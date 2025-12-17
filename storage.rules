@@ -1,0 +1,72 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper functions
+    function authed() {
+      return request.auth != null;
+    }
+    
+    function companyId() {
+      return request.auth.token.companyId;
+    }
+    
+    function userRole() {
+      return request.auth.token.role;
+    }
+    
+    function isAdminOrManager() {
+      return userRole() in ['ADMIN', 'MANAGER'];
+    }
+    
+    function isSubcontractor() {
+      return userRole() == 'SUBCONTRACTOR';
+    }
+    
+    // Receipts path: receipts/{companyId}/{projectId}/{expenseId}/{filename}
+    match /receipts/{companyIdPath}/{projectId}/{expenseId}/{filename} {
+      // Users can read receipts from their own company
+      allow read: if authed() && companyIdPath == companyId();
+      
+      // Write rules:
+      // - Admins and managers can write any receipt in their company
+      // - Subcontractors can write receipts for their own expenses (verified via expense doc)
+      allow write: if authed() 
+        && companyIdPath == companyId()
+        && (
+          isAdminOrManager()
+          || (
+            isSubcontractor() 
+            && firestore.get(/databases/(default)/documents/expenses/$(expenseId)).data.createdByUserId == request.auth.uid
+            && firestore.get(/databases/(default)/documents/expenses/$(expenseId)).data.status == 'DRAFT'
+          )
+        );
+      
+      // Delete - only admins and managers can delete
+      allow delete: if authed() 
+        && companyIdPath == companyId() 
+        && isAdminOrManager();
+    }
+    
+    // Optional: Profile pictures path
+    match /profiles/{companyIdPath}/{userId}/{filename} {
+      allow read: if authed() && companyIdPath == companyId();
+      allow write: if authed() 
+        && companyIdPath == companyId() 
+        && (isAdminOrManager() || request.auth.uid == userId);
+    }
+    
+    // Optional: Company logos
+    match /logos/{companyIdPath}/{filename} {
+      allow read: if authed() && companyIdPath == companyId();
+      allow write: if authed() 
+        && companyIdPath == companyId() 
+        && isAdminOrManager();
+    }
+    
+    // Deny everything else
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
