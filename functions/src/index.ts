@@ -1,7 +1,7 @@
 import * as admin from 'firebase-admin';
 import * as functions from 'firebase-functions';
 import {FieldValue, Timestamp} from 'firebase-admin/firestore';
-import {getUserClaims, refreshUserClaims} from './auth';
+import {getUserClaims, refreshUserClaims, buildUserClaims, setCustomUserClaims} from './auth';
 import {RateResolver, PriceCalculator, ShiftType} from './rates';
 import {
   CreateTimeLogSchema,
@@ -12,6 +12,27 @@ import * as crypto from 'crypto';
 // Initialize Firebase Admin
 admin.initializeApp();
 const db = admin.firestore();
+
+/**
+ * Automatically set custom claims when a new user document is created
+ * This ensures users have the proper claims for Firestore security rules
+ */
+export const onUserCreated = functions.firestore
+  .document('users/{userId}')
+  .onCreate(async (snap, context) => {
+    const userId = context.params.userId;
+    const userData = snap.data();
+    
+    try {
+      const claims = buildUserClaims(userData, userId);
+      await setCustomUserClaims(userId, claims);
+      
+      console.log(`Custom claims set for new user: ${userId}`, claims);
+    } catch (error) {
+      console.error(`Error setting claims for user ${userId}:`, error);
+      throw error;
+    }
+  });
 
 /**
  * Create Time Log with rate resolution and optional inline expenses

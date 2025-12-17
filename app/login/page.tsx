@@ -102,7 +102,7 @@ export default function LoginPage() {
                 value={formData.email}
                 onChange={handleInputChange}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                placeholder="admin@corporatespec.com"
+                placeholder="your-email@example.com"
                 autoComplete="email"
               />
             </div>

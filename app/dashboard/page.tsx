@@ -152,28 +152,6 @@ export default function DashboardPage() {
           </a>
         </div>
 
-        {/* Success Message */}
-        <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl shadow-lg p-8 text-white mb-8">
-          <div className="flex items-start space-x-4">
-            <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center flex-shrink-0">
-              <TrendingUp className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-2xl font-bold mb-2">🎉 Setup Complete!</h3>
-              <p className="text-green-50 mb-4">
-                Your Corporate Spec account has been successfully created with comprehensive data:
-              </p>
-              <ul className="space-y-2 text-sm text-green-50">
-                <li>✓ Client: PriceWater Coopers (PwC) with full rate card</li>
-                <li>✓ Subcontractors: Hanmore & Family Ltd and Pashe Solutions Ltd</li>
-                <li>✓ Project: PwC Office Renovation (ACTIVE)</li>
-                <li>✓ {stats.rateCards} rate cards configured with multiple shift types</li>
-                <li>✓ 8 job roles ready to use</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
         {/* Info Cards */}
         <div className="grid md:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
