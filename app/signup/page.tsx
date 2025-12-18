@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { auth, functions } from '@/lib/firebase';
+import { httpsCallable } from 'firebase/functions';
 import { Layers, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -50,7 +50,6 @@ export default function SignUpPage() {
       );
 
       // Call Cloud Function to complete signup (creates company, user docs, and sets claims)
-      const functions = getFunctions();
       const completeSignup = httpsCallable(functions, 'completeSignup');
       
       await completeSignup({
