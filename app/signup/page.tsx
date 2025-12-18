@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth, db } from '@/lib/firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { auth } from '@/lib/firebase';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { Layers, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -43,46 +43,36 @@ export default function SignUpPage() {
       }
 
       // Create Firebase user
-      const userCredential = await createUserWithEmailAndPassword(
+      await createUserWithEmailAndPassword(
         auth,
         formData.email,
         formData.password
       );
 
-      const user = userCredential.user;
-
-      // Create company document with trial status
-      const companyRef = doc(db, 'companies', user.uid);
-      await setDoc(companyRef, {
-        name: formData.companyName,
-        ownerId: user.uid,
-        subscriptionPlan: 'trial',
-        subscriptionStatus: 'trial',
-        trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-
-      // Create user profile
-      const userRef = doc(db, 'users', user.uid);
-      await setDoc(userRef, {
-        email: formData.email,
+      // Call Cloud Function to complete signup (creates company, user docs, and sets claims)
+      const functions = getFunctions();
+      const completeSignup = httpsCallable(functions, 'completeSignup');
+      
+      await completeSignup({
+        companyName: formData.companyName,
         firstName: formData.firstName,
         lastName: formData.lastName,
-        companyId: user.uid,
-        ownCompanyId: user.uid,
-        activeCompanyId: user.uid,
-        role: 'ADMIN',
-        subcontractorRoles: {},
-        subscriptionPlan: 'trial',
-        subscriptionStatus: 'trial',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        email: formData.email,
       });
+
+      // Force token refresh to get new claims
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        await currentUser.getIdToken(true);
+      }
+
+      // Small delay to ensure claims are propagated
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       // Redirect to dashboard
       window.location.href = '/dashboard';
     } catch (err: any) {
+      console.error('Signup error:', err);
       setError(err.message || 'Failed to create account');
       setLoading(false);
     }

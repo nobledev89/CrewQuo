@@ -7,7 +7,6 @@ import {
   CreateTimeLogSchema,
   ProjectSummarySchema,
 } from './validators';
-import * as crypto from 'crypto';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -33,6 +32,70 @@ export const onUserCreated = functions.firestore
       throw error;
     }
   });
+
+/**
+ * Complete user signup - creates company and user documents with proper setup
+ * This bypasses security rules by using Admin SDK
+ */
+export const completeSignup = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const { companyName, firstName, lastName, email } = data;
+
+  if (!companyName || !firstName || !lastName || !email) {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing required fields');
+  }
+
+  const userId = context.auth.uid;
+
+  try {
+    // Create company document
+    const companyRef = db.collection('companies').doc(userId);
+    await companyRef.set({
+      name: companyName,
+      ownerId: userId,
+      subscriptionPlan: 'trial',
+      subscriptionStatus: 'trial',
+      trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    // Create user document
+    const userRef = db.collection('users').doc(userId);
+    await userRef.set({
+      email,
+      firstName,
+      lastName,
+      companyId: userId,
+      ownCompanyId: userId,
+      activeCompanyId: userId,
+      role: 'ADMIN',
+      subcontractorRoles: {},
+      subscriptionPlan: 'trial',
+      subscriptionStatus: 'trial',
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    // Set custom claims
+    await setCustomUserClaims(userId, {
+      companyId: userId,
+      ownCompanyId: userId,
+      activeCompanyId: userId,
+      role: 'ADMIN',
+    });
+
+    console.log(`Signup completed for user: ${userId}`);
+
+    return { success: true, userId };
+  } catch (error) {
+    console.error('Error completing signup:', error);
+    throw new functions.https.HttpsError('internal', 'Failed to complete signup');
+  }
+});
 
 /**
  * Create Time Log with rate resolution and optional inline expenses
@@ -301,10 +364,10 @@ export const refreshClaims = functions.https.onCall(async (data, context) => {
 });
 
 /**
- * Lemon Squeezy Webhook Handler
- * Handles subscription and payment events from Lemon Squeezy
+ * Gumroad Webhook Handler
+ * Handles purchase and subscription events from Gumroad
  */
-export const lemonsqueezyWebhook = functions.https.onRequest(async (req, res) => {
+export const gumroadWebhook = functions.https.onRequest(async (req, res) => {
   // Only accept POST requests
   if (req.method !== 'POST') {
     res.status(405).send('Method Not Allowed');
@@ -312,29 +375,13 @@ export const lemonsqueezyWebhook = functions.https.onRequest(async (req, res) =>
   }
 
   try {
-    const body = JSON.stringify(req.body);
-    const signature = req.headers['x-signature'] as string;
-    const webhookSecret = functions.config().lemonsqueezy?.webhook_secret || process.env.LEMONSQUEEZY_WEBHOOK_SECRET;
+    // Gumroad sends data as URL-encoded form data
+    const data = req.body;
+    
+    console.log('Received Gumroad webhook:', data);
 
-    if (!webhookSecret) {
-      console.error('LEMONSQUEEZY_WEBHOOK_SECRET not configured');
-      res.status(500).json({ error: 'Webhook secret not configured' });
-      return;
-    }
-
-    // Verify signature
-    if (!signature || !verifyLemonSqueezySignature(body, signature, webhookSecret)) {
-      console.error('Invalid webhook signature');
-      res.status(401).json({ error: 'Invalid signature' });
-      return;
-    }
-
-    const event = req.body;
-    const eventName = event.meta?.event_name;
-    const customData = event.meta?.custom_data;
-    const userId = customData?.user_id;
-
-    console.log('Received Lemon Squeezy webhook:', eventName, userId);
+    // Extract user_id from custom fields
+    const userId = data.custom_fields?.user_id || data.user_id;
 
     if (!userId) {
       console.error('No user_id in webhook data');
@@ -342,103 +389,107 @@ export const lemonsqueezyWebhook = functions.https.onRequest(async (req, res) =>
       return;
     }
 
-    // Handle different webhook events
-    switch (eventName) {
-      case 'order_created':
-        await handleOrderCreated(event, userId);
-        break;
-      case 'subscription_created':
-        await handleSubscriptionCreated(event, userId);
-        break;
-      case 'subscription_updated':
-        await handleSubscriptionUpdated(event, userId);
-        break;
-      case 'subscription_cancelled':
-        await handleSubscriptionCancelled(event, userId);
-        break;
-      case 'subscription_expired':
-        await handleSubscriptionExpired(event, userId);
-        break;
-      case 'subscription_payment_success':
-        await handlePaymentSuccess(event, userId);
-        break;
-      case 'subscription_payment_failed':
-        await handlePaymentFailed(event, userId);
-        break;
-      default:
-        console.log('Unhandled webhook event:', eventName);
+    // Gumroad webhook events are identified by different fields
+    // sale: When a purchase is made
+    // refund: When a refund is issued
+    // dispute: When a dispute is filed
+    // dispute_won: When a dispute is won
+    // cancellation: When a subscription is cancelled
+    // subscription_updated: When subscription is updated
+    // subscription_ended: When subscription ends
+    // subscription_restarted: When subscription restarts
+
+    const saleId = data.sale_id;
+    const sellerId = data.seller_id;
+    const isSubscription = data.subscription_id ? true : false;
+    const subscriptionId = data.subscription_id;
+    const cancelled = data.cancelled === 'true' || data.cancelled === true;
+    const ended = data.ended === 'true' || data.ended === true;
+    const isRefund = data.refunded === 'true' || data.refunded === true;
+
+    // Verify this is from your Gumroad account (optional but recommended)
+    const expectedSellerId = functions.config().gumroad?.seller_id || process.env.GUMROAD_SELLER_ID;
+    if (expectedSellerId && sellerId !== expectedSellerId) {
+      console.error('Invalid seller ID');
+      res.status(401).json({ error: 'Invalid seller ID' });
+      return;
+    }
+
+    // Handle different scenarios
+    if (isRefund) {
+      await handleGumroadRefund(data, userId);
+    } else if (cancelled) {
+      await handleGumroadCancellation(data, userId);
+    } else if (ended) {
+      await handleGumroadSubscriptionEnded(data, userId);
+    } else if (isSubscription && subscriptionId) {
+      await handleGumroadSubscription(data, userId);
+    } else if (saleId) {
+      await handleGumroadPurchase(data, userId);
     }
 
     res.status(200).json({ received: true });
   } catch (error) {
-    console.error('Webhook error:', error);
+    console.error('Gumroad webhook error:', error);
     res.status(500).json({ error: 'Webhook processing failed' });
   }
 });
 
-// Helper function to verify Lemon Squeezy webhook signature
-function verifyLemonSqueezySignature(payload: string, signature: string, secret: string): boolean {
-  try {
-    const hmac = crypto.createHmac('sha256', secret);
-    const digest = hmac.update(payload).digest('hex');
-    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(digest));
-  } catch (error) {
-    return false;
-  }
-}
-
-// Webhook event handlers
-async function handleOrderCreated(event: any, userId: string) {
+// Gumroad webhook event handlers
+async function handleGumroadPurchase(data: any, userId: string) {
   const companyRef = db.collection('companies').doc(userId);
   
   await companyRef.update({
     subscriptionStatus: 'active',
-    lemonsqueezyOrderId: event.data.id,
-    lemonsqueezyCustomerId: event.data.attributes.customer_id,
+    gumroadSaleId: data.sale_id,
+    gumroadPurchaserEmail: data.email,
+    gumroadProductPermalink: data.product_permalink,
+    lastPaymentAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
 
-  console.log(`Order created for user ${userId}`);
+  // Determine subscription plan from tier
+  const subscriptionPlan = determineSubscriptionPlan(data);
+  
+  // Also update user document
+  await db.collection('users').doc(userId).update({
+    subscriptionStatus: 'active',
+    subscriptionPlan: subscriptionPlan,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  console.log(`Gumroad purchase completed for user ${userId}, plan: ${subscriptionPlan}`);
 }
 
-async function handleSubscriptionCreated(event: any, userId: string) {
+async function handleGumroadSubscription(data: any, userId: string) {
   const companyRef = db.collection('companies').doc(userId);
+  
+  // Determine subscription plan from tier
+  const subscriptionPlan = determineSubscriptionPlan(data);
   
   await companyRef.update({
     subscriptionStatus: 'active',
-    lemonsqueezySubscriptionId: event.data.id,
-    lemonsqueezyCustomerId: event.data.attributes.customer_id,
-    subscriptionRenewsAt: event.data.attributes.renews_at ? Timestamp.fromDate(new Date(event.data.attributes.renews_at)) : null,
+    subscriptionPlan: subscriptionPlan,
+    gumroadSubscriptionId: data.subscription_id,
+    gumroadSaleId: data.sale_id,
+    gumroadPurchaserEmail: data.email,
+    gumroadProductPermalink: data.product_permalink,
+    gumroadTierName: data.variant_name || data.tier_name || '',
+    lastPaymentAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
 
-  console.log(`Subscription created for user ${userId}`);
-}
-
-async function handleSubscriptionUpdated(event: any, userId: string) {
-  const companyRef = db.collection('companies').doc(userId);
-  
-  const status = event.data.attributes.status;
-  let subscriptionStatus = 'active';
-  
-  if (status === 'cancelled' || status === 'expired') {
-    subscriptionStatus = 'cancelled';
-  } else if (status === 'past_due') {
-    subscriptionStatus = 'past_due';
-  } else if (status === 'on_trial') {
-    subscriptionStatus = 'trial';
-  }
-  
-  await companyRef.update({
-    subscriptionStatus,
-    subscriptionRenewsAt: event.data.attributes.renews_at ? Timestamp.fromDate(new Date(event.data.attributes.renews_at)) : null,
+  // Also update user document
+  await db.collection('users').doc(userId).update({
+    subscriptionStatus: 'active',
+    subscriptionPlan: subscriptionPlan,
     updatedAt: FieldValue.serverTimestamp(),
   });
 
-  console.log(`Subscription updated for user ${userId}: ${subscriptionStatus}`);
+  console.log(`Gumroad subscription active for user ${userId}`);
 }
 
-async function handleSubscriptionCancelled(event: any, userId: string) {
+async function handleGumroadCancellation(data: any, userId: string) {
   const companyRef = db.collection('companies').doc(userId);
   
   await companyRef.update({
@@ -447,10 +498,16 @@ async function handleSubscriptionCancelled(event: any, userId: string) {
     updatedAt: FieldValue.serverTimestamp(),
   });
 
-  console.log(`Subscription cancelled for user ${userId}`);
+  // Also update user document
+  await db.collection('users').doc(userId).update({
+    subscriptionStatus: 'cancelled',
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  console.log(`Gumroad subscription cancelled for user ${userId}`);
 }
 
-async function handleSubscriptionExpired(event: any, userId: string) {
+async function handleGumroadSubscriptionEnded(data: any, userId: string) {
   const companyRef = db.collection('companies').doc(userId);
   
   await companyRef.update({
@@ -459,29 +516,64 @@ async function handleSubscriptionExpired(event: any, userId: string) {
     updatedAt: FieldValue.serverTimestamp(),
   });
 
-  console.log(`Subscription expired for user ${userId}`);
-}
-
-async function handlePaymentSuccess(event: any, userId: string) {
-  const companyRef = db.collection('companies').doc(userId);
-  
-  await companyRef.update({
-    subscriptionStatus: 'active',
-    lastPaymentAt: FieldValue.serverTimestamp(),
+  // Also update user document
+  await db.collection('users').doc(userId).update({
+    subscriptionStatus: 'expired',
     updatedAt: FieldValue.serverTimestamp(),
   });
 
-  console.log(`Payment success for user ${userId}`);
+  console.log(`Gumroad subscription ended for user ${userId}`);
 }
 
-async function handlePaymentFailed(event: any, userId: string) {
+async function handleGumroadRefund(data: any, userId: string) {
   const companyRef = db.collection('companies').doc(userId);
   
   await companyRef.update({
-    subscriptionStatus: 'past_due',
-    lastPaymentFailedAt: FieldValue.serverTimestamp(),
+    subscriptionStatus: 'refunded',
+    refundedAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
 
-  console.log(`Payment failed for user ${userId}`);
+  // Also update user document
+  await db.collection('users').doc(userId).update({
+    subscriptionStatus: 'refunded',
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  console.log(`Gumroad refund processed for user ${userId}`);
+}
+
+// Helper function to determine subscription plan from Gumroad tier/variant name
+function determineSubscriptionPlan(data: any): string {
+  // Gumroad sends tier/variant information in different fields depending on product type
+  const variantName = data.variant_name || data.variants || '';
+  const tierName = data.tier_name || data.offer_code || '';
+  const productName = data.product_name || '';
+  
+  // Combine all possible fields to find the tier
+  const searchString = `${variantName} ${tierName} ${productName}`.toLowerCase();
+  
+  console.log('Determining plan from:', { variantName, tierName, productName, searchString });
+  
+  // Match against tier names
+  if (searchString.includes('personal')) {
+    return 'starter';
+  } else if (searchString.includes('business starter')) {
+    return 'professional';
+  } else if (searchString.includes('business pro')) {
+    return 'enterprise';
+  }
+  
+  // Fallback: try to determine from price if tier name not found
+  const price = parseInt(data.price) || 0;
+  if (price >= 30000) { // £349 = 34900 pence
+    return 'enterprise';
+  } else if (price >= 15000) { // £199 = 19900 pence
+    return 'professional';
+  } else if (price >= 5000) { // £99 = 9900 pence
+    return 'starter';
+  }
+  
+  console.warn('Could not determine plan from data, defaulting to starter');
+  return 'starter'; // Default fallback
 }
