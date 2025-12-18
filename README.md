@@ -26,6 +26,13 @@ CrewQuo is an all-in-one platform that streamlines project management, time trac
 - Assign specific rate cards to client-subcontractor relationships
 - Track billing rates per project
 
+### 📧 Email System
+- Automated subcontractor invite emails with secure links
+- Registration confirmation emails with trial information
+- Invite acceptance notifications to company owners
+- Professional branded templates from support@crewquo.com
+- Powered by Resend for reliable delivery
+
 ### 🔐 Role-Based Access Control
 - **Admin**: Full system access
 - **Manager**: Manage projects, clients, and subcontractors
@@ -44,6 +51,7 @@ CrewQuo is an all-in-one platform that streamlines project management, time trac
 - **Backend**: Firebase (Authentication, Firestore, Cloud Functions)
 - **Deployment**: Vercel
 - **Payments**: Gumroad
+- **Email**: Resend
 
 ---
 
@@ -52,6 +60,8 @@ CrewQuo is an all-in-one platform that streamlines project management, time trac
 - 📖 [Setup Guide](./SETUP.md) - Get started with development
 - 🚀 [Deployment Guide](./DEPLOYMENT.md) - Deploy to production
 - 💻 [Development Guide](./DEVELOPMENT.md) - Development workflows and architecture
+- 📧 [Email Setup](./EMAIL_QUICKSTART.md) - Configure the email system (Quick Start)
+- 📬 [Email Documentation](./EMAIL_SETUP.md) - Detailed email system documentation
 
 ---
 
@@ -66,6 +76,9 @@ CrewQuo/
 ├── components/              # React components
 ├── lib/                     # Utilities and contexts
 ├── functions/               # Firebase Cloud Functions
+│   └── src/
+│       ├── email.ts         # Email service and templates
+│       └── index.ts         # Cloud Functions
 ├── scripts/                 # Database seeding and management
 └── firestore.rules         # Firebase security rules
 ```

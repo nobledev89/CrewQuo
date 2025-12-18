@@ -7,6 +7,11 @@ import {
   CreateTimeLogSchema,
   ProjectSummarySchema,
 } from './validators';
+import {
+  sendSubcontractorInviteEmail,
+  sendRegistrationConfirmationEmail,
+  sendInviteAcceptedNotificationEmail,
+} from './email';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -119,6 +124,20 @@ export const completeSignup = functions.https.onRequest(async (req, res) => {
     });
 
     console.log(`Signup completed for user: ${userId}`);
+
+    // Send registration confirmation email (non-blocking)
+    const trialEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    sendRegistrationConfirmationEmail(email, firstName, companyName, trialEndsAt)
+      .then((result) => {
+        if (result.success) {
+          console.log(`Registration email sent to ${email}`);
+        } else {
+          console.error(`Failed to send registration email: ${result.error}`);
+        }
+      })
+      .catch((error) => {
+        console.error('Error sending registration email:', error);
+      });
 
     res.status(200).json({ result: { success: true, userId } });
   } catch (error) {
@@ -614,3 +633,174 @@ function determineSubscriptionPlan(data: any): string {
   console.warn('Could not determine plan from data, defaulting to starter');
   return 'starter'; // Default fallback
 }
+
+/**
+ * Send Subcontractor Invite Email
+ * Callable function to send invite email to a subcontractor
+ */
+export const sendSubcontractorInvite = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const { subcontractorId } = data;
+
+  if (!subcontractorId) {
+    throw new functions.https.HttpsError('invalid-argument', 'subcontractorId is required');
+  }
+
+  try {
+    // Get subcontractor details
+    const subcontractorDoc = await db.collection('subcontractors').doc(subcontractorId).get();
+    
+    if (!subcontractorDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Subcontractor not found');
+    }
+
+    const subcontractor = subcontractorDoc.data()!;
+
+    // Verify user has access to this subcontractor's company
+    const userDoc = await db.collection('users').doc(context.auth.uid).get();
+    const userData = userDoc.data();
+    
+    if (!userData || userData.companyId !== subcontractor.companyId) {
+      throw new functions.https.HttpsError('permission-denied', 'Not authorized');
+    }
+
+    // Check if subcontractor already has invite pending or accepted
+    if (!subcontractor.inviteToken || subcontractor.inviteStatus !== 'pending') {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Subcontractor does not have a pending invite'
+      );
+    }
+
+    // Get company details
+    const companyDoc = await db.collection('companies').doc(subcontractor.companyId).get();
+    const companyName = companyDoc.exists ? companyDoc.data()!.name : 'Company';
+
+    // Send the email
+    const inviterName = `${userData.firstName} ${userData.lastName}`;
+    const result = await sendSubcontractorInviteEmail(
+      subcontractor.email,
+      subcontractor.name,
+      companyName,
+      subcontractor.inviteToken,
+      inviterName
+    );
+
+    if (!result.success) {
+      throw new functions.https.HttpsError('internal', result.error || 'Failed to send email');
+    }
+
+    // Update subcontractor with email sent timestamp
+    await db.collection('subcontractors').doc(subcontractorId).update({
+      inviteSentAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    return { success: true, message: 'Invite email sent successfully' };
+  } catch (error: any) {
+    console.error('Error sending invite email:', error);
+    
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+    
+    throw new functions.https.HttpsError('internal', error.message || 'Failed to send invite email');
+  }
+});
+
+/**
+ * Firestore Trigger: Send email when subcontractor invite is created
+ */
+export const onSubcontractorInviteCreated = functions.firestore
+  .document('subcontractors/{subcontractorId}')
+  .onCreate(async (snap, context) => {
+    const subcontractor = snap.data();
+    
+    // Only send email if invite status is pending and has token
+    if (subcontractor.inviteStatus !== 'pending' || !subcontractor.inviteToken) {
+      console.log('Subcontractor created without invite, skipping email');
+      return;
+    }
+
+    try {
+      // Get company details
+      const companyDoc = await db.collection('companies').doc(subcontractor.companyId).get();
+      const companyName = companyDoc.exists ? companyDoc.data()!.name : 'Company';
+
+      // Send the email
+      const result = await sendSubcontractorInviteEmail(
+        subcontractor.email,
+        subcontractor.name,
+        companyName,
+        subcontractor.inviteToken
+      );
+
+      if (result.success) {
+        console.log(`Invite email sent to ${subcontractor.email}`);
+        
+        // Update with email sent timestamp
+        await snap.ref.update({
+          inviteSentAt: FieldValue.serverTimestamp(),
+        });
+      } else {
+        console.error(`Failed to send invite email: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error in onSubcontractorInviteCreated:', error);
+    }
+  });
+
+/**
+ * Firestore Trigger: Send notification when subcontractor accepts invite
+ */
+export const onSubcontractorInviteAccepted = functions.firestore
+  .document('subcontractors/{subcontractorId}')
+  .onUpdate(async (change, context) => {
+    const before = change.before.data();
+    const after = change.after.data();
+    
+    // Check if invite status changed to accepted
+    if (before.inviteStatus !== 'accepted' && after.inviteStatus === 'accepted') {
+      try {
+        // Get company details and owner email
+        const companyDoc = await db.collection('companies').doc(after.companyId).get();
+        
+        if (!companyDoc.exists) {
+          console.error('Company not found');
+          return;
+        }
+        
+        const companyData = companyDoc.data()!;
+        const ownerId = companyData.ownerId;
+        
+        // Get owner email
+        const ownerDoc = await db.collection('users').doc(ownerId).get();
+        
+        if (!ownerDoc.exists) {
+          console.error('Owner not found');
+          return;
+        }
+        
+        const ownerEmail = ownerDoc.data()!.email;
+        
+        // Send notification email to company owner
+        const result = await sendInviteAcceptedNotificationEmail(
+          ownerEmail,
+          companyData.name,
+          after.name,
+          after.email
+        );
+
+        if (result.success) {
+          console.log(`Notification email sent to ${ownerEmail}`);
+        } else {
+          console.error(`Failed to send notification email: ${result.error}`);
+        }
+      } catch (error) {
+        console.error('Error in onSubcontractorInviteAccepted:', error);
+      }
+    }
+  });
