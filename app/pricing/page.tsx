@@ -18,10 +18,8 @@ export default function PricingPage() {
       if (user) {
         setUserId(user.uid);
         setUserEmail(user.email);
-      } else {
-        // Redirect to login if not authenticated
-        router.push('/login?redirect=/pricing');
       }
+      // Don't redirect - allow unauthenticated users to view pricing
       setLoading(false);
     });
 
@@ -30,7 +28,8 @@ export default function PricingPage() {
 
   const handleSubscribe = (tierName: string) => {
     if (!userId) {
-      router.push('/login?redirect=/pricing');
+      // Redirect to signup if not authenticated
+      router.push('/signup');
       return;
     }
 
