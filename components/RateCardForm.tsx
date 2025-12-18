@@ -278,25 +278,31 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
             </h4>
 
             {!loadingTemplates && templates.length > 0 && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Template (Optional)
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                <label className="block text-sm font-semibold text-purple-900 mb-2">
+                  📋 Rate Card Template
                 </label>
                 <select
                   value={formData.templateId || ''}
                   onChange={(e) => handleTemplateChange(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
                 >
-                  <option value="">No Template (Legacy)</option>
+                  <option value="">No Template (Legacy Mode)</option>
                   {templates.map(template => (
                     <option key={template.id} value={template.id}>
                       {template.name} {template.isDefault ? '(Default)' : ''}
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  Select a template to use predefined shift types and expense categories
+                <p className="text-xs text-purple-700 mt-2 font-medium">
+                  💡 Choose a template to automatically use predefined shift types, resource categories, and expense types - making rate card creation faster and more consistent!
                 </p>
+              </div>
+            )}
+
+            {loadingTemplates && (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
+                <p className="text-sm text-gray-600">Loading templates...</p>
               </div>
             )}
             

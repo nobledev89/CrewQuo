@@ -106,7 +106,10 @@ export default function RateCardsPage() {
         name: data.name,
         description: data.description,
         active: data.active,
+        templateId: data.templateId || null,
+        templateName: data.templateName || null,
         rates: data.rates,
+        expenses: data.expenses || [],
         updatedAt: serverTimestamp(),
       };
 
@@ -202,7 +205,14 @@ export default function RateCardsPage() {
               >
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex-1">
-                    <h3 className="text-xl font-bold text-gray-900 mb-2">{rateCard.name}</h3>
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="text-xl font-bold text-gray-900">{rateCard.name}</h3>
+                      {rateCard.templateName && (
+                        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-purple-100 text-purple-800">
+                          Template: {rateCard.templateName}
+                        </span>
+                      )}
+                    </div>
                     {rateCard.description && (
                       <p className="text-sm text-gray-600">{rateCard.description}</p>
                     )}
