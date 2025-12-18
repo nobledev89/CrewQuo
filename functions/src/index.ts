@@ -380,11 +380,18 @@ export const gumroadWebhook = functions.https.onRequest(async (req, res) => {
     
     console.log('Received Gumroad webhook:', data);
 
-    // Extract user_id from custom fields
-    const userId = data.custom_fields?.user_id || data.user_id;
+    // Extract user_id from multiple possible sources
+    // 1. Custom fields (if configured in Gumroad)
+    // 2. Direct field (from query parameter)
+    // 3. Referrer field (fallback)
+    const userId = data.custom_fields?.user_id || data.user_id || data.referrer;
 
     if (!userId) {
-      console.error('No user_id in webhook data');
+      console.error('No user_id in webhook data', { 
+        custom_fields: data.custom_fields,
+        user_id: data.user_id,
+        referrer: data.referrer 
+      });
       res.status(400).json({ error: 'No user_id provided' });
       return;
     }

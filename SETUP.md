@@ -66,9 +66,8 @@ NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project_id.appspot.com
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
 
-# Optional: LemonSqueezy (if using payments)
-NEXT_PUBLIC_LEMONSQUEEZY_STORE_ID=your_store_id
-LEMONSQUEEZY_API_KEY=your_api_key
+# Gumroad Configuration
+NEXT_PUBLIC_GUMROAD_PRODUCT_PERMALINK=zxjxzj
 ```
 
 ---

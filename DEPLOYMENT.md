@@ -37,6 +37,7 @@ git push origin main
 In Vercel Dashboard → Your Project → **Settings** → **Environment Variables**:
 
 ```env
+# Firebase Configuration
 NEXT_PUBLIC_FIREBASE_API_KEY=your_value
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_value
 NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_value
@@ -44,9 +45,8 @@ NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_value
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_value
 NEXT_PUBLIC_FIREBASE_APP_ID=your_value
 
-# Optional: LemonSqueezy
-NEXT_PUBLIC_LEMONSQUEEZY_STORE_ID=your_value
-LEMONSQUEEZY_API_KEY=your_value
+# Gumroad Configuration
+NEXT_PUBLIC_GUMROAD_PRODUCT_PERMALINK=zxjxzj
 ```
 
 **Important**: Apply to all environments (Production, Preview, Development)

@@ -140,8 +140,9 @@ export function generateGumroadCheckoutUrl(
   const permalink = GUMROAD_CONFIG.productPermalink;
   const baseUrl = `https://dunehunter.gumroad.com/l/${permalink}`;
   const params = new URLSearchParams({
-    // Pass user_id as custom field for webhook processing
     wanted: 'true',
+    // Pass user_id as query parameter - Gumroad will include it in webhook
+    user_id: userId,
   });
 
   // Add tier selection if Gumroad supports variant selection via URL
@@ -151,8 +152,7 @@ export function generateGumroadCheckoutUrl(
     params.append('email', email);
   }
 
-  // Add user_id to URL hash for retrieval after checkout
-  return `${baseUrl}?${params.toString()}#user_id=${userId}`;
+  return `${baseUrl}?${params.toString()}`;
 }
 
 /**

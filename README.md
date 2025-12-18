@@ -43,7 +43,7 @@ CrewQuo is an all-in-one platform that streamlines project management, time trac
 - **Frontend**: Next.js 15 (App Router), React, TypeScript, Tailwind CSS
 - **Backend**: Firebase (Authentication, Firestore, Cloud Functions)
 - **Deployment**: Vercel
-- **Payments**: LemonSqueezy (optional)
+- **Payments**: Gumroad
 
 ---
 
