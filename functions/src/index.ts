@@ -37,20 +37,49 @@ export const onUserCreated = functions.firestore
  * Complete user signup - creates company and user documents with proper setup
  * This bypasses security rules by using Admin SDK
  */
-export const completeSignup = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+export const completeSignup = functions.https.onRequest(async (req, res) => {
+  // Set CORS headers
+  const allowedOrigins = ['https://www.crewquo.com', 'https://crewquo.com', 'http://localhost:3000'];
+  const origin = req.headers.origin || '';
+  
+  if (allowedOrigins.includes(origin)) {
+    res.set('Access-Control-Allow-Origin', origin);
   }
-
-  const { companyName, firstName, lastName, email } = data;
-
-  if (!companyName || !firstName || !lastName || !email) {
-    throw new functions.https.HttpsError('invalid-argument', 'Missing required fields');
+  
+  res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.set('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
   }
-
-  const userId = context.auth.uid;
+  
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
 
   try {
+    // Verify Firebase authentication
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      res.status(401).json({ error: 'Unauthenticated' });
+      return;
+    }
+
+    const idToken = authHeader.split('Bearer ')[1];
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const userId = decodedToken.uid;
+
+    const { companyName, firstName, lastName, email } = req.body.data || req.body;
+
+    if (!companyName || !firstName || !lastName || !email) {
+      res.status(400).json({ error: 'Missing required fields' });
+      return;
+    }
+
     // Create company document
     const companyRef = db.collection('companies').doc(userId);
     await companyRef.set({
@@ -90,10 +119,10 @@ export const completeSignup = functions.https.onCall(async (data, context) => {
 
     console.log(`Signup completed for user: ${userId}`);
 
-    return { success: true, userId };
+    res.status(200).json({ result: { success: true, userId } });
   } catch (error) {
     console.error('Error completing signup:', error);
-    throw new functions.https.HttpsError('internal', 'Failed to complete signup');
+    res.status(500).json({ error: 'Failed to complete signup' });
   }
 });
 

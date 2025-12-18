@@ -43,21 +43,36 @@ export default function SignUpPage() {
       }
 
       // Create Firebase user
-      await createUserWithEmailAndPassword(
+      const userCredential = await createUserWithEmailAndPassword(
         auth,
         formData.email,
         formData.password
       );
 
+      // Get ID token for authentication
+      const idToken = await userCredential.user.getIdToken();
+
       // Call Cloud Function to complete signup (creates company, user docs, and sets claims)
-      const completeSignup = httpsCallable(functions, 'completeSignup');
+      const functionUrl = `https://us-central1-projects-corporatespec.cloudfunctions.net/completeSignup`;
       
-      await completeSignup({
-        companyName: formData.companyName,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        email: formData.email,
+      const response = await fetch(functionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          companyName: formData.companyName,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+        }),
       });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to complete signup');
+      }
 
       // Force token refresh to get new claims
       const currentUser = auth.currentUser;
