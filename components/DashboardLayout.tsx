@@ -20,7 +20,8 @@ import {
   ChevronDown,
   Check,
   FileText,
-  Settings
+  Settings,
+  DollarSign
 } from 'lucide-react';
 
 interface DashboardLayoutProps {
@@ -101,8 +102,9 @@ function DashboardContent({ children }: DashboardLayoutProps) {
       { name: 'Subcontractors', href: '/dashboard/subcontractors', icon: Users },
     ];
     
-    // Only show Rate Cards when viewing own company (not client-specific workspace)
+    // Only show Rate Cards and Templates when viewing own company (not client-specific workspace)
     if (selectedClient.clientId === null) {
+      baseItems.push({ name: 'Rate Templates', href: '/dashboard/rate-templates', icon: DollarSign });
       baseItems.push({ name: 'Rate Cards', href: '/dashboard/ratecards', icon: FileText });
     }
     

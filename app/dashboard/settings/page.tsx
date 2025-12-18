@@ -88,7 +88,7 @@ export default function SettingsPage() {
           // Fetch all company users
           const usersQuery = query(
             collection(db, 'users'),
-            where('companyId', '==', data.companyId)
+            where('ownCompanyId', '==', data.companyId)
           );
           const usersSnap = await getDocs(usersQuery);
           const users: CompanyUser[] = [];
