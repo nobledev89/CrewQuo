@@ -191,6 +191,14 @@ service cloud.firestore {
         && isAdminOrManager();
     }
     
+    // Rate Card Templates
+    match /rateCardTemplates/{templateId} {
+      allow read: if authed() && sameCompany(resource.data);
+      allow create: if authed() && sameCompany(request.resource.data) && isAdminOrManager();
+      allow update: if authed() && sameCompany(resource.data) && sameCompany(request.resource.data) && isAdminOrManager();
+      allow delete: if authed() && sameCompany(resource.data) && isAdmin();
+    }
+    
     // Rate Cards
     match /rateCards/{rateCardId} {
       allow read: if authed() && sameCompany(resource.data);

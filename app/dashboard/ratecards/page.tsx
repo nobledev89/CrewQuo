@@ -266,6 +266,7 @@ export default function RateCardsPage() {
           onSave={handleSaveRateCard}
           onClose={handleCloseModal}
           saving={saving}
+          companyId={companyId}
         />
       )}
     </DashboardLayout>

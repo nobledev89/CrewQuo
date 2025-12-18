@@ -209,25 +209,69 @@ export const SUBSCRIPTION_LIMITS: Record<SubscriptionPlan, PlanLimits> = {
 };
 
 // ============================================
-// RATE CARD MODEL - COMPREHENSIVE
+// RATE CARD TEMPLATE MODEL (TIER 1)
 // ============================================
 
-export type ResourceCategory = 'Labour' | 'Vehicle' | 'Specialist Service' | 'Other';
+export interface CustomShiftType {
+  id: string;
+  name: string;                    // e.g., "Sunday", "Night Shift", "Bank Holiday"
+  description?: string;
+  rateMultiplier: number;          // e.g., 2.0 for double time, 1.5 for time and a half
+  applicableDays?: string[];       // e.g., ["Sunday"], ["Monday", "Tuesday"]
+  startTime?: string;              // e.g., "18:00"
+  endTime?: string;                // e.g., "06:00"
+}
 
-export type ShiftType = 
-  | 'Mon–Fri (1st 8 hours)'
-  | 'Friday & Saturday nights'
-  | 'Saturday & Mon–Thurs nights'
-  | 'Sunday';
+export interface ExpenseCategory {
+  id: string;
+  name: string;                    // e.g., "Accommodation", "Mileage", "Parking Fees"
+  description?: string;
+  unitType: 'flat' | 'per_unit' | 'per_mile' | 'per_day' | 'per_hour';
+  defaultRate?: number;
+  taxable?: boolean;
+}
+
+export interface RateCardTemplate {
+  id: string;
+  name: string;                    // e.g., "Standard UK Construction Rates"
+  description: string;
+  
+  // Custom shift types with multipliers
+  shiftTypes: CustomShiftType[];
+  
+  // Custom expense categories
+  expenseCategories: ExpenseCategory[];
+  
+  // Base resource categories (can be customized)
+  resourceCategories: string[];    // e.g., ['Labour', 'Vehicle', 'Equipment', 'Specialist Service']
+  
+  companyId: string;
+  isDefault: boolean;              // One default template per company
+  active: boolean;
+  
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  createdBy: string;
+}
+
+// ============================================
+// RATE CARD MODEL (TIER 2) - COMPREHENSIVE
+// ============================================
+
+export type ResourceCategory = string; // Now dynamic based on template
+
+export type ShiftType = string; // Now dynamic based on template
 
 export interface RateEntry {
   // 1. Role / Resource Details
   roleName: string;              // e.g., Supervisor, Fitter, Driver, Porter, Vehicle
-  category: ResourceCategory;    // Labour / Vehicle / Specialist Service / Other
+  category: ResourceCategory;    // Dynamic from template
   description?: string;          // Optional notes or description
   
-  // 2. Shift Type
-  shiftType: ShiftType;
+  // 2. Shift Type (references template shift type)
+  shiftType: string;             // ID or name from template
+  shiftTypeId?: string;          // Optional: reference to template shift type ID
+  rateMultiplier?: number;       // Inherited from shift type, can be overridden
   
   // 3. Time & Duration (for reference/calculation)
   startTime?: string;            // e.g., "09:00"
@@ -235,11 +279,13 @@ export interface RateEntry {
   totalHours?: number;           // Total hours worked
   
   // 4. Pricing Fields
-  hourlyRate?: number | null;    // Rate per hour
+  baseRate: number;              // Base hourly rate (before multipliers)
+  hourlyRate?: number | null;    // Effective rate per hour (after multiplier)
   rate4Hours?: number | null;    // 4-hour rate
   rate8Hours?: number | null;    // 8-hour rate
   rate9Hours?: number | null;    // 9-hour rate
   rate10Hours?: number | null;   // 10-hour rate
+  rate12Hours?: number | null;   // 12-hour rate
   flatShiftRate?: number | null; // Flat shift rate (if applicable)
   
   // 5. Additional Charges
@@ -256,13 +302,35 @@ export interface RateEntry {
   invoicingNotes?: string;
 }
 
+export interface ExpenseEntry {
+  id: string;
+  categoryId: string;            // References template expense category
+  categoryName: string;          // Denormalized for display
+  description?: string;
+  unitType: 'flat' | 'per_unit' | 'per_mile' | 'per_day' | 'per_hour';
+  rate: number;
+  taxable: boolean;
+  notes?: string;
+}
+
 export interface RateCard {
   id: string;
   name: string;                  // e.g., "Standard Labour Rates 2024"
   description: string;           // General description of the rate card
+  
+  // Reference to template used (optional - for new system)
+  templateId?: string;
+  templateName?: string;         // Denormalized
+  
   effectiveFrom?: Timestamp;     // When these rates become effective
   effectiveTo?: Timestamp;       // When these rates expire (optional)
-  rates: RateEntry[];            // Array of comprehensive rate entries
+  
+  // Rate entries for labour/resources
+  rates: RateEntry[];
+  
+  // Expense entries
+  expenses?: ExpenseEntry[];
+  
   companyId: string;
   active: boolean;
   createdAt: Timestamp;
@@ -274,18 +342,23 @@ export interface RateCard {
 export type RateCardCategory = 'service' | 'expense' | 'equipment' | 'material';
 
 // ============================================
-// SUBCONTRACTOR RATE ASSIGNMENT MODEL
+// SUBCONTRACTOR RATE ASSIGNMENT MODEL (TIER 3)
 // ============================================
 
 export interface SubcontractorRateAssignment {
   id: string;
   subcontractorId: string;
+  subcontractorName?: string;    // Denormalized
   rateCardId: string;
+  rateCardName?: string;         // Denormalized
   clientId: string;
-  projectId?: string;  // Optional: specific to a project
+  clientName?: string;           // Denormalized
+  projectId?: string;            // Optional: specific to a project
+  projectName?: string;          // Denormalized
   companyId: string;
   assignedAt: Timestamp;
-  assignedBy: string;  // userId
+  assignedBy: string;            // userId
+  notes?: string;
 }
 
 // ============================================

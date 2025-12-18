@@ -1,38 +1,102 @@
 'use client';
 
-import { useState } from 'react';
-import { X, Plus, Trash2, DollarSign, Tag, Calendar, Truck, Clock } from 'lucide-react';
-import { RateCard, RateEntry, ResourceCategory, ShiftType } from '@/lib/types';
+import { useState, useEffect } from 'react';
+import { db } from '@/lib/firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { X, Plus, Trash2, DollarSign, Tag, Calendar, Truck, Clock, Receipt } from 'lucide-react';
+import { RateCard, RateEntry, ResourceCategory, ShiftType, RateCardTemplate, ExpenseEntry } from '@/lib/types';
 
 interface RateCardFormProps {
   rateCard: RateCard | null;
   onSave: (data: RateCardFormData) => Promise<void>;
   onClose: () => void;
   saving: boolean;
+  companyId: string;
 }
 
 export interface RateCardFormData {
   name: string;
   description: string;
   active: boolean;
+  templateId?: string;
+  templateName?: string;
   rates: RateEntry[];
+  expenses?: ExpenseEntry[];
 }
 
-const RESOURCE_CATEGORIES: ResourceCategory[] = ['Labour', 'Vehicle', 'Specialist Service', 'Other'];
-const SHIFT_TYPES: ShiftType[] = [
+// Legacy defaults for backward compatibility
+const LEGACY_RESOURCE_CATEGORIES: ResourceCategory[] = ['Labour', 'Vehicle', 'Specialist Service', 'Other'];
+const LEGACY_SHIFT_TYPES: ShiftType[] = [
   'Mon–Fri (1st 8 hours)',
   'Friday & Saturday nights',
   'Saturday & Mon–Thurs nights',
   'Sunday'
 ];
 
-export default function RateCardForm({ rateCard, onSave, onClose, saving }: RateCardFormProps) {
+export default function RateCardForm({ rateCard, onSave, onClose, saving, companyId }: RateCardFormProps) {
+  const [templates, setTemplates] = useState<RateCardTemplate[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<RateCardTemplate | null>(null);
+  const [loadingTemplates, setLoadingTemplates] = useState(true);
+  
   const [formData, setFormData] = useState<RateCardFormData>({
     name: rateCard?.name || '',
     description: rateCard?.description || '',
     active: rateCard?.active ?? true,
+    templateId: rateCard?.templateId,
+    templateName: rateCard?.templateName,
     rates: rateCard?.rates || [],
+    expenses: rateCard?.expenses || [],
   });
+
+  // Fetch templates on mount
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        const templatesQuery = query(
+          collection(db, 'rateCardTemplates'),
+          where('companyId', '==', companyId),
+          where('active', '==', true)
+        );
+        const templatesSnap = await getDocs(templatesQuery);
+        const templatesData = templatesSnap.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+        } as RateCardTemplate));
+        
+        setTemplates(templatesData);
+        
+        // Set selected template if editing
+        if (rateCard?.templateId) {
+          const template = templatesData.find(t => t.id === rateCard.templateId);
+          if (template) {
+            setSelectedTemplate(template);
+          }
+        } else {
+          // Select default template if creating new
+          const defaultTemplate = templatesData.find(t => t.isDefault);
+          if (defaultTemplate) {
+            setSelectedTemplate(defaultTemplate);
+            setFormData(prev => ({
+              ...prev,
+              templateId: defaultTemplate.id,
+              templateName: defaultTemplate.name,
+            }));
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching templates:', error);
+      } finally {
+        setLoadingTemplates(false);
+      }
+    };
+
+    fetchTemplates();
+  }, [companyId, rateCard]);
+
+  // Get resource categories and shift types from template or use legacy
+  const resourceCategories = selectedTemplate?.resourceCategories || LEGACY_RESOURCE_CATEGORIES;
+  const shiftTypes = selectedTemplate?.shiftTypes || 
+    LEGACY_SHIFT_TYPES.map(st => ({ id: st, name: st, rateMultiplier: 1.0 }));
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -42,12 +106,26 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving }: Rate
     }));
   };
 
+  const handleTemplateChange = (templateId: string) => {
+    const template = templates.find(t => t.id === templateId);
+    setSelectedTemplate(template || null);
+    setFormData(prev => ({
+      ...prev,
+      templateId: template?.id,
+      templateName: template?.name,
+    }));
+  };
+
   const addRateEntry = () => {
+    const firstShiftType = shiftTypes[0];
     const newEntry: RateEntry = {
       roleName: '',
-      category: 'Labour',
+      category: resourceCategories[0] || 'Labour',
       description: '',
-      shiftType: 'Mon–Fri (1st 8 hours)',
+      shiftType: firstShiftType.name,
+      shiftTypeId: firstShiftType.id,
+      rateMultiplier: firstShiftType.rateMultiplier,
+      baseRate: 0,
       startTime: '',
       endTime: '',
       totalHours: undefined,
@@ -56,6 +134,7 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving }: Rate
       rate8Hours: null,
       rate9Hours: null,
       rate10Hours: null,
+      rate12Hours: null,
       flatShiftRate: null,
       congestionChargeApplicable: false,
       congestionChargeAmount: 15,
@@ -86,9 +165,86 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving }: Rate
       ...prev,
       rates: prev.rates.map((rate, i) => {
         if (i === index) {
-          return { ...rate, [field]: value };
+          const updatedRate = { ...rate, [field]: value };
+          
+          // If shift type changed, update multiplier and calculated rates
+          if (field === 'shiftType') {
+            const shiftType = shiftTypes.find(st => st.name === value);
+            if (shiftType) {
+              updatedRate.shiftTypeId = shiftType.id;
+              updatedRate.rateMultiplier = shiftType.rateMultiplier;
+              
+              // Recalculate hourly rate if base rate exists
+              if (updatedRate.baseRate) {
+                updatedRate.hourlyRate = updatedRate.baseRate * shiftType.rateMultiplier;
+              }
+            }
+          }
+          
+          // If base rate changed, recalculate hourly rate
+          if (field === 'baseRate' && updatedRate.rateMultiplier) {
+            updatedRate.hourlyRate = value * updatedRate.rateMultiplier;
+          }
+          
+          return updatedRate;
         }
         return rate;
+      })
+    }));
+  };
+
+  const addExpenseEntry = () => {
+    if (!selectedTemplate || selectedTemplate.expenseCategories.length === 0) {
+      alert('Please select a template with expense categories first');
+      return;
+    }
+    
+    const firstExpense = selectedTemplate.expenseCategories[0];
+    const newExpense: ExpenseEntry = {
+      id: crypto.randomUUID(),
+      categoryId: firstExpense.id,
+      categoryName: firstExpense.name,
+      description: '',
+      unitType: firstExpense.unitType,
+      rate: firstExpense.defaultRate || 0,
+      taxable: firstExpense.taxable || false,
+      notes: '',
+    };
+    
+    setFormData(prev => ({
+      ...prev,
+      expenses: [...(prev.expenses || []), newExpense]
+    }));
+  };
+
+  const removeExpenseEntry = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      expenses: (prev.expenses || []).filter((_, i) => i !== index)
+    }));
+  };
+
+  const updateExpenseEntry = (index: number, field: keyof ExpenseEntry, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      expenses: (prev.expenses || []).map((expense, i) => {
+        if (i === index) {
+          const updated = { ...expense, [field]: value };
+          
+          // If category changed, update related fields
+          if (field === 'categoryId' && selectedTemplate) {
+            const category = selectedTemplate.expenseCategories.find(ec => ec.id === value);
+            if (category) {
+              updated.categoryName = category.name;
+              updated.unitType = category.unitType;
+              updated.rate = category.defaultRate || 0;
+              updated.taxable = category.taxable || false;
+            }
+          }
+          
+          return updated;
+        }
+        return expense;
       })
     }));
   };
@@ -120,6 +276,29 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving }: Rate
               <Tag className="w-5 h-5 mr-2 text-blue-600" />
               Rate Card Information
             </h4>
+
+            {!loadingTemplates && templates.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Template (Optional)
+                </label>
+                <select
+                  value={formData.templateId || ''}
+                  onChange={(e) => handleTemplateChange(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">No Template (Legacy)</option>
+                  {templates.map(template => (
+                    <option key={template.id} value={template.id}>
+                      {template.name} {template.isDefault ? '(Default)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Select a template to use predefined shift types and expense categories
+                </p>
+              </div>
+            )}
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
@@ -172,7 +351,7 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving }: Rate
             <div className="flex items-center justify-between">
               <h4 className="text-lg font-semibold text-gray-900 flex items-center">
                 <DollarSign className="w-5 h-5 mr-2 text-green-600" />
-                Rate Entries ({formData.rates.length})
+                Labour & Resource Rates ({formData.rates.length})
               </h4>
               <button
                 type="button"
@@ -207,11 +386,48 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving }: Rate
                     index={index}
                     onUpdate={updateRateEntry}
                     onRemove={removeRateEntry}
+                    resourceCategories={resourceCategories}
+                    shiftTypes={shiftTypes}
                   />
                 ))}
               </div>
             )}
           </div>
+
+          {/* Expense Entries */}
+          {selectedTemplate && selectedTemplate.expenseCategories.length > 0 && (
+            <div className="space-y-4 border-t border-gray-200 pt-6">
+              <div className="flex items-center justify-between">
+                <h4 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <Receipt className="w-5 h-5 mr-2 text-purple-600" />
+                  Expense Rates ({(formData.expenses || []).length})
+                </h4>
+                <button
+                  type="button"
+                  onClick={addExpenseEntry}
+                  className="flex items-center space-x-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Expense</span>
+                </button>
+              </div>
+
+              {(formData.expenses || []).length > 0 && (
+                <div className="space-y-3">
+                  {(formData.expenses || []).map((expense, index) => (
+                    <ExpenseEntryRow
+                      key={expense.id}
+                      expense={expense}
+                      index={index}
+                      onUpdate={updateExpenseEntry}
+                      onRemove={removeExpenseEntry}
+                      expenseCategories={selectedTemplate.expenseCategories}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200 sticky bottom-0 bg-white">
             <button
@@ -236,11 +452,13 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving }: Rate
 }
 
 // Individual Rate Entry Row Component
-function RateEntryRow({ rate, index, onUpdate, onRemove }: {
+function RateEntryRow({ rate, index, onUpdate, onRemove, resourceCategories, shiftTypes }: {
   rate: RateEntry;
   index: number;
   onUpdate: (index: number, field: keyof RateEntry, value: any) => void;
   onRemove: (index: number) => void;
+  resourceCategories: string[];
+  shiftTypes: Array<{ id: string; name: string; rateMultiplier: number }>;
 }) {
   return (
     <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
@@ -273,19 +491,19 @@ function RateEntryRow({ rate, index, onUpdate, onRemove }: {
               placeholder="e.g., Supervisor, Fitter, Driver"
             />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Category *</label>
-            <select
-              required
-              value={rate.category}
-              onChange={(e) => onUpdate(index, 'category', e.target.value as ResourceCategory)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              {RESOURCE_CATEGORIES.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
-          </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Category *</label>
+              <select
+                required
+                value={rate.category}
+                onChange={(e) => onUpdate(index, 'category', e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                {resourceCategories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Description / Notes</label>
             <input
@@ -310,13 +528,18 @@ function RateEntryRow({ rate, index, onUpdate, onRemove }: {
             <select
               required
               value={rate.shiftType}
-              onChange={(e) => onUpdate(index, 'shiftType', e.target.value as ShiftType)}
+              onChange={(e) => onUpdate(index, 'shiftType', e.target.value)}
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             >
-              {SHIFT_TYPES.map(shift => (
-                <option key={shift} value={shift}>{shift}</option>
+              {shiftTypes.map(shift => (
+                <option key={shift.id} value={shift.name}>
+                  {shift.name} ({shift.rateMultiplier}x)
+                </option>
               ))}
             </select>
+            {rate.rateMultiplier && rate.rateMultiplier !== 1 && (
+              <p className="text-xs text-blue-600 mt-1">Multiplier: {rate.rateMultiplier}x</p>
+            )}
           </div>
         </div>
       </div>
@@ -362,7 +585,20 @@ function RateEntryRow({ rate, index, onUpdate, onRemove }: {
         <h5 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
           <DollarSign className="w-4 h-4 mr-1" /> 4. Pricing Fields
         </h5>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Base Rate (£) *</label>
+            <input
+              type="number"
+              step="0.01"
+              required
+              value={rate.baseRate ?? ''}
+              onChange={(e) => onUpdate(index, 'baseRate', e.target.value ? parseFloat(e.target.value) : 0)}
+              className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="0.00"
+            />
+            <p className="text-xs text-gray-500 mt-1">Before multiplier</p>
+          </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Hourly Rate (£)</label>
             <input
@@ -414,6 +650,17 @@ function RateEntryRow({ rate, index, onUpdate, onRemove }: {
               step="0.01"
               value={rate.rate10Hours ?? ''}
               onChange={(e) => onUpdate(index, 'rate10Hours', e.target.value ? parseFloat(e.target.value) : null)}
+              className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="0.00"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">12-Hour Rate (£)</label>
+            <input
+              type="number"
+              step="0.01"
+              value={rate.rate12Hours ?? ''}
+              onChange={(e) => onUpdate(index, 'rate12Hours', e.target.value ? parseFloat(e.target.value) : null)}
               className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               placeholder="0.00"
             />
@@ -538,6 +785,84 @@ function RateEntryRow({ rate, index, onUpdate, onRemove }: {
               placeholder="Internal notes for invoicing"
             />
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Expense Entry Row Component
+function ExpenseEntryRow({ expense, index, onUpdate, onRemove, expenseCategories }: {
+  expense: ExpenseEntry;
+  index: number;
+  onUpdate: (index: number, field: keyof ExpenseEntry, value: any) => void;
+  onRemove: (index: number) => void;
+  expenseCategories: Array<{ id: string; name: string; unitType: string; defaultRate?: number; taxable?: boolean }>;
+}) {
+  return (
+    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-sm font-bold text-gray-900">Expense #{index + 1}</span>
+        <button
+          type="button"
+          onClick={() => onRemove(index)}
+          className="p-1 text-red-600 hover:bg-red-50 rounded transition"
+          title="Remove"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Expense Category *</label>
+          <select
+            required
+            value={expense.categoryId}
+            onChange={(e) => onUpdate(index, 'categoryId', e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          >
+            {expenseCategories.map(cat => (
+              <option key={cat.id} value={cat.id}>{cat.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Rate (£) *</label>
+          <input
+            type="number"
+            step="0.01"
+            required
+            value={expense.rate}
+            onChange={(e) => onUpdate(index, 'rate', parseFloat(e.target.value))}
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            placeholder="0.00"
+          />
+          <p className="text-xs text-gray-500 mt-1">{expense.unitType.replace('_', ' ')}</p>
+        </div>
+
+        <div className="md:col-span-2">
+          <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
+          <input
+            type="text"
+            value={expense.description || ''}
+            onChange={(e) => onUpdate(index, 'description', e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            placeholder="Optional description"
+          />
+        </div>
+
+        <div className="flex items-center">
+          <label className="flex items-center mt-5">
+            <input
+              type="checkbox"
+              checked={expense.taxable}
+              onChange={(e) => onUpdate(index, 'taxable', e.target.checked)}
+              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <span className="ml-2 text-xs text-gray-700">Taxable</span>
+          </label>
         </div>
       </div>
     </div>
