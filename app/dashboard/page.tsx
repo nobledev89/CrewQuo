@@ -21,8 +21,10 @@ interface UserData {
 
 interface CompanyData {
   name: string;
-  plan: string;
-  currency: string;
+  subscriptionPlan: string;
+  subscriptionStatus: string;
+  trialEndsAt?: any;
+  currency?: string;
 }
 
 interface Stats {
@@ -163,7 +165,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <p className="text-sm text-gray-600">Plan</p>
-                <p className="font-semibold text-gray-900 capitalize">{companyData?.plan || 'Loading...'}</p>
+                <p className="font-semibold text-gray-900 capitalize">{companyData?.subscriptionPlan || 'Loading...'}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Currency</p>

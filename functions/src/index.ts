@@ -88,6 +88,7 @@ export const completeSignup = functions.https.onRequest(async (req, res) => {
       subscriptionPlan: 'trial',
       subscriptionStatus: 'trial',
       trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
+      currency: 'GBP',
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });

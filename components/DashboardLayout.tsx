@@ -6,6 +6,7 @@ import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { ClientFilterProvider, useClientFilter } from '../lib/ClientFilterContext';
+import TrialBanner from './TrialBanner';
 import { 
   Layers, 
   Home,
@@ -18,7 +19,8 @@ import {
   Building2,
   ChevronDown,
   Check,
-  FileText
+  FileText,
+  Settings
 } from 'lucide-react';
 
 interface DashboardLayoutProps {
@@ -34,6 +36,8 @@ interface UserData {
 
 interface CompanyData {
   name: string;
+  subscriptionStatus?: string;
+  trialEndsAt?: any;
 }
 
 // Inner component that uses the context
@@ -318,6 +322,14 @@ function DashboardContent({ children }: DashboardLayoutProps) {
             <p className="text-sm font-medium text-gray-900 truncate">{user?.email}</p>
             <p className="text-xs text-gray-600">{userData?.role}</p>
           </div>
+          <a
+            href="/dashboard/settings"
+            onClick={() => setSidebarOpen(false)}
+            className="w-full flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gray-100 rounded-lg transition font-medium mb-2"
+          >
+            <Settings className="w-5 h-5" />
+            <span>Settings</span>
+          </a>
           <button
             onClick={handleSignOut}
             className="w-full flex items-center space-x-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg transition font-medium"
@@ -332,6 +344,14 @@ function DashboardContent({ children }: DashboardLayoutProps) {
       <div className="lg:pl-64">
         {/* Mobile spacing */}
         <div className="lg:hidden h-16" />
+        
+        {/* Trial Banner */}
+        {companyData && (
+          <TrialBanner 
+            subscriptionStatus={companyData.subscriptionStatus || 'inactive'} 
+            trialEndsAt={companyData.trialEndsAt}
+          />
+        )}
         
         {/* Content */}
         <main className="min-h-screen">

@@ -63,6 +63,8 @@ export interface Company {
   ownerId: string;
   subscriptionPlan: SubscriptionPlan;
   subscriptionStatus: SubscriptionStatus;
+  trialEndsAt?: Timestamp;
+  currency?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
