@@ -82,6 +82,8 @@ function SubcontractorsContent() {
             const userData = userDoc.data();
             setCompanyId(userData.companyId);
             setUserRole(userData.role);
+            // Fetch subcontractors on mount
+            await fetchSubcontractors(userData.companyId, selectedClient.clientId);
           }
         } catch (error) {
           console.error('Error fetching subcontractors:', error);
@@ -92,7 +94,7 @@ function SubcontractorsContent() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [selectedClient.clientId]);
 
   const fetchSubcontractors = async (compId: string, clientId: string | null) => {
     try {
