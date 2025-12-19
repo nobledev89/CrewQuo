@@ -96,14 +96,19 @@ function DashboardContent({ children }: DashboardLayoutProps) {
     }
   };
 
-  // Navigation items - Rate Cards only shown in own company workspace
+  // Navigation items - contextual based on workspace
   const getNavItems = () => {
     const baseItems = [
       { name: 'Dashboard', href: '/dashboard', icon: Home },
-      { name: 'Clients', href: '/dashboard/clients', icon: Building2 },
-      { name: 'Projects', href: '/dashboard/projects', icon: Briefcase },
-      { name: 'Subcontractors', href: '/dashboard/subcontractors', icon: Users },
     ];
+    
+    // Only show Clients when viewing own company (not client-specific workspace)
+    if (selectedClient.clientId === null) {
+      baseItems.push({ name: 'Clients', href: '/dashboard/clients', icon: Building2 });
+    }
+    
+    baseItems.push({ name: 'Projects', href: '/dashboard/projects', icon: Briefcase });
+    baseItems.push({ name: 'Subcontractors', href: '/dashboard/subcontractors', icon: Users });
     
     // Only show Rate Cards and Templates when viewing own company (not client-specific workspace)
     if (selectedClient.clientId === null) {

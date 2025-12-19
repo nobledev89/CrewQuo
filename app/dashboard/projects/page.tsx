@@ -180,7 +180,7 @@ function ProjectsContent() {
       startDate: '',
       endDate: '',
       notes: '',
-      clientId: '',
+      clientId: selectedClient.clientId || '', // Auto-select client if in client workspace
     });
     setShowModal(true);
   };
@@ -351,7 +351,7 @@ function ProjectsContent() {
             <p className="text-gray-600 mb-4">
               {selectedClient.clientId ? 'This client has no projects assigned yet.' : 'Get started by adding your first project.'}
             </p>
-            {canEdit && !selectedClient.clientId && (
+            {canEdit && (
               <button
                 onClick={openAddModal}
                 className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
@@ -495,25 +495,34 @@ function ProjectsContent() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Client *
-                </label>
-                <select
-                  name="clientId"
-                  required
-                  value={formData.clientId}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">Select a client</option>
-                  {clients.map(client => (
-                    <option key={client.id} value={client.id}>
-                      {client.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* Only show client selector if not in a client workspace */}
+              {!selectedClient.clientId ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Client *
+                  </label>
+                  <select
+                    name="clientId"
+                    required
+                    value={formData.clientId}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Select a client</option>
+                    {clients.map(client => (
+                      <option key={client.id} value={client.id}>
+                        {client.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                  <p className="text-sm font-medium text-gray-700 mb-1">Client</p>
+                  <p className="text-lg font-bold text-purple-900">{selectedClient.clientName}</p>
+                  <p className="text-xs text-gray-600 mt-1">Project will be assigned to this client's workspace</p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">

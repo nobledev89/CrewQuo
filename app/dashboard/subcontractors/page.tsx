@@ -354,7 +354,7 @@ function SubcontractorsContent() {
             <p className="text-gray-600 mb-4">
               {selectedClient.clientId ? 'No subcontractors are assigned to this client\'s projects.' : 'Get started by adding your first subcontractor.'}
             </p>
-            {canEdit && !selectedClient.clientId && (
+            {canEdit && (
               <button
                 onClick={openAddModal}
                 className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
