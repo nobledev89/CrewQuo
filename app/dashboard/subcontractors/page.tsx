@@ -64,14 +64,7 @@ function SubcontractorsContent() {
   
   // Get client filter from context
   const { selectedClient } = useClientFilter();
-  const { cachedData, updateSubcontractors } = useClientData();
-
-  // Use cached data only on initial load
-  useEffect(() => {
-    if (cachedData && cachedData.subcontractors && subcontractors.length === 0) {
-      setSubcontractors(cachedData.subcontractors);
-    }
-  }, [cachedData]);
+  const { updateSubcontractors } = useClientData();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
