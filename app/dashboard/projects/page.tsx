@@ -391,7 +391,10 @@ function ProjectsContent() {
                   {canEdit && (
                     <div className="flex items-center space-x-2">
                       <button
-                        onClick={() => openEditModal(project)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditModal(project);
+                        }}
                         className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
                         title="Edit"
                       >
@@ -399,7 +402,10 @@ function ProjectsContent() {
                       </button>
                       {userRole === 'ADMIN' && (
                         <button
-                          onClick={() => handleDelete(project.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(project.id);
+                          }}
                           className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
                           title="Delete"
                         >

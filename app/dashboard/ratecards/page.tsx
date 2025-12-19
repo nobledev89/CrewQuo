@@ -53,6 +53,9 @@ export default function RateCardsPage() {
             const userData = userDoc.data();
             setCompanyId(userData.companyId);
             setUserRole(userData.role);
+            
+            // Fetch rate cards after getting company ID
+            await fetchRateCards(userData.companyId);
           }
         } catch (error) {
           console.error('Error fetching rate cards:', error);
