@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -38,6 +39,7 @@ interface Stats {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [companyData, setCompanyData] = useState<CompanyData | null>(null);
   const [stats, setStats] = useState<Stats>({ projects: 0, clients: 0, subcontractors: 0, rateCards: 0 });
   const [loading, setLoading] = useState(true);
@@ -50,6 +52,11 @@ export default function DashboardPage() {
         const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
         if (userDoc.exists()) {
           const data = userDoc.data() as UserData;
+
+          if (data.role === 'SUBCONTRACTOR') {
+            router.push('/dashboard/my-work');
+            return;
+          }
           
           // Fetch company data
           const companyDoc = await getDoc(doc(db, 'companies', data.companyId));

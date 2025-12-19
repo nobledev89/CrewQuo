@@ -40,6 +40,12 @@ service cloud.firestore {
              (request.auth.token.subcontractorRoles != null && 
               compId in request.auth.token.subcontractorRoles);
     }
+
+    function subcontractorIdForActiveCompany() {
+      return (request.auth.token.subcontractorRoles != null && activeCompanyId() in request.auth.token.subcontractorRoles)
+        ? request.auth.token.subcontractorRoles[activeCompanyId()].subcontractorId
+        : null;
+    }
     
     function isAdmin() {
       return userRole() == 'ADMIN';
@@ -233,7 +239,10 @@ service cloud.firestore {
           (isOwnCompany() && isAdminOrManager())
           ||
           // In subcontractor context: can create own logs
-          (!isOwnCompany() && request.resource.data.createdByUserId == request.auth.uid)
+          (!isOwnCompany() 
+            && request.resource.data.createdByUserId == request.auth.uid
+            && request.resource.data.subcontractorId == subcontractorIdForActiveCompany()
+            && request.resource.data.status == 'DRAFT')
         );
       
       allow update: if authed()
@@ -246,7 +255,8 @@ service cloud.firestore {
           // In subcontractor context: can update own DRAFT logs
           (!isOwnCompany() 
             && resource.data.createdByUserId == request.auth.uid
-            && resource.data.status == 'DRAFT')
+            && resource.data.subcontractorId == subcontractorIdForActiveCompany()
+            && resource.data.status in ['DRAFT', 'REJECTED'])
         );
       
       allow delete: if authed() 
@@ -267,7 +277,10 @@ service cloud.firestore {
           (isOwnCompany() && isAdminOrManager())
           ||
           // In subcontractor context: can create own expenses
-          (!isOwnCompany() && request.resource.data.createdByUserId == request.auth.uid)
+          (!isOwnCompany() 
+            && request.resource.data.createdByUserId == request.auth.uid
+            && request.resource.data.subcontractorId == subcontractorIdForActiveCompany()
+            && request.resource.data.status == 'DRAFT')
         );
       
       allow update: if authed()
@@ -280,7 +293,8 @@ service cloud.firestore {
           // In subcontractor context: can update own DRAFT expenses
           (!isOwnCompany() 
             && resource.data.createdByUserId == request.auth.uid
-            && resource.data.status == 'DRAFT')
+            && resource.data.subcontractorId == subcontractorIdForActiveCompany()
+            && resource.data.status in ['DRAFT', 'REJECTED'])
         );
       
       allow delete: if authed() 

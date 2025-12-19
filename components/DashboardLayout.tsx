@@ -101,6 +101,10 @@ function DashboardContent({ children }: DashboardLayoutProps) {
 
   // Navigation items - contextual based on workspace
   const getNavItems = () => {
+    if (userData?.role === 'SUBCONTRACTOR') {
+      return [{ name: 'My Work', href: '/dashboard/my-work', icon: Briefcase }];
+    }
+
     const baseItems = [
       { name: 'Dashboard', href: '/dashboard', icon: Home },
     ];

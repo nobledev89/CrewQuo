@@ -18,6 +18,7 @@ export interface RateCardFormData {
   name: string;
   description: string;
   active: boolean;
+  cardType?: 'PAY' | 'BILL';
   templateId?: string;
   templateName?: string;
   rates: RateEntry[];
@@ -42,6 +43,7 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
     name: rateCard?.name || '',
     description: rateCard?.description || '',
     active: rateCard?.active ?? true,
+    cardType: rateCard?.cardType || 'PAY',
     templateId: rateCard?.templateId,
     templateName: rateCard?.templateName,
     rates: rateCard?.rates || [],
@@ -307,6 +309,21 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
             )}
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Card Type *
+                </label>
+                <select
+                  name="cardType"
+                  required
+                  value={formData.cardType || 'PAY'}
+                  onChange={(e) => handleInputChange(e as any)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="PAY">Subcontractor Pay</option>
+                  <option value="BILL">Client Bill</option>
+                </select>
+              </div>
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Rate Card Name *

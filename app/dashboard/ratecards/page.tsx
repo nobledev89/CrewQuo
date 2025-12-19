@@ -133,6 +133,7 @@ export default function RateCardsPage() {
         name: data.name,
         description: data.description,
         active: data.active,
+        cardType: data.cardType || 'PAY',
         templateId: data.templateId || null,
         templateName: data.templateName || null,
         rates: data.rates,
@@ -234,6 +235,9 @@ export default function RateCardsPage() {
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
                       <h3 className="text-xl font-bold text-gray-900">{rateCard.name}</h3>
+                      <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold ${rateCard.cardType === 'BILL' ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'}`}>
+                        {rateCard.cardType === 'BILL' ? 'Client Bill' : 'Sub Pay'}
+                      </span>
                       {rateCard.templateName && (
                         <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-purple-100 text-purple-800">
                           Template: {rateCard.templateName}

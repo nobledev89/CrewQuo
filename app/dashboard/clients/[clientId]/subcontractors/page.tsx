@@ -30,13 +30,16 @@ interface RateCard {
   name: string;
   category: string;
   description: string;
+  cardType?: 'PAY' | 'BILL';
 }
 
 interface RateAssignment {
   id: string;
   subcontractorId: string;
-  rateCardId: string;
-  rateCardName: string;
+  payRateCardId?: string;
+  payRateCardName?: string;
+  billRateCardId?: string;
+  billRateCardName?: string;
   assignedAt: any;
 }
 
@@ -45,7 +48,8 @@ export default function ClientSubcontractorsPage() {
   const clientId = params?.clientId as string;
   
   const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
-  const [rateCards, setRateCards] = useState<RateCard[]>([]);
+  const [payRateCards, setPayRateCards] = useState<RateCard[]>([]);
+  const [billRateCards, setBillRateCards] = useState<RateCard[]>([]);
   const [assignments, setAssignments] = useState<Map<string, RateAssignment>>(new Map());
   const [loading, setLoading] = useState(true);
   const [companyId, setCompanyId] = useState<string>('');
@@ -54,7 +58,8 @@ export default function ClientSubcontractorsPage() {
   const [clientName, setClientName] = useState<string>('');
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedSubcontractor, setSelectedSubcontractor] = useState<Subcontractor | null>(null);
-  const [selectedRateCardId, setSelectedRateCardId] = useState<string>('');
+  const [selectedPayRateCardId, setSelectedPayRateCardId] = useState<string>('');
+  const [selectedBillRateCardId, setSelectedBillRateCardId] = useState<string>('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -159,14 +164,16 @@ export default function ClientSubcontractorsPage() {
       );
       const rateCardsSnap = await getDocs(rateCardsQuery);
       
-      const rateCardsData = rateCardsSnap.docs.map(doc => ({
+      const allCards = rateCardsSnap.docs.map(doc => ({
         id: doc.id,
         name: doc.data().name,
         category: doc.data().category,
         description: doc.data().description,
+        cardType: doc.data().cardType || 'PAY',
       } as RateCard));
       
-      setRateCards(rateCardsData);
+      setPayRateCards(allCards.filter(card => (card.cardType || 'PAY') === 'PAY'));
+      setBillRateCards(allCards.filter(card => card.cardType === 'BILL'));
     } catch (error) {
       console.error('Error fetching rate cards:', error);
     }
@@ -185,15 +192,27 @@ export default function ClientSubcontractorsPage() {
       
       for (const docSnap of assignmentsSnap.docs) {
         const data = docSnap.data();
-        // Fetch rate card name
-        const rateCardDoc = await getDoc(doc(db, 'rateCards', data.rateCardId));
-        const rateCardName = rateCardDoc.exists() ? rateCardDoc.data().name : 'Unknown';
+        // Fetch rate card names
+        let payRateCardName = 'Not set';
+        let billRateCardName = 'Not set';
+        const payId = data.payRateCardId || data.rateCardId; // legacy fallback
+        const billId = data.billRateCardId;
+        if (payId) {
+          const rateCardDoc = await getDoc(doc(db, 'rateCards', payId));
+          payRateCardName = rateCardDoc.exists() ? rateCardDoc.data().name : 'Unknown';
+        }
+        if (billId) {
+          const billCardDoc = await getDoc(doc(db, 'rateCards', billId));
+          billRateCardName = billCardDoc.exists() ? billCardDoc.data().name : 'Unknown';
+        }
         
         assignmentsMap.set(data.subcontractorId, {
           id: docSnap.id,
           subcontractorId: data.subcontractorId,
-          rateCardId: data.rateCardId,
-          rateCardName,
+          payRateCardId: payId,
+          payRateCardName,
+          billRateCardId: billId,
+          billRateCardName,
           assignedAt: data.assignedAt,
         });
       }
@@ -207,19 +226,21 @@ export default function ClientSubcontractorsPage() {
   const openAssignModal = (subcontractor: Subcontractor) => {
     setSelectedSubcontractor(subcontractor);
     const existing = assignments.get(subcontractor.id);
-    setSelectedRateCardId(existing?.rateCardId || '');
+    setSelectedPayRateCardId(existing?.payRateCardId || '');
+    setSelectedBillRateCardId(existing?.billRateCardId || '');
     setShowAssignModal(true);
   };
 
   const closeAssignModal = () => {
     setShowAssignModal(false);
     setSelectedSubcontractor(null);
-    setSelectedRateCardId('');
+    setSelectedPayRateCardId('');
+    setSelectedBillRateCardId('');
   };
 
   const handleAssignRateCard = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedSubcontractor || !selectedRateCardId) return;
+    if (!selectedSubcontractor || !selectedPayRateCardId) return;
 
     setSaving(true);
     try {
@@ -232,7 +253,9 @@ export default function ClientSubcontractorsPage() {
       // Create new assignment
       await addDoc(collection(db, 'subcontractorRateAssignments'), {
         subcontractorId: selectedSubcontractor.id,
-        rateCardId: selectedRateCardId,
+        rateCardId: selectedPayRateCardId, // legacy
+        payRateCardId: selectedPayRateCardId,
+        billRateCardId: selectedBillRateCardId || null,
         clientId: clientId,
         companyId,
         assignedAt: serverTimestamp(),
@@ -334,12 +357,17 @@ export default function ClientSubcontractorsPage() {
                   {assignment ? (
                     <div className="bg-green-50 rounded-lg p-4 border border-green-200 mb-3">
                       <div className="flex items-start justify-between">
-                        <div className="flex-1">
+                        <div className="flex-1 space-y-1">
                           <div className="flex items-center space-x-2 mb-2">
                             <FileText className="w-4 h-4 text-green-600" />
-                            <span className="text-sm font-semibold text-green-900">Rate Card Assigned</span>
+                            <span className="text-sm font-semibold text-green-900">Rate Cards Assigned</span>
                           </div>
-                          <p className="text-sm text-green-800 font-medium mb-1">{assignment.rateCardName}</p>
+                          <p className="text-sm text-green-800 font-medium">
+                            Pay: {assignment.payRateCardName || 'Not set'}
+                          </p>
+                          <p className="text-sm text-green-800 font-medium">
+                            Bill: {assignment.billRateCardName || 'None'}
+                          </p>
                           <p className="text-xs text-green-600">Assigned on {formatDate(assignment.assignedAt)}</p>
                         </div>
                         {canEdit && (
@@ -405,34 +433,59 @@ export default function ClientSubcontractorsPage() {
             </div>
 
             <form onSubmit={handleAssignRateCard} className="p-6">
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select Rate Card *
-                </label>
-                <select
-                  required
-                  value={selectedRateCardId}
-                  onChange={(e) => setSelectedRateCardId(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">Choose a rate card...</option>
-                  {rateCards.map(card => (
-                    <option key={card.id} value={card.id}>
-                      {card.name} ({card.category})
-                    </option>
-                  ))}
-                </select>
-                {rateCards.length === 0 && (
-                  <p className="text-sm text-red-600 mt-2">
-                    No active rate cards available. Please create rate cards first.
-                  </p>
-                )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Sub Pay Rate Card *
+                  </label>
+                  <select
+                    required
+                    value={selectedPayRateCardId}
+                    onChange={(e) => setSelectedPayRateCardId(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Choose a rate card...</option>
+                    {payRateCards.map(card => (
+                      <option key={card.id} value={card.id}>
+                        {card.name} ({card.category})
+                      </option>
+                    ))}
+                  </select>
+                  {payRateCards.length === 0 && (
+                    <p className="text-sm text-red-600 mt-2">
+                      No active pay rate cards available. Please create rate cards first.
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Client Bill Rate Card
+                  </label>
+                  <select
+                    value={selectedBillRateCardId}
+                    onChange={(e) => setSelectedBillRateCardId(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">None</option>
+                    {billRateCards.map(card => (
+                      <option key={card.id} value={card.id}>
+                        {card.name} ({card.category})
+                      </option>
+                    ))}
+                  </select>
+                  {billRateCards.length === 0 && (
+                    <p className="text-sm text-gray-600 mt-2">
+                      No bill rate cards created yet. You can still assign a pay card.
+                    </p>
+                  )}
+                </div>
               </div>
 
-              {selectedRateCardId && (
+              {selectedPayRateCardId && (
                 <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 mb-4">
                   <p className="text-sm text-blue-800">
-                    {rateCards.find(c => c.id === selectedRateCardId)?.description || 'No description'}
+                    {payRateCards.find(c => c.id === selectedPayRateCardId)?.description || 'No description'}
                   </p>
                 </div>
               )}
@@ -447,7 +500,7 @@ export default function ClientSubcontractorsPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={saving || !selectedRateCardId}
+                  disabled={saving || !selectedPayRateCardId}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400"
                 >
                   {saving ? 'Assigning...' : 'Assign Rate Card'}

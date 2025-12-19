@@ -317,6 +317,8 @@ export interface RateCard {
   id: string;
   name: string;                  // e.g., "Standard Labour Rates 2024"
   description: string;           // General description of the rate card
+  // Card type: PAY = subcontractor pay rates, BILL = client billing rates
+  cardType?: 'PAY' | 'BILL';
   
   // Reference to template used (optional - for new system)
   templateId?: string;
@@ -349,8 +351,13 @@ export interface SubcontractorRateAssignment {
   id: string;
   subcontractorId: string;
   subcontractorName?: string;    // Denormalized
-  rateCardId: string;
-  rateCardName?: string;         // Denormalized
+  // Pay and bill cards are now stored separately; rateCardId kept for backward compatibility
+  payRateCardId?: string;
+  payRateCardName?: string;      // Denormalized
+  billRateCardId?: string;
+  billRateCardName?: string;
+  rateCardId?: string;
+  rateCardName?: string;         // Legacy denormalized
   clientId: string;
   clientName?: string;           // Denormalized
   projectId?: string;            // Optional: specific to a project
