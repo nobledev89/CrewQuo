@@ -188,21 +188,24 @@ service cloud.firestore {
     
     // Project Assignments
     match /projectAssignments/{assignmentId} {
-      // Allow read if user has access to the company (own company or subcontractor role)
+      // Allow read if user has access to the company (active company or through subcontractor role)
       allow read: if authed() && (
-        sameCompany(resource.data) || 
+        sameActiveCompany(resource.data) || 
         hasAccessToCompany(resource.data.companyId)
       );
       // Can only create in own company
       allow create: if authed() 
-        && sameCompany(request.resource.data) 
+        && sameActiveCompany(request.resource.data) 
+        && isOwnCompany()
         && isAdminOrManager();
       allow update: if authed() 
-        && sameCompany(resource.data) 
-        && sameCompany(request.resource.data) 
+        && sameActiveCompany(resource.data) 
+        && sameActiveCompany(request.resource.data) 
+        && isOwnCompany()
         && isAdminOrManager();
       allow delete: if authed() 
-        && sameCompany(resource.data) 
+        && sameActiveCompany(resource.data) 
+        && isOwnCompany()
         && isAdminOrManager();
     }
     
