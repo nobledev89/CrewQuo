@@ -1,6 +1,131 @@
 # Development Guide
 
-Development workflows, architecture, and best practices for CrewQuo.
+Complete guide for setting up, developing, and maintaining CrewQuo.
+
+---
+
+## Quick Start
+
+### Prerequisites
+- Node.js 18+
+- npm or yarn
+- Firebase CLI: `npm install -g firebase-tools`
+- Git
+
+### Initial Setup
+
+1. **Clone Repository**
+```bash
+git clone https://github.com/nobledev89/CrewQuo.git
+cd CrewQuo
+```
+
+2. **Install Dependencies**
+```bash
+npm install
+cd functions && npm install && cd ..
+```
+
+3. **Configure Environment**
+
+Create `.env.local` in root:
+```env
+# Firebase Config (from Firebase Console)
+NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_auth_domain
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_storage_bucket
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
+
+# Email Service (Resend)
+RESEND_API_KEY=re_your_resend_api_key
+APP_URL=http://localhost:3000
+
+# Payment Integration
+NEXT_PUBLIC_GUMROAD_PRODUCT_ID=your_product_id
+```
+
+4. **Start Development**
+```bash
+npm run dev
+# App runs at http://localhost:3000
+```
+
+5. **Start Firebase Emulators** (optional for local testing)
+```bash
+firebase emulators:start
+# Firestore UI at http://localhost:4000
+```
+
+---
+
+## Email System Setup
+
+### Quick Setup (5 Minutes)
+
+1. **Sign up for Resend**
+   - Visit [resend.com](https://resend.com)
+   - Free tier: 100 emails/day
+
+2. **Get API Key**
+   - Resend Dashboard → API Keys → Create API Key
+   - Copy key (starts with `re_`)
+
+3. **Configure Environment**
+
+   **Local Development** (`.env.local`):
+   ```env
+   RESEND_API_KEY=re_your_key_here
+   APP_URL=http://localhost:3000
+   ```
+
+   **Production** (Firebase Functions):
+   ```bash
+   firebase functions:config:set resend.api_key="re_your_key_here"
+   firebase functions:config:set app.url="https://crewquo.com"
+   ```
+
+4. **Configure Domain** (Production only)
+   - Resend Dashboard → Domains → Add Domain
+   - Enter: `crewquo.com`
+   - Add DNS records to domain registrar
+   - Wait for verification (up to 48 hours)
+
+### Email Features
+
+The system automatically sends:
+
+1. **Subcontractor Invites**
+   - Triggered when creating subcontractor with invite option
+   - Includes secure invitation link
+   - From: support@crewquo.com
+
+2. **Registration Confirmation**
+   - Sent on new user signup
+   - Includes trial information
+   - From: support@crewquo.com
+
+3. **Invite Acceptance Notification**
+   - Sent to company owner when subcontractor accepts
+   - From: support@crewquo.com
+
+### Testing Emails
+
+**Local Development:**
+```bash
+npm run emu  # Start emulators
+# Create test subcontractor
+# Check console logs for email confirmation
+```
+
+**Production:**
+```bash
+npm run functions:build
+firebase deploy --only functions
+# Create subcontractor with real email
+# Monitor in Resend dashboard
+```
 
 ---
 
@@ -89,6 +214,9 @@ npm run build
 
 # Test production build
 npm start
+
+# Test with emulators
+firebase emulators:start
 ```
 
 ### 4. Commit & Push
@@ -97,6 +225,49 @@ git add .
 git commit -m "feat: description of changes"
 git push origin main
 # Auto-deploys to Vercel
+```
+
+---
+
+## Performance Optimizations
+
+### Client Data Prefetching
+
+Implemented to improve navigation speed between pages:
+
+**Architecture:**
+- `ClientDataContext.tsx`: Manages data cache and prefetching
+- `useClientContext.ts`: Triggers prefetch on client selection
+- `ClientFilterContext.tsx`: Integrates prefetch with client switching
+
+**How It Works:**
+1. When user switches clients/workspace, `prefetchClientData()` is called
+2. All page data fetches in parallel using `Promise.all()`:
+   - Projects
+   - Subcontractors  
+   - Rate Cards
+   - Clients
+   - Dashboard Stats
+3. Data is cached in context
+4. Pages read from cache for instant rendering
+5. CRUD operations update cache automatically
+
+**Benefits:**
+- Single loading screen when switching clients
+- Instant page navigation after initial load
+- Reduced Firebase read operations
+- Better user experience
+
+**Implementation Example:**
+```typescript
+// In dashboard pages
+const { cachedData } = useClientData();
+
+useEffect(() => {
+  if (cachedData) {
+    setProjects(cachedData.projects); // Instant!
+  }
+}, [cachedData]);
 ```
 
 ---
@@ -405,9 +576,51 @@ git push origin feature/your-feature
 
 ---
 
+## Troubleshooting
+
+### Email Issues
+
+**Emails not sending?**
+- Verify API key in environment variables
+- Check domain verification in Resend dashboard
+- View logs: `firebase functions:log`
+
+**Emails in spam?**
+- Ensure domain is fully verified
+- Add all DNS records (SPF, DKIM, DMARC)
+- Whitelist support@crewquo.com
+
+### Build Errors
+
+**TypeScript errors:**
+```bash
+npx tsc --noEmit  # Check all types
+```
+
+**Module not found:**
+```bash
+rm -rf node_modules .next
+npm install
+npm run dev
+```
+
+### Firebase Issues
+
+**Authentication errors:**
+- Check Firebase console for auth configuration
+- Verify environment variables match Firebase project
+
+**Firestore permission denied:**
+- Review `firestore.rules`
+- Ensure user is authenticated
+- Check companyId filtering
+
+---
+
 ## Resources
 
 - [Next.js Docs](https://nextjs.org/docs)
 - [Firebase Docs](https://firebase.google.com/docs)
 - [Tailwind CSS](https://tailwindcss.com/docs)
 - [TypeScript Handbook](https://www.typescriptlang.org/docs)
+- [Resend Docs](https://resend.com/docs)

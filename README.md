@@ -43,6 +43,11 @@ CrewQuo is an all-in-one platform that streamlines project management, time trac
 - Works seamlessly on desktop, tablet, and mobile devices
 - Modern, intuitive interface
 
+### ⚡ Performance Optimizations
+- **Client Data Prefetching**: When switching clients, all page data (projects, subcontractors, rate cards) loads in parallel
+- **Instant Page Navigation**: After initial client load, navigating between pages is instant with cached data
+- **Smart Loading States**: Single loading indicator when switching workspaces, then blazing-fast navigation
+
 ---
 
 ## Tech Stack
@@ -57,11 +62,8 @@ CrewQuo is an all-in-one platform that streamlines project management, time trac
 
 ## Quick Links
 
-- 📖 [Setup Guide](./SETUP.md) - Get started with development
-- 🚀 [Deployment Guide](./DEPLOYMENT.md) - Deploy to production
-- 💻 [Development Guide](./DEVELOPMENT.md) - Development workflows and architecture
-- 📧 [Email Setup](./EMAIL_QUICKSTART.md) - Configure the email system (Quick Start)
-- 📬 [Email Documentation](./EMAIL_SETUP.md) - Detailed email system documentation
+- 💻 [Development Guide](./DEVELOPMENT.md) - Setup, workflows, email system, and architecture
+- 🚀 [Deployment Guide](./DEPLOYMENT.md) - Deploy to production and manage infrastructure
 
 ---
 
@@ -74,7 +76,11 @@ CrewQuo/
 │   ├── login/               # Authentication pages
 │   └── signup/              # Registration pages
 ├── components/              # React components
+│   └── DashboardLayout.tsx  # Main layout with workspace switcher
 ├── lib/                     # Utilities and contexts
+│   ├── ClientDataContext.tsx    # Data prefetching & caching
+│   ├── ClientFilterContext.tsx  # Client workspace management
+│   └── useClientContext.ts      # Client selection hook
 ├── functions/               # Firebase Cloud Functions
 │   └── src/
 │       ├── email.ts         # Email service and templates
