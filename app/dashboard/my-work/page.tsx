@@ -29,7 +29,7 @@ interface Assignment {
 interface RateEntry {
   roleName: string;
   shiftType: string;
-  hourlyRate-: number | null;
+  hourlyRate: number | null;
   baseRate: number;
 }
 
@@ -43,22 +43,22 @@ interface ExpenseEntry {
 interface RateCard {
   id: string;
   name: string;
-  cardType-: 'PAY' | 'BILL';
-  rates-: RateEntry[];
-  expenses-: ExpenseEntry[];
+  cardType: 'PAY' | 'BILL';
+  rates: RateEntry[];
+  expenses: ExpenseEntry[];
 }
 
 interface RateAssignment {
   clientId: string;
-  payRateCardId-: string;
-  billRateCardId-: string;
+  payRateCardId: string;
+  billRateCardId: string;
 }
 
 interface TimeLog {
   id: string;
   projectId: string;
   projectName: string;
-  clientId-: string;
+  clientId: string;
   roleName: string;
   shiftType: string;
   date: any;
@@ -125,7 +125,7 @@ export default function MyWorkPage() {
         const activeId = userData.activeCompanyId || userData.companyId;
         setActiveCompanyId(activeId);
 
-        const subRole = userData.subcontractorRoles-.[activeId];
+        const subRole = userData.subcontractorRoles?.[activeId];
         if (!subRole) {
           setLoading(false);
           return;
@@ -307,37 +307,37 @@ export default function MyWorkPage() {
     return rateAssignments.get(selectedExpenseAssignment.clientId);
   }, [selectedExpenseAssignment, rateAssignments]);
 
-  const payCard = currentRateAssignment-.payRateCardId
-    - rateCards.get(currentRateAssignment.payRateCardId)
+  const payCard = currentRateAssignment?.payRateCardId
+    ? rateCards.get(currentRateAssignment.payRateCardId)
     : undefined;
-  const billCard = currentRateAssignment-.billRateCardId
-    - rateCards.get(currentRateAssignment.billRateCardId)
+  const billCard = currentRateAssignment?.billRateCardId
+    ? rateCards.get(currentRateAssignment.billRateCardId)
     : undefined;
 
   const rateOptions =
-    payCard-.rates-.map((r, idx) => ({
+    payCard?.rates?.map((r, idx) => ({
       key: `${idx}`,
       label: `${r.roleName} - ${r.shiftType}`,
       value: r,
     })) || [];
 
   const selectedRateEntry =
-    payCard-.rates && logForm.rateKey !== ''
-      - payCard.rates[parseInt(logForm.rateKey, 10)]
+    payCard?.rates && logForm.rateKey !== ''
+      ? payCard.rates[parseInt(logForm.rateKey, 10)]
       : undefined;
 
   const matchingBillEntry =
-    billCard-.rates-.find(
+    billCard?.rates?.find(
       (r) =>
-        r.roleName === selectedRateEntry-.roleName &&
-        r.shiftType === selectedRateEntry-.shiftType
+        r.roleName === selectedRateEntry?.roleName &&
+        r.shiftType === selectedRateEntry?.shiftType
     ) || undefined;
 
   const payRate = selectedRateEntry
-    - (selectedRateEntry.hourlyRate -- selectedRateEntry.baseRate -- 0)
+    ? (selectedRateEntry.hourlyRate ?? selectedRateEntry.baseRate ?? 0)
     : 0;
   const billRate = matchingBillEntry
-    - (matchingBillEntry.hourlyRate -- matchingBillEntry.baseRate -- payRate)
+    ? (matchingBillEntry.hourlyRate ?? matchingBillEntry.baseRate ?? payRate)
     : payRate;
 
   const calculatedLog = useMemo(() => {
@@ -346,7 +346,7 @@ export default function MyWorkPage() {
     const cost = payRate * (regular + ot);
     const bill = billRate * (regular + ot);
     const marginValue = bill - cost;
-    const marginPct = bill > 0 - (marginValue / bill) * 100 : 0;
+    const marginPct = bill > 0 ? (marginValue / bill) * 100 : 0;
     return {
       cost: Math.round(cost * 100) / 100,
       bill: Math.round(bill * 100) / 100,
@@ -356,9 +356,9 @@ export default function MyWorkPage() {
   }, [payRate, billRate, logForm.hoursRegular, logForm.hoursOT]);
 
   const expenseOptions =
-    (currentExpenseRateAssignment-.payRateCardId
-      - rateCards.get(currentExpenseRateAssignment.payRateCardId)-.expenses
-      : payCard-.expenses)-.map((e) => ({
+    (currentExpenseRateAssignment?.payRateCardId
+      ? rateCards.get(currentExpenseRateAssignment.payRateCardId)?.expenses
+      : payCard?.expenses)?.map((e) => ({
       key: e.id,
       label: e.categoryName,
       rate: e.rate,
@@ -368,7 +368,7 @@ export default function MyWorkPage() {
 
   const formatDate = (timestamp: any) => {
     if (!timestamp) return 'N/A';
-    const date = timestamp.toDate - timestamp.toDate() : new Date(timestamp);
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     return date.toLocaleDateString('en-GB', {
       day: '2-digit',
       month: 'short',
@@ -378,14 +378,14 @@ export default function MyWorkPage() {
 
   const formatDateInput = (timestamp: any) => {
     if (!timestamp) return '';
-    const date = timestamp.toDate - timestamp.toDate() : new Date(timestamp);
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     return date.toISOString().slice(0, 10);
   };
 
   const resetLogForm = () => {
     setEditingLogId(null);
     setLogForm((prev) => ({
-      projectId: prev.projectId || assignments[0]-.projectId || '',
+      projectId: prev.projectId || assignments[0]?.projectId || '',
       date: '',
       rateKey: '',
       hoursRegular: 8,
@@ -397,7 +397,7 @@ export default function MyWorkPage() {
   const resetExpenseForm = () => {
     setEditingExpenseId(null);
     setExpenseForm((prev) => ({
-      projectId: prev.projectId || assignments[0]-.projectId || '',
+      projectId: prev.projectId || assignments[0]?.projectId || '',
       date: '',
       expenseKey: '',
       amount: 0,
@@ -421,7 +421,7 @@ export default function MyWorkPage() {
         projectId: selectedAssignment.projectId,
         clientId: selectedAssignment.clientId,
         subcontractorId,
-        createdByUserId: auth.currentUser-.uid,
+        createdByUserId: auth.currentUser?.uid,
         date: new Date(logForm.date),
         roleName: selectedRateEntry.roleName,
         shiftType: selectedRateEntry.shiftType,
@@ -432,15 +432,15 @@ export default function MyWorkPage() {
         marginValue: calculatedLog.marginValue,
         marginPct: calculatedLog.marginPct,
         currency: 'GBP',
-        payRateCardId: currentRateAssignment-.payRateCardId || null,
-        billRateCardId: currentRateAssignment-.billRateCardId || null,
+        payRateCardId: currentRateAssignment?.payRateCardId || null,
+        billRateCardId: currentRateAssignment?.billRateCardId || null,
         updatedAt: serverTimestamp(),
       };
 
       if (editingLogId) {
         await updateDoc(doc(db, 'timeLogs', editingLogId), {
           ...basePayload,
-          status: status === 'SUBMITTED' - 'SUBMITTED' : 'DRAFT',
+          status: status === 'SUBMITTED' ? 'SUBMITTED' : 'DRAFT',
         });
       } else {
         const logRef = await addDoc(collection(db, 'timeLogs'), {
@@ -488,20 +488,20 @@ export default function MyWorkPage() {
         companyId: activeCompanyId,
         projectId: expenseForm.projectId,
         subcontractorId,
-        createdByUserId: auth.currentUser-.uid,
+        createdByUserId: auth.currentUser?.uid,
         date: new Date(expenseForm.date),
         category: selectedExpense.label,
         amount,
         currency: 'GBP',
-        payRateCardId: currentExpenseRateAssignment-.payRateCardId || null,
-        billRateCardId: currentExpenseRateAssignment-.billRateCardId || null,
+        payRateCardId: currentExpenseRateAssignment?.payRateCardId || null,
+        billRateCardId: currentExpenseRateAssignment?.billRateCardId || null,
         updatedAt: serverTimestamp(),
       };
 
       if (editingExpenseId) {
         await updateDoc(doc(db, 'expenses', editingExpenseId), {
           ...basePayload,
-          status: status === 'SUBMITTED' - 'SUBMITTED' : 'DRAFT',
+          status: status === 'SUBMITTED' ? 'SUBMITTED' : 'DRAFT',
         });
       } else {
         const expRef = await addDoc(collection(db, 'expenses'), {
@@ -588,7 +588,7 @@ export default function MyWorkPage() {
             <Briefcase className="w-5 h-5 text-blue-600" />
             <h2 className="text-lg font-semibold text-gray-900">Assigned Projects</h2>
           </div>
-          {assignments.length === 0 - (
+          {assignments.length === 0 ? (
             <p className="text-gray-600">No assignments yet.</p>
           ) : (
             <div className="grid md:grid-cols-2 gap-3">
