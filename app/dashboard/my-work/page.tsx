@@ -560,7 +560,10 @@ export default function MyWorkPage() {
     );
   }
 
-  if (userRole !== 'SUBCONTRACTOR') {
+  // Check if user is a subcontractor (either primary role or acting as one)
+  const isSubcontractor = userRole === 'SUBCONTRACTOR' || subcontractorId !== '';
+
+  if (!isSubcontractor) {
     return (
       <DashboardLayout>
         <div className="max-w-4xl mx-auto px-4 py-12">

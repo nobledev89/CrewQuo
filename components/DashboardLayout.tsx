@@ -377,7 +377,9 @@ function DashboardContent({ children }: DashboardLayoutProps) {
         <div className="border-t border-gray-200 p-4">
           <div className="mb-3 px-2">
             <p className="text-sm font-medium text-gray-900 truncate">{user?.email}</p>
-            <p className="text-xs text-gray-600">{userData?.role}</p>
+            <p className="text-xs text-gray-600">
+              {isActingAsSubcontractor() ? 'SUBCONTRACTOR' : userData?.role}
+            </p>
           </div>
           <a
             href="/dashboard/settings"
