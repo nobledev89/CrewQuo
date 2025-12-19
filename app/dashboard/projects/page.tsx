@@ -95,6 +95,8 @@ function ProjectsContent() {
             setUserRole(userData.role);
             
             await fetchClients(userData.companyId);
+            // Fetch projects on initial load based on selected client filter
+            await fetchProjects(userData.companyId, selectedClient.clientId);
           }
         } catch (error) {
           console.error('Error fetching data:', error);
@@ -106,6 +108,13 @@ function ProjectsContent() {
 
     return () => unsubscribe();
   }, []);
+
+  // Refetch projects when client filter changes
+  useEffect(() => {
+    if (companyId) {
+      fetchProjects(companyId, selectedClient.clientId);
+    }
+  }, [selectedClient.clientId, companyId]);
 
   const fetchProjects = async (compId: string, clientId: string | null) => {
     try {
