@@ -34,6 +34,14 @@ interface UserData {
   name: string;
   role: string;
   companyId: string;
+  ownCompanyId?: string;
+  activeCompanyId?: string;
+  subcontractorRoles?: {
+    [companyId: string]: {
+      subcontractorId: string;
+      status: string;
+    };
+  };
 }
 
 interface CompanyData {
@@ -99,9 +107,29 @@ function DashboardContent({ children }: DashboardLayoutProps) {
     }
   };
 
+  // Check if user is acting as a subcontractor in the current company context
+  const isActingAsSubcontractor = () => {
+    if (!userData) return false;
+    
+    // Primary role is SUBCONTRACTOR
+    if (userData.role === 'SUBCONTRACTOR') return true;
+    
+    // User is viewing a company where they're a subcontractor
+    // (activeCompanyId different from their own company)
+    const activeCompanyId = userData.activeCompanyId || userData.companyId;
+    const ownCompanyId = userData.ownCompanyId || userData.companyId;
+    
+    // If viewing a different company and they have a subcontractor role there
+    if (activeCompanyId !== ownCompanyId) {
+      return userData.subcontractorRoles && activeCompanyId in userData.subcontractorRoles;
+    }
+    
+    return false;
+  };
+
   // Navigation items - contextual based on workspace
   const getNavItems = () => {
-    if (userData?.role === 'SUBCONTRACTOR') {
+    if (isActingAsSubcontractor()) {
       return [{ name: 'My Work', href: '/dashboard/my-work', icon: Briefcase }];
     }
 
@@ -211,7 +239,8 @@ function DashboardContent({ children }: DashboardLayoutProps) {
           </div>
         </div>
 
-        {/* Workspace Selector - Always show */}
+        {/* Workspace Selector - Only show for non-subcontractors */}
+        {!isActingAsSubcontractor() && (
         <div className="px-4 py-4 border-b border-gray-200 bg-gradient-to-br from-gray-50 to-white">
           <div className="mb-2">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Workspace</p>
@@ -316,6 +345,7 @@ function DashboardContent({ children }: DashboardLayoutProps) {
             )}
           </div>
         </div>
+        )}
 
         {/* Navigation */}
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
