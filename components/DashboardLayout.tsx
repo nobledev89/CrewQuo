@@ -5,8 +5,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { ClientFilterProvider, useClientFilter } from '../lib/ClientFilterContext';
-import { ClientDataProvider, useClientData } from '../lib/ClientDataContext';
+import { useClientFilter } from '../lib/ClientFilterContext';
+import { useClientData } from '../lib/ClientDataContext';
 import TrialBanner from './TrialBanner';
 import { 
   Layers, 
@@ -376,13 +376,7 @@ function DashboardContent({ children }: DashboardLayoutProps) {
   );
 }
 
-// Wrapper component that provides context
+// Main export - no longer needs to wrap providers since they're in app/dashboard/layout.tsx
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
-  return (
-    <ClientFilterProvider>
-      <ClientDataProvider>
-        <DashboardContent>{children}</DashboardContent>
-      </ClientDataProvider>
-    </ClientFilterProvider>
-  );
+  return <DashboardContent>{children}</DashboardContent>;
 }
