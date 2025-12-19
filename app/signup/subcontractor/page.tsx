@@ -36,24 +36,20 @@ function SubcontractorSignupContent() {
     }
 
     try {
-      // Find subcontractor with this invite token
-      const subcontractorsQuery = query(
-        collection(db, 'subcontractors'),
-        where('inviteToken', '==', token),
-        where('inviteStatus', '==', 'pending')
-      );
+      // Call Cloud Function to validate token (bypasses Firestore security rules)
+      const { httpsCallable } = await import('firebase/functions');
+      const { functions } = await import('@/lib/firebase');
       
-      const subcontractorsSnap = await getDocs(subcontractorsQuery);
+      const validateInviteToken = httpsCallable(functions, 'validateInviteToken');
+      const result = await validateInviteToken({ token });
       
-      if (subcontractorsSnap.empty) {
-        setError('This invite link is invalid or has already been used');
+      const data = result.data as any;
+      
+      if (!data.valid) {
+        setError(data.error || 'This invite link is invalid or has already been used');
         setValidToken(false);
       } else {
-        const subcontractorDoc = subcontractorsSnap.docs[0];
-        setSubcontractorData({
-          id: subcontractorDoc.id,
-          ...subcontractorDoc.data(),
-        });
+        setSubcontractorData(data.subcontractor);
         setValidToken(true);
       }
     } catch (err: any) {

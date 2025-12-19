@@ -635,6 +635,53 @@ function determineSubscriptionPlan(data: any): string {
 }
 
 /**
+ * Validate Subcontractor Invite Token
+ * Callable function that validates an invite token without requiring authentication
+ * This bypasses Firestore security rules by using Admin SDK
+ */
+export const validateInviteToken = functions.https.onCall(async (data, context) => {
+  const { token } = data;
+
+  if (!token || typeof token !== 'string') {
+    throw new functions.https.HttpsError('invalid-argument', 'Token is required');
+  }
+
+  try {
+    // Query for subcontractor with this invite token
+    const subcontractorsSnap = await db
+      .collection('subcontractors')
+      .where('inviteToken', '==', token)
+      .where('inviteStatus', '==', 'pending')
+      .limit(1)
+      .get();
+
+    if (subcontractorsSnap.empty) {
+      return {
+        valid: false,
+        error: 'This invite link is invalid or has already been used',
+      };
+    }
+
+    const subcontractorDoc = subcontractorsSnap.docs[0];
+    const subcontractor = subcontractorDoc.data();
+
+    // Return the subcontractor data needed for signup
+    return {
+      valid: true,
+      subcontractor: {
+        id: subcontractorDoc.id,
+        name: subcontractor.name,
+        email: subcontractor.email,
+        companyId: subcontractor.companyId,
+      },
+    };
+  } catch (error: any) {
+    console.error('Error validating invite token:', error);
+    throw new functions.https.HttpsError('internal', 'Failed to validate invite token');
+  }
+});
+
+/**
  * Send Subcontractor Invite Email
  * Callable function to send invite email to a subcontractor
  */

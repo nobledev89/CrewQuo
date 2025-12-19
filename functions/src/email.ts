@@ -1,7 +1,20 @@
 import { Resend } from 'resend';
 
-// Initialize Resend with API key from environment
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy initialization of Resend to avoid build-time errors
+let resend: Resend | null = null;
+function getResendClient(): Resend {
+  if (!resend) {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      console.warn('RESEND_API_KEY not set, email functionality will be limited');
+      // Create a dummy instance that won't actually send emails
+      resend = new Resend('re_dummy_key_for_build');
+    } else {
+      resend = new Resend(apiKey);
+    }
+  }
+  return resend;
+}
 
 const FROM_EMAIL = 'support@crewquo.com';
 const COMPANY_NAME = 'CrewQuo';
@@ -96,7 +109,7 @@ export async function sendSubcontractorInviteEmail(
       ${getEmailFooter()}
     `;
 
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await getResendClient().emails.send({
       from: FROM_EMAIL,
       to: recipientEmail,
       subject: `You've been invited to join ${companyName} on ${COMPANY_NAME}`,
@@ -218,7 +231,7 @@ export async function sendRegistrationConfirmationEmail(
       ${getEmailFooter()}
     `;
 
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await getResendClient().emails.send({
       from: FROM_EMAIL,
       to: recipientEmail,
       subject: `Welcome to ${COMPANY_NAME}! Your account is ready 🎉`,
@@ -280,7 +293,7 @@ export async function sendInviteAcceptedNotificationEmail(
       ${getEmailFooter()}
     `;
 
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await getResendClient().emails.send({
       from: FROM_EMAIL,
       to: companyEmail,
       subject: `${subcontractorName} has joined your ${COMPANY_NAME} team`,
