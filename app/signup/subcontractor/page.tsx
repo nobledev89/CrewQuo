@@ -146,6 +146,23 @@ function SubcontractorSignupContent() {
         updatedAt: serverTimestamp(),
       });
 
+      // IMPORTANT: Refresh custom claims to ensure subcontractorRoles are available
+      // This is critical for the My Work page to function properly
+      try {
+        const { httpsCallable } = await import('firebase/functions');
+        const { functions } = await import('@/lib/firebase');
+        const refreshClaims = httpsCallable(functions, 'refreshClaims');
+        await refreshClaims();
+        
+        // Force token refresh on the client side
+        await user.getIdToken(true);
+        
+        console.log('Custom claims refreshed successfully');
+      } catch (claimsError) {
+        console.error('Error refreshing claims:', claimsError);
+        // Continue anyway - claims will be set by the trigger eventually
+      }
+
       // Redirect to dashboard
       window.location.href = '/dashboard';
     } catch (err: any) {
