@@ -63,18 +63,28 @@ export default function ProjectDetailPage() {
       if (currentUser) {
         setUserId(currentUser.uid);
         try {
-          const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            setCompanyId(userData.companyId);
-            setUserRole(userData.role);
-            
-            await Promise.all([
-              fetchProject(projectId),
-              fetchSubcontractors(userData.companyId),
-              fetchAssignments(userData.companyId, projectId)
-            ]);
+          // Get the ID token to access custom claims
+          const idTokenResult = await currentUser.getIdTokenResult();
+          const claims = idTokenResult.claims;
+          
+          // Use activeCompanyId from custom claims (this matches what Firestore rules check)
+          const activeCompanyId = claims.activeCompanyId as string;
+          const role = claims.role as string;
+          
+          if (!activeCompanyId) {
+            console.error('No activeCompanyId in token claims');
+            setLoading(false);
+            return;
           }
+          
+          setCompanyId(activeCompanyId);
+          setUserRole(role);
+          
+          await Promise.all([
+            fetchProject(projectId),
+            fetchSubcontractors(activeCompanyId),
+            fetchAssignments(activeCompanyId, projectId)
+          ]);
         } catch (error) {
           console.error('Error fetching data:', error);
         } finally {
