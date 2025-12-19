@@ -79,7 +79,6 @@ function ProjectsContent() {
   // Use cached data when available
   useEffect(() => {
     if (cachedData) {
-      console.log('[ProjectsPage] Using cached projects:', cachedData.projects.length);
       setProjects(cachedData.projects);
       setClients(cachedData.clients);
     }
@@ -114,7 +113,6 @@ function ProjectsContent() {
       let projectsQuery;
       if (clientId) {
         // Workspace-scoped: Only fetch projects for this client
-        console.log('[ProjectsPage] Fetching projects for workspace client:', clientId);
         projectsQuery = query(
           collection(db, 'projects'),
           where('companyId', '==', compId),
@@ -122,7 +120,6 @@ function ProjectsContent() {
         );
       } else {
         // All clients view: Fetch all projects
-        console.log('[ProjectsPage] Fetching all projects for company');
         projectsQuery = query(
           collection(db, 'projects'),
           where('companyId', '==', compId)

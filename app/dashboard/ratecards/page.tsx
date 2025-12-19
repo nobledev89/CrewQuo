@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useEffect, useState } from 'react';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -36,7 +38,6 @@ export default function RateCardsPage() {
   // Use cached data when available
   useEffect(() => {
     if (cachedData) {
-      console.log('[RateCardsPage] Using cached rate cards:', cachedData.rateCards.length);
       setRateCards(cachedData.rateCards as any);
     }
   }, [cachedData]);

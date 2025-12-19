@@ -69,7 +69,6 @@ function SubcontractorsContent() {
   // Use cached data when available
   useEffect(() => {
     if (cachedData) {
-      console.log('[SubcontractorsPage] Using cached subcontractors:', cachedData.subcontractors.length);
       setSubcontractors(cachedData.subcontractors);
     }
   }, [cachedData]);
@@ -99,8 +98,6 @@ function SubcontractorsContent() {
     try {
       if (clientId) {
         // Workspace-scoped: Only fetch subcontractors for this client's projects
-        console.log('[SubcontractorsPage] Fetching subcontractors for workspace client:', clientId);
-        
         // Step 1: Get all projects for the selected client
         const projectsQuery = query(
           collection(db, 'projects'),
@@ -153,7 +150,6 @@ function SubcontractorsContent() {
         setSubcontractors(subcontractorsData);
       } else {
         // All clients view: Fetch all subcontractors
-        console.log('[SubcontractorsPage] Fetching all subcontractors for company');
         const subcontractorsQuery = query(
           collection(db, 'subcontractors'),
           where('companyId', '==', compId)

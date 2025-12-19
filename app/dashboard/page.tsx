@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useEffect, useState } from 'react';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -201,23 +203,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Footer Note */}
-        <div className="mt-8 text-center text-sm text-gray-600">
-          <p>
-            💡 This is a demo dashboard. Full functionality is currently in development.
-          </p>
-          <p className="mt-2">
-            View your data in the{' '}
-            <a 
-              href="http://127.0.0.1:4000" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-blue-600 hover:text-blue-700 font-medium"
-            >
-              Firebase Emulator UI
-            </a>
-          </p>
-        </div>
       </div>
     </DashboardLayout>
   );

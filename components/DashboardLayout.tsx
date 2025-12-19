@@ -6,7 +6,7 @@ import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { ClientFilterProvider, useClientFilter } from '../lib/ClientFilterContext';
-import { useClientData } from '../lib/ClientDataContext';
+import { ClientDataProvider, useClientData } from '../lib/ClientDataContext';
 import TrialBanner from './TrialBanner';
 import { 
   Layers, 
@@ -380,7 +380,9 @@ function DashboardContent({ children }: DashboardLayoutProps) {
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
     <ClientFilterProvider>
-      <DashboardContent>{children}</DashboardContent>
+      <ClientDataProvider>
+        <DashboardContent>{children}</DashboardContent>
+      </ClientDataProvider>
     </ClientFilterProvider>
   );
 }
