@@ -66,9 +66,9 @@ function SubcontractorsContent() {
   const { selectedClient } = useClientFilter();
   const { cachedData, updateSubcontractors } = useClientData();
 
-  // Use cached data when available
+  // Use cached data only on initial load
   useEffect(() => {
-    if (cachedData) {
+    if (cachedData && cachedData.subcontractors && subcontractors.length === 0) {
       setSubcontractors(cachedData.subcontractors);
     }
   }, [cachedData]);
@@ -111,6 +111,7 @@ function SubcontractorsContent() {
         
         if (projectIds.length === 0) {
           setSubcontractors([]);
+          updateSubcontractors([]);
           return;
         }
         
@@ -132,6 +133,7 @@ function SubcontractorsContent() {
         
         if (subcontractorIds.size === 0) {
           setSubcontractors([]);
+          updateSubcontractors([]);
           return;
         }
         
@@ -150,6 +152,7 @@ function SubcontractorsContent() {
           .filter(sub => subcontractorIds.has(sub.id));
         
         setSubcontractors(subcontractorsData);
+        updateSubcontractors(subcontractorsData);
       } else {
         // All clients view: Fetch all subcontractors
         const subcontractorsQuery = query(
@@ -164,6 +167,7 @@ function SubcontractorsContent() {
         } as Subcontractor));
         
         setSubcontractors(subcontractorsData);
+        updateSubcontractors(subcontractorsData);
       }
     } catch (error) {
       console.error('Error fetching subcontractors:', error);
