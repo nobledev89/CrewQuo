@@ -18,6 +18,7 @@ import {
 import { Users, Plus, Edit2, Trash2, X, Mail, Phone, CheckCircle, XCircle, Copy, UserPlus } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useClientFilter } from '../../../lib/ClientFilterContext';
+import { useClientData } from '@/lib/ClientDataContext';
 
 interface Subcontractor {
   id: string;
@@ -63,12 +64,15 @@ function SubcontractorsContent() {
   
   // Get client filter from context
   const { selectedClient } = useClientFilter();
+  const { cachedData, updateSubcontractors } = useClientData();
 
-  // Debug logging
+  // Use cached data when available
   useEffect(() => {
-    console.log('[SubcontractorsPage] Selected workspace changed:', selectedClient);
-    console.log('[SubcontractorsPage] Loaded subcontractors:', subcontractors.length);
-  }, [selectedClient, subcontractors.length]);
+    if (cachedData) {
+      console.log('[SubcontractorsPage] Using cached subcontractors:', cachedData.subcontractors.length);
+      setSubcontractors(cachedData.subcontractors);
+    }
+  }, [cachedData]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -79,8 +83,6 @@ function SubcontractorsContent() {
             const userData = userDoc.data();
             setCompanyId(userData.companyId);
             setUserRole(userData.role);
-            
-            await fetchSubcontractors(userData.companyId, null);
           }
         } catch (error) {
           console.error('Error fetching subcontractors:', error);
@@ -92,14 +94,6 @@ function SubcontractorsContent() {
 
     return () => unsubscribe();
   }, []);
-
-  // Refetch subcontractors when workspace changes
-  useEffect(() => {
-    if (companyId) {
-      console.log('[SubcontractorsPage] useEffect triggered - fetching subcontractors for workspace:', selectedClient.clientName, selectedClient.clientId);
-      fetchSubcontractors(companyId, selectedClient.clientId);
-    }
-  }, [companyId, selectedClient]);
 
   const fetchSubcontractors = async (compId: string, clientId: string | null) => {
     try {

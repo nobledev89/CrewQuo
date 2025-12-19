@@ -19,6 +19,7 @@ import { FileText, Plus, Edit2, Trash2, X, DollarSign } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { RateCard, RateEntry, ResourceCategory, ShiftType } from '@/lib/types';
 import RateCardForm, { RateCardFormData } from '@/components/RateCardForm';
+import { useClientData } from '@/lib/ClientDataContext';
 
 export default function RateCardsPage() {
   // State management
@@ -30,6 +31,15 @@ export default function RateCardsPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingRateCard, setEditingRateCard] = useState<RateCard | null>(null);
   const [saving, setSaving] = useState(false);
+  const { cachedData, updateRateCards } = useClientData();
+
+  // Use cached data when available
+  useEffect(() => {
+    if (cachedData) {
+      console.log('[RateCardsPage] Using cached rate cards:', cachedData.rateCards.length);
+      setRateCards(cachedData.rateCards as any);
+    }
+  }, [cachedData]);
 
   // Fetch rate cards on mount
   useEffect(() => {
@@ -42,8 +52,6 @@ export default function RateCardsPage() {
             const userData = userDoc.data();
             setCompanyId(userData.companyId);
             setUserRole(userData.role);
-            
-            await fetchRateCards(userData.companyId);
           }
         } catch (error) {
           console.error('Error fetching rate cards:', error);

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { 
   Users, 
   Briefcase, 
@@ -11,6 +11,7 @@ import {
   TrendingUp
 } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
+import { useClientData } from '@/lib/ClientDataContext';
 
 interface UserData {
   email: string;
@@ -38,6 +39,7 @@ export default function DashboardPage() {
   const [companyData, setCompanyData] = useState<CompanyData | null>(null);
   const [stats, setStats] = useState<Stats>({ projects: 0, clients: 0, subcontractors: 0, rateCards: 0 });
   const [loading, setLoading] = useState(true);
+  const { cachedData } = useClientData();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -52,19 +54,6 @@ export default function DashboardPage() {
           if (companyDoc.exists()) {
             setCompanyData(companyDoc.data() as CompanyData);
           }
-          
-          // Fetch stats
-          const projectsSnap = await getDocs(query(collection(db, 'projects'), where('companyId', '==', data.companyId)));
-          const clientsSnap = await getDocs(query(collection(db, 'clients'), where('companyId', '==', data.companyId)));
-          const subsSnap = await getDocs(query(collection(db, 'subcontractors'), where('companyId', '==', data.companyId)));
-          const ratesSnap = await getDocs(query(collection(db, 'rateCards'), where('companyId', '==', data.companyId)));
-          
-          setStats({
-            projects: projectsSnap.size,
-            clients: clientsSnap.size,
-            subcontractors: subsSnap.size,
-            rateCards: ratesSnap.size,
-          });
         }
         
         setLoading(false);
@@ -73,6 +62,13 @@ export default function DashboardPage() {
 
     return () => unsubscribe();
   }, []);
+
+  // Use cached stats if available
+  useEffect(() => {
+    if (cachedData) {
+      setStats(cachedData.stats);
+    }
+  }, [cachedData]);
 
   if (loading) {
     return (

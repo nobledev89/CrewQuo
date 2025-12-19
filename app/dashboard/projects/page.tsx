@@ -19,6 +19,7 @@ import {
 import { Briefcase, Calendar, MapPin, Users, Clock, Plus, Edit2, Trash2, X } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useClientFilter } from '../../../lib/ClientFilterContext';
+import { useClientData } from '@/lib/ClientDataContext';
 
 interface Project {
   id: string;
@@ -73,12 +74,16 @@ function ProjectsContent() {
   
   // Get client filter from context
   const { selectedClient } = useClientFilter();
+  const { cachedData, updateProjects } = useClientData();
 
-  // Debug logging
+  // Use cached data when available
   useEffect(() => {
-    console.log('[ProjectsPage] Selected workspace changed:', selectedClient);
-    console.log('[ProjectsPage] Loaded projects:', projects.length);
-  }, [selectedClient, projects.length]);
+    if (cachedData) {
+      console.log('[ProjectsPage] Using cached projects:', cachedData.projects.length);
+      setProjects(cachedData.projects);
+      setClients(cachedData.clients);
+    }
+  }, [cachedData]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -102,14 +107,6 @@ function ProjectsContent() {
 
     return () => unsubscribe();
   }, []);
-
-  // Refetch projects when workspace changes
-  useEffect(() => {
-    if (companyId) {
-      console.log('[ProjectsPage] useEffect triggered - fetching projects for workspace:', selectedClient.clientName, selectedClient.clientId);
-      fetchProjects(companyId, selectedClient.clientId);
-    }
-  }, [companyId, selectedClient]);
 
   const fetchProjects = async (compId: string, clientId: string | null) => {
     try {

@@ -6,6 +6,7 @@ import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { ClientFilterProvider, useClientFilter } from '../lib/ClientFilterContext';
+import { useClientData } from '../lib/ClientDataContext';
 import TrialBanner from './TrialBanner';
 import { 
   Layers, 
@@ -54,6 +55,7 @@ function DashboardContent({ children }: DashboardLayoutProps) {
 
   // Client context for filtering
   const { clients, selectedClient, selectClient, clearClientSelection, hasClients } = useClientFilter();
+  const { isLoading: isLoadingData } = useClientData();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -128,6 +130,16 @@ function DashboardContent({ children }: DashboardLayoutProps) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      {/* Global Loading Overlay - shown when switching clients */}
+      {isLoadingData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center">
+          <div className="bg-white rounded-xl shadow-2xl p-8 text-center">
+            <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-gray-900 font-semibold text-lg mb-2">Loading workspace data...</p>
+            <p className="text-gray-600 text-sm">Please wait while we fetch your data</p>
+          </div>
+        </div>
+      )}
       {/* Mobile Header */}
       <div className="lg:hidden bg-white shadow-sm border-b border-gray-200 fixed top-0 left-0 right-0 z-30">
         <div className="flex items-center justify-between px-4 h-16">

@@ -1,8 +1,9 @@
 'use client';
 
-import { createContext, useContext, ReactNode } from 'react';
-import { useClientContext, ClientContext } from './useClientContext';
+import { createContext, useContext, ReactNode, useEffect } from 'react';
+import { useClientContext, ClientContext, setPrefetchFunction } from './useClientContext';
 import { Client } from './types';
+import { ClientDataProvider, useClientData } from './ClientDataContext';
 
 interface ClientFilterContextType {
   clients: Client[];
@@ -15,13 +16,29 @@ interface ClientFilterContextType {
 
 const ClientFilterContext = createContext<ClientFilterContextType | undefined>(undefined);
 
-export function ClientFilterProvider({ children }: { children: ReactNode }) {
+function ClientFilterProviderInner({ children }: { children: ReactNode }) {
   const clientContext = useClientContext();
+  const { prefetchClientData } = useClientData();
+
+  // Connect the prefetch function to useClientContext
+  useEffect(() => {
+    setPrefetchFunction(prefetchClientData);
+  }, [prefetchClientData]);
 
   return (
     <ClientFilterContext.Provider value={clientContext}>
       {children}
     </ClientFilterContext.Provider>
+  );
+}
+
+export function ClientFilterProvider({ children }: { children: ReactNode }) {
+  return (
+    <ClientDataProvider>
+      <ClientFilterProviderInner>
+        {children}
+      </ClientFilterProviderInner>
+    </ClientDataProvider>
   );
 }
 

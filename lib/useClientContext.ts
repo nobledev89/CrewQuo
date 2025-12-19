@@ -4,6 +4,13 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { Client } from './types';
 
+// Import will be provided by ClientFilterContext
+let prefetchClientDataFn: ((companyId: string, clientId: string | null) => Promise<void>) | null = null;
+
+export function setPrefetchFunction(fn: (companyId: string, clientId: string | null) => Promise<void>) {
+  prefetchClientDataFn = fn;
+}
+
 export interface ClientContext {
   clientId: string | null; // null means "My Company" (all clients)
   clientName: string;
@@ -114,7 +121,7 @@ export function useClientContext() {
     }
   };
 
-  const selectClient = (clientId: string | null, clientName: string) => {
+  const selectClient = async (clientId: string | null, clientName: string) => {
     console.log('[ClientContext] Switching workspace to:', clientName, clientId);
     setSelectedClient({ 
       clientId, 
@@ -127,6 +134,18 @@ export function useClientContext() {
       localStorage.setItem('selectedWorkspace', JSON.stringify({ clientId, clientName }));
     } else {
       localStorage.removeItem('selectedWorkspace');
+    }
+
+    // Trigger data prefetch if function is available
+    if (prefetchClientDataFn) {
+      const userDoc = await getDoc(doc(db, 'users', auth.currentUser?.uid || ''));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        const companyId = userData.companyId || userData.ownCompanyId;
+        if (companyId) {
+          await prefetchClientDataFn(companyId, clientId);
+        }
+      }
     }
   };
 
