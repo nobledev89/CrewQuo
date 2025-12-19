@@ -100,6 +100,7 @@ function DashboardContent({ children }: DashboardLayoutProps) {
   const getNavItems = () => {
     const baseItems = [
       { name: 'Dashboard', href: '/dashboard', icon: Home },
+      { name: 'Clients', href: '/dashboard/clients', icon: Building2 },
       { name: 'Projects', href: '/dashboard/projects', icon: Briefcase },
       { name: 'Subcontractors', href: '/dashboard/subcontractors', icon: Users },
     ];
