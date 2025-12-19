@@ -114,8 +114,9 @@ service cloud.firestore {
     
     // Subcontractors
     match /subcontractors/{subcontractorId} {
-      // Allow unauthenticated users to read subcontractors with pending invites (for signup validation)
-      allow read: if !authed() && resource.data.inviteToken != null && resource.data.inviteStatus == 'pending';
+      // Allow unauthenticated queries/reads for invite validation (both list and get)
+      allow get: if !authed() && resource.data.inviteToken != null && resource.data.inviteStatus == 'pending';
+      allow list: if !authed(); // Allow queries for invite token validation
       
       // Authenticated users can see subcontractors in active company
       allow read: if authed() && sameActiveCompany(resource.data);
