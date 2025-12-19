@@ -610,7 +610,7 @@ function RateEntryRow({ rate, index, onUpdate, onRemove, resourceCategories, shi
         </h5>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Base Rate (£) *</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Base Rate (GBP) *</label>
             <input
               type="number"
               step="0.01"
@@ -623,7 +623,7 @@ function RateEntryRow({ rate, index, onUpdate, onRemove, resourceCategories, shi
             <p className="text-xs text-gray-500 mt-1">Before multiplier</p>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Hourly Rate (£)</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Hourly Rate (GBP)</label>
             <input
               type="number"
               step="0.01"
@@ -634,7 +634,7 @@ function RateEntryRow({ rate, index, onUpdate, onRemove, resourceCategories, shi
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">4-Hour Rate (£)</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">4-Hour Rate (GBP)</label>
             <input
               type="number"
               step="0.01"
@@ -645,7 +645,7 @@ function RateEntryRow({ rate, index, onUpdate, onRemove, resourceCategories, shi
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">8-Hour Rate (£)</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">8-Hour Rate (GBP)</label>
             <input
               type="number"
               step="0.01"
@@ -656,7 +656,7 @@ function RateEntryRow({ rate, index, onUpdate, onRemove, resourceCategories, shi
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">9-Hour Rate (£)</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">9-Hour Rate (GBP)</label>
             <input
               type="number"
               step="0.01"
@@ -667,7 +667,7 @@ function RateEntryRow({ rate, index, onUpdate, onRemove, resourceCategories, shi
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">10-Hour Rate (£)</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">10-Hour Rate (GBP)</label>
             <input
               type="number"
               step="0.01"
@@ -678,7 +678,7 @@ function RateEntryRow({ rate, index, onUpdate, onRemove, resourceCategories, shi
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">12-Hour Rate (£)</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">12-Hour Rate (GBP)</label>
             <input
               type="number"
               step="0.01"
@@ -689,7 +689,7 @@ function RateEntryRow({ rate, index, onUpdate, onRemove, resourceCategories, shi
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Flat Shift Rate (£)</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Flat Shift Rate (GBP)</label>
             <input
               type="number"
               step="0.01"
@@ -730,7 +730,7 @@ function RateEntryRow({ rate, index, onUpdate, onRemove, resourceCategories, shi
             )}
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Per-Person Charge (£)</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Per-Person Charge (GBP)</label>
             <input
               type="number"
               step="0.01"
@@ -741,7 +741,7 @@ function RateEntryRow({ rate, index, onUpdate, onRemove, resourceCategories, shi
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Drop-off Charge (£)</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Drop-off Charge (GBP)</label>
             <input
               type="number"
               step="0.01"
@@ -852,7 +852,7 @@ function ExpenseEntryRow({ expense, index, onUpdate, onRemove, expenseCategories
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Rate (£) *</label>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Rate (GBP) *</label>
           <input
             type="number"
             step="0.01"

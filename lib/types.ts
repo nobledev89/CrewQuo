@@ -380,6 +380,76 @@ export interface CompanyContext {
 }
 
 // ============================================
+// TIME LOG MODEL
+// ============================================
+
+export type TimeLogStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED';
+
+export interface TimeLog {
+  id: string;
+  companyId: string;
+  projectId: string;
+  clientId: string;
+  subcontractorId: string;
+  createdByUserId: string;
+  
+  // Work details
+  date: Timestamp;
+  roleName: string;
+  shiftType: string;
+  hoursRegular: number;
+  hoursOT?: number;
+  
+  // Financial details
+  subCost: number;         // What we pay the subcontractor
+  clientBill?: number;     // What we bill the client (optional)
+  marginValue?: number;    // clientBill - subCost
+  marginPct?: number;      // (marginValue / clientBill) * 100
+  
+  // Rate card references
+  payRateCardId: string;
+  billRateCardId?: string;
+  
+  // Status and metadata
+  status: TimeLogStatus;
+  currency: string;        // e.g., 'GBP'
+  
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// ============================================
+// EXPENSE MODEL
+// ============================================
+
+export type ExpenseStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED';
+
+export interface Expense {
+  id: string;
+  companyId: string;
+  projectId: string;
+  clientId?: string;
+  subcontractorId: string;
+  createdByUserId: string;
+  
+  // Expense details
+  date: Timestamp;
+  category: string;        // Expense category label
+  amount: number;
+  
+  // Rate card references
+  payRateCardId: string;
+  billRateCardId?: string;
+  
+  // Status and metadata
+  status: ExpenseStatus;
+  currency: string;        // e.g., 'GBP'
+  
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// ============================================
 // CUSTOM CLAIMS
 // ============================================
 
