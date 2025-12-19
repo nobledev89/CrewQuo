@@ -67,11 +67,13 @@ function SubcontractorsContent() {
   const { updateSubcontractors } = useClientData();
 
   useEffect(() => {
+    let isMounted = true;
+    
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
+      if (currentUser && isMounted) {
         try {
           const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-          if (userDoc.exists()) {
+          if (userDoc.exists() && isMounted) {
             const userData = userDoc.data();
             setCompanyId(userData.companyId);
             setUserRole(userData.role);
@@ -81,12 +83,17 @@ function SubcontractorsContent() {
         } catch (error) {
           console.error('Error fetching subcontractors:', error);
         } finally {
-          setLoading(false);
+          if (isMounted) {
+            setLoading(false);
+          }
         }
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, [selectedClient.clientId]);
 
   const fetchSubcontractors = async (compId: string, clientId: string | null) => {
