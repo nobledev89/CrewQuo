@@ -108,10 +108,28 @@ export default function RateCardsPage() {
     });
   };
 
+  // Helper function to remove undefined values from objects
+  const removeUndefinedFields = (obj: any): any => {
+    if (Array.isArray(obj)) {
+      return obj.map(item => removeUndefinedFields(item));
+    } else if (obj !== null && typeof obj === 'object') {
+      const cleaned: any = {};
+      Object.keys(obj).forEach(key => {
+        const value = obj[key];
+        if (value !== undefined) {
+          cleaned[key] = removeUndefinedFields(value);
+        }
+      });
+      return cleaned;
+    }
+    return obj;
+  };
+
   const handleSaveRateCard = async (data: RateCardFormData) => {
     setSaving(true);
     try {
-      const rateCardData = {
+      // Clean the data to remove all undefined values (Firestore doesn't support undefined)
+      const cleanedData = removeUndefinedFields({
         name: data.name,
         description: data.description,
         active: data.active,
@@ -120,15 +138,15 @@ export default function RateCardsPage() {
         rates: data.rates,
         expenses: data.expenses || [],
         updatedAt: serverTimestamp(),
-      };
+      });
 
       if (editingRateCard) {
         // Update existing rate card
-        await updateDoc(doc(db, 'rateCards', editingRateCard.id), rateCardData);
+        await updateDoc(doc(db, 'rateCards', editingRateCard.id), cleanedData);
       } else {
         // Create new rate card
         await addDoc(collection(db, 'rateCards'), {
-          ...rateCardData,
+          ...cleanedData,
           companyId,
           createdBy: userId,
           createdAt: serverTimestamp(),
