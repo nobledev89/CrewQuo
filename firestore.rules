@@ -193,11 +193,12 @@ service cloud.firestore {
         sameActiveCompany(resource.data) || 
         hasAccessToCompany(resource.data.companyId)
       );
-      // Can only create in own company
+      // Can only create in own company - prevent duplicates by checking no existing assignment
       allow create: if authed() 
         && sameActiveCompany(request.resource.data) 
         && isOwnCompany()
-        && isAdminOrManager();
+        && isAdminOrManager()
+        && !exists(/databases/$(database)/documents/projectAssignments/$(request.resource.data.projectId + '_' + request.resource.data.subcontractorId));
       allow update: if authed() 
         && sameActiveCompany(resource.data) 
         && sameActiveCompany(request.resource.data) 

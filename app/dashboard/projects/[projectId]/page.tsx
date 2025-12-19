@@ -11,6 +11,7 @@ import {
   where, 
   getDocs,
   addDoc,
+  setDoc,
   deleteDoc,
   serverTimestamp 
 } from 'firebase/firestore';
@@ -202,7 +203,12 @@ export default function ProjectDetailPage() {
 
     setSaving(true);
     try {
-      await addDoc(collection(db, 'projectAssignments'), {
+      // Use deterministic document ID: projectId_subcontractorId
+      // This prevents duplicates at the database level
+      const assignmentId = `${project.id}_${selectedSubcontractorId}`;
+      const assignmentRef = doc(db, 'projectAssignments', assignmentId);
+      
+      await setDoc(assignmentRef, {
         projectId: project.id,
         subcontractorId: selectedSubcontractorId,
         companyId,
