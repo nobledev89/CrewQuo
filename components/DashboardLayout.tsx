@@ -89,6 +89,9 @@ function DashboardContent({ children }: DashboardLayoutProps) {
 
   const handleSignOut = async () => {
     try {
+      // Clear the auth cookie
+      document.cookie = 'auth-token=; path=/; max-age=0';
+      
       await signOut(auth);
       router.push('/login');
     } catch (error) {

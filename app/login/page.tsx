@@ -17,6 +17,10 @@ export default function LoginPage() {
     password: '',
   });
 
+  // Get redirect URL from query params
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const redirectTo = searchParams?.get('from') || '/dashboard';
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
       ...formData,
@@ -31,14 +35,18 @@ export default function LoginPage() {
 
     try {
       // Sign in with Firebase
-      await signInWithEmailAndPassword(
+      const userCredential = await signInWithEmailAndPassword(
         auth,
         formData.email,
         formData.password
       );
 
-      // Redirect to dashboard
-      router.push('/dashboard');
+      // Get the ID token and set it as a cookie for middleware
+      const idToken = await userCredential.user.getIdToken();
+      document.cookie = `auth-token=${idToken}; path=/; max-age=3600; SameSite=Lax`;
+
+      // Redirect to the original destination or dashboard
+      router.push(redirectTo);
     } catch (err: any) {
       console.error('Login error:', err);
       
