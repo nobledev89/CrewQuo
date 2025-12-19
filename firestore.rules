@@ -124,6 +124,13 @@ service cloud.firestore {
         // Allow unauthenticated update during signup (accept invite)
         (!authed() && resource.data.inviteToken != null && resource.data.inviteStatus == 'pending')
         ||
+        // Allow authenticated update during signup (accept invite) - before custom claims are set
+        (authed() 
+          && resource.data.inviteToken != null 
+          && resource.data.inviteStatus == 'pending'
+          && request.resource.data.inviteStatus == 'accepted'
+          && request.resource.data.userId == request.auth.uid)
+        ||
         // Regular authenticated updates in own company
         (authed() && sameActiveCompany(resource.data) && isOwnCompany() && isAdminOrManager())
       );
