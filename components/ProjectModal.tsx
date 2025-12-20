@@ -540,7 +540,7 @@ export default function ProjectModal({
                     {timeLogs.length > 0 && (
                       <div className="mt-4">
                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                          <div className="grid grid-cols-3 gap-4">
+                          <div className="grid grid-cols-2 gap-4">
                             <div>
                               <p className="text-sm text-gray-600">Total Hours</p>
                               <p className="text-2xl font-bold text-blue-900">
@@ -551,12 +551,6 @@ export default function ProjectModal({
                               <p className="text-sm text-gray-600">Total Cost</p>
                               <p className="text-2xl font-bold text-blue-900">
                                 £{timeLogs.reduce((sum, log) => sum + (log.subCost || 0), 0).toFixed(2)}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-gray-600">Draft Items</p>
-                              <p className="text-2xl font-bold text-blue-900">
-                                {timeLogs.filter((l) => l.status === 'DRAFT').length}
                               </p>
                             </div>
                           </div>
@@ -688,19 +682,11 @@ export default function ProjectModal({
                     {expenses.length > 0 && (
                       <div className="mt-4">
                         <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <p className="text-sm text-gray-600">Total Amount</p>
-                              <p className="text-2xl font-bold text-green-900">
-                                £{expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0).toFixed(2)}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-gray-600">Draft Items</p>
-                              <p className="text-2xl font-bold text-green-900">
-                                {expenses.filter((e) => e.status === 'DRAFT').length}
-                              </p>
-                            </div>
+                          <div>
+                            <p className="text-sm text-gray-600">Total Amount</p>
+                            <p className="text-2xl font-bold text-green-900">
+                              £{expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0).toFixed(2)}
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -729,29 +715,6 @@ export default function ProjectModal({
                     </div>
                   </div>
 
-                  <div className="border border-gray-200 rounded-lg p-4">
-                    <h4 className="font-semibold text-gray-900 mb-3">Status Breakdown</h4>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600">Draft</span>
-                        <span className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm font-semibold">
-                          {summaryStats.draftCount}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600">Submitted</span>
-                        <span className="px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-sm font-semibold">
-                          {summaryStats.submittedCount}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600">Approved</span>
-                        <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-semibold">
-                          {summaryStats.approvedCount}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
 
                   <div className="border border-gray-200 rounded-lg p-4 bg-gradient-to-r from-blue-50 to-indigo-50">
                     <h4 className="font-semibold text-gray-900 mb-3">Submit for Approval</h4>
