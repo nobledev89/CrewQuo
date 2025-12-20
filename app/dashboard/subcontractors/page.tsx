@@ -375,7 +375,8 @@ function SubcontractorsContent() {
             {subcontractors.map((subcontractor) => (
               <div
                 key={subcontractor.id}
-                className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition"
+                onClick={() => window.location.href = `/dashboard/subcontractors/${subcontractor.id}`}
+                className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition cursor-pointer"
               >
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex-1">
@@ -404,7 +405,10 @@ function SubcontractorsContent() {
                   {canEdit && (
                     <div className="flex items-center space-x-2">
                       <button
-                        onClick={() => openEditModal(subcontractor)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditModal(subcontractor);
+                        }}
                         className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
                         title="Edit"
                       >
@@ -412,7 +416,10 @@ function SubcontractorsContent() {
                       </button>
                       {userRole === 'ADMIN' && (
                         <button
-                          onClick={() => handleDelete(subcontractor.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(subcontractor.id);
+                          }}
                           className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
                           title="Delete"
                         >
@@ -458,14 +465,20 @@ function SubcontractorsContent() {
                     <p className="text-xs text-gray-600 mb-2">Invite Link:</p>
                     <div className="flex items-center space-x-2">
                       <button
-                        onClick={() => copyInviteLink(subcontractor.inviteToken!)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          copyInviteLink(subcontractor.inviteToken!);
+                        }}
                         className="flex-1 flex items-center justify-center space-x-2 px-3 py-2 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 transition text-sm"
                       >
                         <Copy className="w-4 h-4" />
                         <span>{copiedToken === subcontractor.inviteToken ? 'Copied!' : 'Copy Link'}</span>
                       </button>
                       <button
-                        onClick={() => handleResendInvite(subcontractor.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleResendInvite(subcontractor.id);
+                        }}
                         className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
                         title="Generate New Invite"
                       >
