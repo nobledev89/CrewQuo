@@ -64,12 +64,15 @@ export default function ProjectDetailPage() {
       if (currentUser) {
         setUserId(currentUser.uid);
         try {
-          // Get the ID token to access custom claims
-          const idTokenResult = await currentUser.getIdTokenResult();
+          // Force refresh the token to get latest claims
+          const idTokenResult = await currentUser.getIdTokenResult(true);
           const claims = idTokenResult.claims;
+          
+          console.log('User claims:', claims); // Debug log
           
           // Use ownCompanyId from custom claims (projectAssignments rules check companyId = ownCompanyId)
           const ownCompanyId = claims.ownCompanyId as string;
+          const activeCompanyId = claims.activeCompanyId as string;
           const role = claims.role as string;
           
           if (!ownCompanyId) {
@@ -78,13 +81,15 @@ export default function ProjectDetailPage() {
             return;
           }
           
-          setCompanyId(ownCompanyId);
+          // Use activeCompanyId if available, fallback to ownCompanyId
+          const companyIdToUse = activeCompanyId || ownCompanyId;
+          setCompanyId(companyIdToUse);
           setUserRole(role);
           
           await Promise.all([
             fetchProject(projectId),
-            fetchSubcontractors(ownCompanyId),
-            fetchAssignments(ownCompanyId, projectId)
+            fetchSubcontractors(companyIdToUse),
+            fetchAssignments(companyIdToUse, projectId)
           ]);
         } catch (error) {
           console.error('Error fetching data:', error);

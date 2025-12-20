@@ -188,8 +188,9 @@ service cloud.firestore {
     
     // Project Assignments
     match /projectAssignments/{assignmentId} {
-      // Allow read if user has access to the company (active company or through subcontractor role)
+      // Allow read if user has access to the company (own company, active company, or through subcontractor role)
       allow read: if authed() && (
+        resource.data.companyId == ownCompanyId() ||
         sameActiveCompany(resource.data) || 
         hasAccessToCompany(resource.data.companyId)
       );
