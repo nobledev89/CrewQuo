@@ -221,7 +221,8 @@ service cloud.firestore {
     
     // Rate Cards
     match /rateCards/{rateCardId} {
-      allow read: if authed() && sameCompany(resource.data);
+      // Allow read if user has access to the company (own company, active company, or through subcontractor role)
+      allow read: if authed() && hasAccessToCompany(resource.data.companyId);
       allow create: if authed() && sameCompany(request.resource.data) && isAdminOrManager();
       allow update: if authed() && sameCompany(resource.data) && sameCompany(request.resource.data) && isAdminOrManager();
       allow delete: if authed() && sameCompany(resource.data) && isAdmin();
@@ -229,7 +230,8 @@ service cloud.firestore {
     
     // Subcontractor Rate Assignments
     match /subcontractorRateAssignments/{assignmentId} {
-      allow read: if authed() && sameCompany(resource.data);
+      // Allow read if user has access to the company (own company, active company, or through subcontractor role)
+      allow read: if authed() && hasAccessToCompany(resource.data.companyId);
       allow create: if authed() && sameCompany(request.resource.data) && isAdminOrManager();
       allow update: if authed() && sameCompany(resource.data) && sameCompany(request.resource.data) && isAdminOrManager();
       allow delete: if authed() && sameCompany(resource.data) && isAdminOrManager();
