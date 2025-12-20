@@ -91,6 +91,7 @@ export default function ProjectModal({
       // Fetch time logs for this project
       const logsQuery = query(
         collection(db, 'timeLogs'),
+        where('companyId', '==', activeCompanyId),
         where('projectId', '==', project.projectId),
         where('subcontractorId', '==', subRole.subcontractorId),
         orderBy('date', 'desc')
@@ -105,6 +106,7 @@ export default function ProjectModal({
       // Fetch expenses for this project
       const expensesQuery = query(
         collection(db, 'expenses'),
+        where('companyId', '==', activeCompanyId),
         where('projectId', '==', project.projectId),
         where('subcontractorId', '==', subRole.subcontractorId),
         orderBy('date', 'desc')
