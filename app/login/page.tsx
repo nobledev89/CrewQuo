@@ -6,6 +6,8 @@ import { auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, Layers } from 'lucide-react';
 import Link from 'next/link';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '@/lib/firebase';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -41,8 +43,18 @@ export default function LoginPage() {
         formData.password
       );
 
-      // Get the ID token and set it as a cookie for middleware
-      const idToken = await userCredential.user.getIdToken();
+      // Refresh custom claims to ensure subcontractor roles and company context are set
+      try {
+        const refreshClaims = httpsCallable(functions, 'refreshClaims');
+        await refreshClaims({});
+        console.log('Custom claims refreshed');
+      } catch (claimsError) {
+        console.error('Error refreshing claims:', claimsError);
+        // Continue anyway - claims should be set from last token refresh
+      }
+
+      // Get the ID token (this will now include refreshed claims) and set it as a cookie for middleware
+      const idToken = await userCredential.user.getIdToken(true);
       document.cookie = `auth-token=${idToken}; path=/; max-age=3600; SameSite=Lax`;
 
       // Redirect to the original destination or dashboard
