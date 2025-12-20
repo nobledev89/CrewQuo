@@ -25,6 +25,7 @@ interface Assignment {
   projectStatus: string;
   pendingCount: number;
   hoursLogged: number;
+  totalCost: number;
 }
 
 interface RateAssignment {
@@ -142,6 +143,7 @@ export default function ProjectsPage() {
         projectStatus: project.status || 'ACTIVE',
         pendingCount: 0,
         hoursLogged: 0,
+        totalCost: 0,
       });
     }
     setAssignments(projects);
@@ -239,10 +241,15 @@ export default function ProjectsPage() {
         projectLogs.filter((log) => log.status === 'DRAFT').length +
         projectExpenses.filter((exp) => exp.status === 'DRAFT').length;
 
+      const totalCost = 
+        projectLogs.reduce((sum, log) => sum + (log.subCost || 0), 0) +
+        projectExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
+
       return {
         ...assignment,
         hoursLogged,
         pendingCount,
+        totalCost,
       };
     });
   }, [assignments, timeLogs, expenses]);
@@ -455,12 +462,10 @@ export default function ProjectsPage() {
                       <p className="text-xs text-gray-500">Hours Logged</p>
                       <p className="text-lg font-bold text-blue-600">{project.hoursLogged.toFixed(1)}h</p>
                     </div>
-                    {project.pendingCount > 0 && (
-                      <div className="text-right">
-                        <p className="text-xs text-gray-500">Pending</p>
-                        <p className="text-lg font-bold text-yellow-600">{project.pendingCount}</p>
-                      </div>
-                    )}
+                    <div className="text-right">
+                      <p className="text-xs text-gray-500">Total Cost</p>
+                      <p className="text-lg font-bold text-green-600">£{project.totalCost.toFixed(2)}</p>
+                    </div>
                   </div>
                   
                   <div className="mt-4">
