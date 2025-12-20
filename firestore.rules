@@ -247,11 +247,11 @@ service cloud.firestore {
           // In own company: admins/managers can create
           (isOwnCompany() && isAdminOrManager())
           ||
-          // In subcontractor context: can create own logs
+          // In subcontractor context: can create own logs (DRAFT or SUBMITTED status allowed)
           (!isOwnCompany() 
             && request.resource.data.createdByUserId == request.auth.uid
             && request.resource.data.subcontractorId == subcontractorIdForActiveCompany()
-            && request.resource.data.status == 'DRAFT')
+            && request.resource.data.status in ['DRAFT', 'SUBMITTED'])
         );
       
       allow update: if authed()
@@ -285,11 +285,11 @@ service cloud.firestore {
           // In own company: admins/managers can create
           (isOwnCompany() && isAdminOrManager())
           ||
-          // In subcontractor context: can create own expenses
+          // In subcontractor context: can create own expenses (DRAFT or SUBMITTED status allowed)
           (!isOwnCompany() 
             && request.resource.data.createdByUserId == request.auth.uid
             && request.resource.data.subcontractorId == subcontractorIdForActiveCompany()
-            && request.resource.data.status == 'DRAFT')
+            && request.resource.data.status in ['DRAFT', 'SUBMITTED'])
         );
       
       allow update: if authed()
