@@ -22,7 +22,8 @@ import {
   Check,
   FileText,
   Settings,
-  DollarSign
+  DollarSign,
+  Clock
 } from 'lucide-react';
 
 interface DashboardLayoutProps {
@@ -132,7 +133,8 @@ function DashboardContent({ children }: DashboardLayoutProps) {
     if (isActingAsSubcontractor()) {
       return [
         { name: 'Summary', href: '/dashboard/my-work/summary', icon: BarChart3 },
-        { name: 'Projects', href: '/dashboard/my-work/projects', icon: Briefcase }
+        { name: 'Projects', href: '/dashboard/my-work/projects', icon: Briefcase },
+        { name: 'Submissions', href: '/dashboard/my-work/submissions', icon: FileText }
       ];
     }
 
@@ -152,6 +154,11 @@ function DashboardContent({ children }: DashboardLayoutProps) {
     if (selectedClient.clientId === null) {
       baseItems.push({ name: 'Rate Templates', href: '/dashboard/rate-templates', icon: DollarSign });
       baseItems.push({ name: 'Rate Cards', href: '/dashboard/ratecards', icon: FileText });
+      
+      // Show Timesheets for Admins and Managers
+      if (userData?.role === 'ADMIN' || userData?.role === 'MANAGER') {
+        baseItems.push({ name: 'Timesheets', href: '/dashboard/timesheets', icon: Clock });
+      }
     }
     
     baseItems.push({ name: 'Reports', href: '/dashboard/reports', icon: BarChart3 });
