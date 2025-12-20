@@ -55,6 +55,8 @@ export default function ProjectModal({
   const [showAddExpenseForm, setShowAddExpenseForm] = useState(false);
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  const [timesheetStatus, setTimesheetStatus] = useState<'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED'>('DRAFT');
+  const [submittingTimesheet, setSubmittingTimesheet] = useState(false);
 
   const [logForm, setLogForm] = useState({
     date: '',
@@ -508,7 +510,7 @@ export default function ProjectModal({
                               <th className="px-4 py-2 text-right font-semibold text-gray-900">Regular</th>
                               <th className="px-4 py-2 text-right font-semibold text-gray-900">OT</th>
                               <th className="px-4 py-2 text-right font-semibold text-gray-900">Cost</th>
-                              <th className="px-4 py-2 text-center font-semibold text-gray-900">Status</th>
+                              <th className="px-4 py-2 text-center font-semibold text-gray-900">Actions</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -519,10 +521,13 @@ export default function ProjectModal({
                                 <td className="px-4 py-2 text-right text-gray-900">{log.hoursRegular}h</td>
                                 <td className="px-4 py-2 text-right text-gray-900">{log.hoursOT}h</td>
                                 <td className="px-4 py-2 text-right text-gray-900 font-semibold">£{(log.subCost || 0).toFixed(2)}</td>
-                                <td className="px-4 py-2 text-center">
-                                  <span className={`px-2 py-1 text-xs rounded-full border ${getStatusBadge(log.status)}`}>
-                                    {log.status}
-                                  </span>
+                                <td className="px-4 py-2 text-center flex items-center justify-center gap-2">
+                                  <button className="p-1 hover:bg-blue-100 rounded transition">
+                                    <Edit2 className="w-4 h-4 text-blue-600" />
+                                  </button>
+                                  <button className="p-1 hover:bg-red-100 rounded transition">
+                                    <Trash2 className="w-4 h-4 text-red-600" />
+                                  </button>
                                 </td>
                               </tr>
                             ))}
@@ -531,9 +536,9 @@ export default function ProjectModal({
                       )}
                     </div>
 
-                    {/* Subtotal and Action Buttons */}
+                    {/* Subtotal */}
                     {timeLogs.length > 0 && (
-                      <div className="mt-4 space-y-3">
+                      <div className="mt-4">
                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                           <div className="grid grid-cols-3 gap-4">
                             <div>
@@ -555,22 +560,6 @@ export default function ProjectModal({
                               </p>
                             </div>
                           </div>
-                        </div>
-
-                        <div className="flex gap-2">
-                          <button
-                            disabled={timeLogs.filter((l) => l.status === 'DRAFT').length === 0}
-                            className="flex-1 px-4 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 disabled:opacity-50 font-medium"
-                          >
-                            Save All as Draft
-                          </button>
-                          <button
-                            disabled={timeLogs.filter((l) => l.status === 'DRAFT').length === 0}
-                            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium flex items-center justify-center gap-2"
-                          >
-                            <Send className="w-4 h-4" />
-                            Submit All for Approval
-                          </button>
                         </div>
                       </div>
                     )}
@@ -671,7 +660,7 @@ export default function ProjectModal({
                               <th className="px-4 py-2 text-left font-semibold text-gray-900">Date</th>
                               <th className="px-4 py-2 text-left font-semibold text-gray-900">Category</th>
                               <th className="px-4 py-2 text-right font-semibold text-gray-900">Amount</th>
-                              <th className="px-4 py-2 text-center font-semibold text-gray-900">Status</th>
+                              <th className="px-4 py-2 text-center font-semibold text-gray-900">Actions</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -680,10 +669,13 @@ export default function ProjectModal({
                                 <td className="px-4 py-2 text-gray-900">{formatDate(exp.date)}</td>
                                 <td className="px-4 py-2 text-gray-900">{exp.category}</td>
                                 <td className="px-4 py-2 text-right text-gray-900 font-semibold">£{(exp.amount || 0).toFixed(2)}</td>
-                                <td className="px-4 py-2 text-center">
-                                  <span className={`px-2 py-1 text-xs rounded-full border ${getStatusBadge(exp.status)}`}>
-                                    {exp.status}
-                                  </span>
+                                <td className="px-4 py-2 text-center flex items-center justify-center gap-2">
+                                  <button className="p-1 hover:bg-blue-100 rounded transition">
+                                    <Edit2 className="w-4 h-4 text-blue-600" />
+                                  </button>
+                                  <button className="p-1 hover:bg-red-100 rounded transition">
+                                    <Trash2 className="w-4 h-4 text-red-600" />
+                                  </button>
                                 </td>
                               </tr>
                             ))}
@@ -692,9 +684,9 @@ export default function ProjectModal({
                       )}
                     </div>
 
-                    {/* Subtotal and Action Buttons */}
+                    {/* Subtotal */}
                     {expenses.length > 0 && (
-                      <div className="mt-4 space-y-3">
+                      <div className="mt-4">
                         <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                           <div className="grid grid-cols-2 gap-4">
                             <div>
@@ -710,22 +702,6 @@ export default function ProjectModal({
                               </p>
                             </div>
                           </div>
-                        </div>
-
-                        <div className="flex gap-2">
-                          <button
-                            disabled={expenses.filter((e) => e.status === 'DRAFT').length === 0}
-                            className="flex-1 px-4 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 disabled:opacity-50 font-medium"
-                          >
-                            Save All as Draft
-                          </button>
-                          <button
-                            disabled={expenses.filter((e) => e.status === 'DRAFT').length === 0}
-                            className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium flex items-center justify-center gap-2"
-                          >
-                            <Send className="w-4 h-4" />
-                            Submit All for Approval
-                          </button>
                         </div>
                       </div>
                     )}
@@ -775,6 +751,33 @@ export default function ProjectModal({
                         </span>
                       </div>
                     </div>
+                  </div>
+
+                  <div className="border border-gray-200 rounded-lg p-4 bg-gradient-to-r from-blue-50 to-indigo-50">
+                    <h4 className="font-semibold text-gray-900 mb-3">Submit for Approval</h4>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Once you submit your timesheet, both time logs and expenses will be sent for approval. You won't be able to edit entries until the approval process is complete.
+                    </p>
+                    <button
+                      disabled={summaryStats.draftCount === 0 || submittingTimesheet}
+                      onClick={async () => {
+                        setSubmittingTimesheet(true);
+                        try {
+                          // TODO: Implement timesheet submission logic
+                          // This should update the status of all draft entries to SUBMITTED
+                          alert('Timesheet submitted for approval!');
+                        } catch (error) {
+                          console.error('Error submitting timesheet:', error);
+                          alert('Failed to submit timesheet');
+                        } finally {
+                          setSubmittingTimesheet(false);
+                        }
+                      }}
+                      className="w-full px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
+                    >
+                      <Send className="w-5 h-5" />
+                      Submit Timesheet for Approval
+                    </button>
                   </div>
                 </div>
               )}
