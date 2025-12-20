@@ -383,8 +383,6 @@ export interface CompanyContext {
 // TIME LOG MODEL
 // ============================================
 
-export type TimeLogStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED';
-
 export interface TimeLog {
   id: string;
   companyId: string;
@@ -410,8 +408,7 @@ export interface TimeLog {
   payRateCardId: string;
   billRateCardId?: string;
   
-  // Status and metadata
-  status: TimeLogStatus;
+  // Metadata
   currency: string;        // e.g., 'GBP'
   
   createdAt: Timestamp;
@@ -421,8 +418,6 @@ export interface TimeLog {
 // ============================================
 // EXPENSE MODEL
 // ============================================
-
-export type ExpenseStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED';
 
 export interface Expense {
   id: string;
@@ -441,9 +436,41 @@ export interface Expense {
   payRateCardId: string;
   billRateCardId?: string;
   
-  // Status and metadata
-  status: ExpenseStatus;
+  // Metadata
   currency: string;        // e.g., 'GBP'
+  
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// ============================================
+// PROJECT SUBMISSION MODEL
+// ============================================
+
+export type SubmissionStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED';
+
+export interface ProjectSubmission {
+  id: string;
+  companyId: string;
+  projectId: string;
+  subcontractorId: string;
+  createdByUserId: string;
+  
+  // Submission details
+  timeLogIds: string[];    // Array of timeLog document IDs
+  expenseIds: string[];    // Array of expense document IDs
+  
+  // Submission metadata
+  status: SubmissionStatus;
+  submittedAt?: Timestamp; // When submitted for approval
+  approvedAt?: Timestamp;  // When approved
+  approvedBy?: string;     // userId who approved
+  rejectionReason?: string; // If rejected
+  
+  // Summary totals (denormalized for quick access)
+  totalHours: number;
+  totalCost: number;
+  totalExpenses: number;
   
   createdAt: Timestamp;
   updatedAt: Timestamp;

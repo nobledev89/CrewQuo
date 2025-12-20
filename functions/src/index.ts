@@ -851,3 +851,327 @@ export const onSubcontractorInviteAccepted = functions.firestore
       }
     }
   });
+
+/**
+ * Create Project Submission
+ * Callable function to submit all time logs and expenses for a project
+ * Creates a projectSubmission document that groups all entries for approval
+ */
+export const createProjectSubmission = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const { projectId, companyId, subcontractorId } = data;
+
+  if (!projectId || !companyId || !subcontractorId) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'projectId, companyId, and subcontractorId are required'
+    );
+  }
+
+  try {
+    // Verify user has access to this company
+    const userDoc = await db.collection('users').doc(context.auth.uid).get();
+    const userData = userDoc.data();
+
+    if (!userData) {
+      throw new functions.https.HttpsError('not-found', 'User not found');
+    }
+
+    const hasAccess =
+      userData.ownCompanyId === companyId ||
+      (userData.subcontractorRoles && userData.subcontractorRoles[companyId]);
+
+    if (!hasAccess) {
+      throw new functions.https.HttpsError('permission-denied', 'No access to this company');
+    }
+
+    // Get all time logs for this project
+    const timeLogsSnap = await db
+      .collection('timeLogs')
+      .where('projectId', '==', projectId)
+      .where('companyId', '==', companyId)
+      .where('subcontractorId', '==', subcontractorId)
+      .where('createdByUserId', '==', context.auth.uid)
+      .get();
+
+    // Get all expenses for this project
+    const expensesSnap = await db
+      .collection('expenses')
+      .where('projectId', '==', projectId)
+      .where('companyId', '==', companyId)
+      .where('subcontractorId', '==', subcontractorId)
+      .where('createdByUserId', '==', context.auth.uid)
+      .get();
+
+    if (timeLogsSnap.empty && expensesSnap.empty) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'No time logs or expenses to submit'
+      );
+    }
+
+    // Calculate totals
+    let totalHours = 0;
+    let totalCost = 0;
+    const timeLogIds: string[] = [];
+
+    timeLogsSnap.forEach((doc) => {
+      const log = doc.data();
+      totalHours += (log.hoursRegular || 0) + (log.hoursOT || 0);
+      totalCost += log.subCost || 0;
+      timeLogIds.push(doc.id);
+    });
+
+    let totalExpenses = 0;
+    const expenseIds: string[] = [];
+
+    expensesSnap.forEach((doc) => {
+      const exp = doc.data();
+      totalExpenses += exp.amount || 0;
+      expenseIds.push(doc.id);
+    });
+
+    // Create project submission document
+    const submissionData = {
+      companyId,
+      projectId,
+      subcontractorId,
+      createdByUserId: context.auth.uid,
+      timeLogIds,
+      expenseIds,
+      status: 'DRAFT',
+      totalHours: Math.round(totalHours * 100) / 100,
+      totalCost: Math.round(totalCost * 100) / 100,
+      totalExpenses: Math.round(totalExpenses * 100) / 100,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
+    const submissionRef = await db.collection('projectSubmissions').add(submissionData);
+
+    console.log(`Project submission created: ${submissionRef.id}`);
+
+    return {
+      success: true,
+      submissionId: submissionRef.id,
+      totalHours: submissionData.totalHours,
+      totalCost: submissionData.totalCost,
+      totalExpenses: submissionData.totalExpenses,
+    };
+  } catch (error: any) {
+    console.error('Error creating project submission:', error);
+
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+
+    throw new functions.https.HttpsError('internal', error.message || 'Failed to create submission');
+  }
+});
+
+/**
+ * Submit Project Submission for Approval
+ * Callable function to submit a project submission (change status from DRAFT to SUBMITTED)
+ */
+export const submitProjectSubmission = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const { submissionId } = data;
+
+  if (!submissionId) {
+    throw new functions.https.HttpsError('invalid-argument', 'submissionId is required');
+  }
+
+  try {
+    // Get submission document
+    const submissionDoc = await db.collection('projectSubmissions').doc(submissionId).get();
+
+    if (!submissionDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Submission not found');
+    }
+
+    const submission = submissionDoc.data()!;
+
+    // Verify user created this submission
+    if (submission.createdByUserId !== context.auth.uid) {
+      throw new functions.https.HttpsError('permission-denied', 'Not authorized to submit this');
+    }
+
+    // Verify submission is in DRAFT status
+    if (submission.status !== 'DRAFT') {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Submission is not in DRAFT status'
+      );
+    }
+
+    // Update submission status to SUBMITTED
+    await db.collection('projectSubmissions').doc(submissionId).update({
+      status: 'SUBMITTED',
+      submittedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    console.log(`Project submission submitted: ${submissionId}`);
+
+    return {
+      success: true,
+      submissionId,
+      status: 'SUBMITTED',
+    };
+  } catch (error: any) {
+    console.error('Error submitting project submission:', error);
+
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+
+    throw new functions.https.HttpsError('internal', error.message || 'Failed to submit');
+  }
+});
+
+/**
+ * Approve Project Submission
+ * Callable function for managers/admins to approve a project submission
+ */
+export const approveProjectSubmission = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const { submissionId } = data;
+
+  if (!submissionId) {
+    throw new functions.https.HttpsError('invalid-argument', 'submissionId is required');
+  }
+
+  try {
+    // Get submission document
+    const submissionDoc = await db.collection('projectSubmissions').doc(submissionId).get();
+
+    if (!submissionDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Submission not found');
+    }
+
+    const submission = submissionDoc.data()!;
+
+    // Verify user is admin/manager in the company
+    const userDoc = await db.collection('users').doc(context.auth.uid).get();
+    const userData = userDoc.data();
+
+    if (!userData || userData.ownCompanyId !== submission.companyId) {
+      throw new functions.https.HttpsError('permission-denied', 'Not authorized to approve');
+    }
+
+    if (!['ADMIN', 'MANAGER'].includes(userData.role)) {
+      throw new functions.https.HttpsError('permission-denied', 'Only admins/managers can approve');
+    }
+
+    // Verify submission is in SUBMITTED status
+    if (submission.status !== 'SUBMITTED') {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Submission is not in SUBMITTED status'
+      );
+    }
+
+    // Update submission status to APPROVED
+    await db.collection('projectSubmissions').doc(submissionId).update({
+      status: 'APPROVED',
+      approvedAt: FieldValue.serverTimestamp(),
+      approvedBy: context.auth.uid,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    console.log(`Project submission approved: ${submissionId}`);
+
+    return {
+      success: true,
+      submissionId,
+      status: 'APPROVED',
+    };
+  } catch (error: any) {
+    console.error('Error approving project submission:', error);
+
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+
+    throw new functions.https.HttpsError('internal', error.message || 'Failed to approve');
+  }
+});
+
+/**
+ * Reject Project Submission
+ * Callable function for managers/admins to reject a project submission
+ */
+export const rejectProjectSubmission = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const { submissionId, rejectionReason } = data;
+
+  if (!submissionId) {
+    throw new functions.https.HttpsError('invalid-argument', 'submissionId is required');
+  }
+
+  try {
+    // Get submission document
+    const submissionDoc = await db.collection('projectSubmissions').doc(submissionId).get();
+
+    if (!submissionDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Submission not found');
+    }
+
+    const submission = submissionDoc.data()!;
+
+    // Verify user is admin/manager in the company
+    const userDoc = await db.collection('users').doc(context.auth.uid).get();
+    const userData = userDoc.data();
+
+    if (!userData || userData.ownCompanyId !== submission.companyId) {
+      throw new functions.https.HttpsError('permission-denied', 'Not authorized to reject');
+    }
+
+    if (!['ADMIN', 'MANAGER'].includes(userData.role)) {
+      throw new functions.https.HttpsError('permission-denied', 'Only admins/managers can reject');
+    }
+
+    // Verify submission is in SUBMITTED status
+    if (submission.status !== 'SUBMITTED') {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Submission is not in SUBMITTED status'
+      );
+    }
+
+    // Update submission status to REJECTED
+    await db.collection('projectSubmissions').doc(submissionId).update({
+      status: 'REJECTED',
+      rejectionReason: rejectionReason || '',
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    console.log(`Project submission rejected: ${submissionId}`);
+
+    return {
+      success: true,
+      submissionId,
+      status: 'REJECTED',
+    };
+  } catch (error: any) {
+    console.error('Error rejecting project submission:', error);
+
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+
+    throw new functions.https.HttpsError('internal', error.message || 'Failed to reject');
+  }
+});

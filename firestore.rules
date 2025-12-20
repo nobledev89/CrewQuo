@@ -247,11 +247,10 @@ service cloud.firestore {
           // In own company: admins/managers can create
           (isOwnCompany() && isAdminOrManager())
           ||
-          // In subcontractor context: can create own logs (DRAFT or SUBMITTED status allowed)
+          // In subcontractor context: can create own logs
           (!isOwnCompany() 
             && request.resource.data.createdByUserId == request.auth.uid
-            && request.resource.data.subcontractorId == subcontractorIdForActiveCompany()
-            && request.resource.data.status in ['DRAFT', 'SUBMITTED'])
+            && request.resource.data.subcontractorId == subcontractorIdForActiveCompany())
         );
       
       allow update: if authed()
@@ -261,18 +260,16 @@ service cloud.firestore {
           // In own company: admins/managers can update
           (isOwnCompany() && isAdminOrManager())
           ||
-          // In subcontractor context: can update own DRAFT logs
+          // In subcontractor context: can update own logs
           (!isOwnCompany() 
             && resource.data.createdByUserId == request.auth.uid
-            && resource.data.subcontractorId == subcontractorIdForActiveCompany()
-            && resource.data.status in ['DRAFT', 'REJECTED'])
+            && resource.data.subcontractorId == subcontractorIdForActiveCompany())
         );
       
       allow delete: if authed() 
         && sameActiveCompany(resource.data) 
         && isOwnCompany()
-        && isAdmin() 
-        && resource.data.status == 'DRAFT';
+        && isAdmin();
     }
     
     // Expenses
@@ -285,11 +282,10 @@ service cloud.firestore {
           // In own company: admins/managers can create
           (isOwnCompany() && isAdminOrManager())
           ||
-          // In subcontractor context: can create own expenses (DRAFT or SUBMITTED status allowed)
+          // In subcontractor context: can create own expenses
           (!isOwnCompany() 
             && request.resource.data.createdByUserId == request.auth.uid
-            && request.resource.data.subcontractorId == subcontractorIdForActiveCompany()
-            && request.resource.data.status in ['DRAFT', 'SUBMITTED'])
+            && request.resource.data.subcontractorId == subcontractorIdForActiveCompany())
         );
       
       allow update: if authed()
@@ -299,17 +295,54 @@ service cloud.firestore {
           // In own company: admins/managers can update
           (isOwnCompany() && isAdminOrManager())
           ||
-          // In subcontractor context: can update own DRAFT expenses
+          // In subcontractor context: can update own expenses
           (!isOwnCompany() 
             && resource.data.createdByUserId == request.auth.uid
-            && resource.data.subcontractorId == subcontractorIdForActiveCompany()
-            && resource.data.status in ['DRAFT', 'REJECTED'])
+            && resource.data.subcontractorId == subcontractorIdForActiveCompany())
         );
       
       allow delete: if authed() 
         && sameActiveCompany(resource.data) 
         && isOwnCompany()
-        && isAdmin() 
+        && isAdmin();
+    }
+    
+    // Project Submissions
+    match /projectSubmissions/{submissionId} {
+      allow read: if authed() && sameActiveCompany(resource.data);
+      
+      allow create: if authed()
+        && sameActiveCompany(request.resource.data)
+        && (
+          // In own company: admins/managers can create
+          (isOwnCompany() && isAdminOrManager())
+          ||
+          // In subcontractor context: can create own submissions
+          (!isOwnCompany() 
+            && request.resource.data.createdByUserId == request.auth.uid
+            && request.resource.data.subcontractorId == subcontractorIdForActiveCompany()
+            && request.resource.data.status == 'DRAFT')
+        );
+      
+      allow update: if authed()
+        && sameActiveCompany(resource.data)
+        && sameActiveCompany(request.resource.data)
+        && (
+          // In own company: admins/managers can update (approve/reject)
+          (isOwnCompany() && isAdminOrManager())
+          ||
+          // In subcontractor context: can update own DRAFT submissions to SUBMITTED
+          (!isOwnCompany() 
+            && resource.data.createdByUserId == request.auth.uid
+            && resource.data.subcontractorId == subcontractorIdForActiveCompany()
+            && resource.data.status == 'DRAFT'
+            && request.resource.data.status == 'SUBMITTED')
+        );
+      
+      allow delete: if authed() 
+        && sameActiveCompany(resource.data) 
+        && isOwnCompany()
+        && isAdmin()
         && resource.data.status == 'DRAFT';
     }
     

@@ -47,8 +47,10 @@ export default function ProjectModal({
   const [loading, setLoading] = useState(true);
   const [savingLog, setSavingLog] = useState(false);
   const [savingExpense, setSavingExpense] = useState(false);
-  const [logFilter, setLogFilter] = useState<'all' | 'draft' | 'submitted' | 'approved'>('all');
-  const [expenseFilter, setExpenseFilter] = useState<'all' | 'draft' | 'submitted' | 'approved'>('all');
+  const [logFilter, setLogFilter] = useState<'all'>('all');
+  const [expenseFilter, setExpenseFilter] = useState<'all'>('all');
+  const [submissionStatus, setSubmissionStatus] = useState<'DRAFT' | 'SUBMITTED' | null>(null);
+  const [submittingProject, setSubmittingProject] = useState(false);
   const [showAddLogForm, setShowAddLogForm] = useState(false);
   const [showAddExpenseForm, setShowAddExpenseForm] = useState(false);
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
@@ -393,123 +395,91 @@ export default function ProjectModal({
             <>
               {/* Time Logs Tab */}
               {activeTab === 'logs' && (
-                <div className="grid md:grid-cols-2 gap-6">
-                  {/* Form */}
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Add Time Log</h3>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Date *</label>
-                      <input
-                        type="date"
-                        value={logForm.date}
-                        onChange={(e) => setLogForm((p) => ({ ...p, date: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Role & Shift *</label>
-                      <select
-                        value={logForm.rateKey}
-                        onChange={(e) => setLogForm((p) => ({ ...p, rateKey: e.target.value }))}
-                        disabled={rateOptions.length === 0}
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                          rateOptions.length === 0 
-                            ? 'bg-gray-100 border-gray-300 cursor-not-allowed' 
-                            : 'border-gray-300'
-                        }`}
-                      >
-                        <option value="">
-                          {rateOptions.length === 0 ? 'No shift types available' : 'Choose...'}
-                        </option>
-                        {rateOptions.map((o: any) => (
-                          <option key={o.key} value={o.key}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
-                      
-                      {/* Warning message when no rates available */}
-                      {rateOptions.length === 0 && (
-                        <div className="mt-3 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                          <div className="flex items-start">
-                            <svg className="w-5 h-5 text-yellow-600 mt-0.5 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                            </svg>
-                            <div className="flex-1">
-                              <h4 className="text-sm font-semibold text-yellow-800 mb-1">
-                                No Shift Types Available
-                              </h4>
-                              <p className="text-sm text-yellow-700 mb-2">
-                                The assigned rate card has no rate entries configured. To add time logs, you need:
-                              </p>
-                              <ol className="text-sm text-yellow-700 list-decimal ml-4 space-y-1">
-                                <li>A rate card assigned to this subcontractor for client "{project.clientName}"</li>
-                                <li>The rate card must have at least one rate entry with a role name and shift type</li>
-                              </ol>
-                              <p className="text-sm text-yellow-700 mt-2">
-                                Please contact your project administrator to add rate entries to your rate card.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-6 flex flex-col h-full">
+                  {/* Add Time Log Form */}
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Add Time Log</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Regular Hours</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
+                        <input
+                          type="date"
+                          value={logForm.date}
+                          onChange={(e) => setLogForm((p) => ({ ...p, date: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Role & Shift *</label>
+                        <select
+                          value={logForm.rateKey}
+                          onChange={(e) => setLogForm((p) => ({ ...p, rateKey: e.target.value }))}
+                          disabled={rateOptions.length === 0}
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm ${
+                            rateOptions.length === 0 
+                              ? 'bg-gray-100 border-gray-300 cursor-not-allowed' 
+                              : 'border-gray-300'
+                          }`}
+                        >
+                          <option value="">
+                            {rateOptions.length === 0 ? 'No types' : 'Choose...'}
+                          </option>
+                          {rateOptions.map((o: any) => (
+                            <option key={o.key} value={o.key}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Regular Hours</label>
                         <input
                           type="number"
                           step="0.5"
                           value={logForm.hoursRegular}
                           onChange={(e) => setLogForm((p) => ({ ...p, hoursRegular: Number(e.target.value) }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
                         />
                       </div>
+
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">OT Hours</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">OT Hours</label>
                         <input
                           type="number"
                           step="0.5"
                           value={logForm.hoursOT}
                           onChange={(e) => setLogForm((p) => ({ ...p, hoursOT: Number(e.target.value) }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
                         />
                       </div>
+
+                      <div className="flex items-end">
+                        <button
+                          onClick={() => saveLog('DRAFT')}
+                          disabled={savingLog || rateOptions.length === 0}
+                          className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
+                        >
+                          <Plus className="w-4 h-4 inline mr-1" />
+                          Add
+                        </button>
+                      </div>
                     </div>
 
-                    {selectedRateEntry && (
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
-                        <p className="text-blue-900">Pay rate: £{payRate.toFixed(2)}/hr</p>
-                        <p className="text-blue-900">Est. cost: £{calculatedLog.cost.toFixed(2)}</p>
+                    {rateOptions.length === 0 && (
+                      <div className="mt-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                        <p className="text-sm text-yellow-700">
+                          No rate card configured. Please contact your administrator.
+                        </p>
                       </div>
                     )}
-
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => saveLog('DRAFT')}
-                        disabled={savingLog}
-                        className="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 disabled:opacity-50"
-                      >
-                        Save Draft
-                      </button>
-                      <button
-                        onClick={() => saveLog('SUBMITTED')}
-                        disabled={savingLog}
-                        className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
-                      >
-                        <Send className="w-4 h-4" />
-                        Submit
-                      </button>
-                    </div>
                   </div>
 
-                  {/* List */}
-                  <div className="space-y-4 flex flex-col">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-semibold text-gray-900">Time Log History</h3>
+                  {/* Time Logs Table */}
+                  <div className="flex-1 flex flex-col">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-lg font-semibold text-gray-900">Time Logs</h3>
                       <select
                         value={logFilter}
                         onChange={(e) => setLogFilter(e.target.value as any)}
@@ -522,45 +492,83 @@ export default function ProjectModal({
                       </select>
                     </div>
 
-                    <div className="space-y-3 flex-1 overflow-y-auto">
+                    <div className="flex-1 overflow-x-auto border border-gray-200 rounded-lg">
                       {filteredLogs.length === 0 ? (
-                        <p className="text-gray-500 text-sm">No time logs found</p>
+                        <div className="flex items-center justify-center h-32 text-gray-500">
+                          <p>No time logs found</p>
+                        </div>
                       ) : (
-                        filteredLogs.map((log) => (
-                          <div key={log.id} className="border border-gray-200 rounded-lg p-3">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm font-semibold text-gray-900">
-                                {log.roleName} - {log.shiftType}
-                              </span>
-                              <span className={`px-2 py-1 text-xs rounded-full border ${getStatusBadge(log.status)}`}>
-                                {log.status}
-                              </span>
-                            </div>
-                            <p className="text-xs text-gray-500">{formatDate(log.date)}</p>
-                            <p className="text-sm text-gray-700 mt-1">
-                              {log.hoursRegular}h + {log.hoursOT}h OT = £{(log.subCost || 0).toFixed(2)}
-                            </p>
-                          </div>
-                        ))
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-100 border-b border-gray-200">
+                            <tr>
+                              <th className="px-4 py-2 text-left font-semibold text-gray-900">Date</th>
+                              <th className="px-4 py-2 text-left font-semibold text-gray-900">Role / Shift</th>
+                              <th className="px-4 py-2 text-right font-semibold text-gray-900">Regular</th>
+                              <th className="px-4 py-2 text-right font-semibold text-gray-900">OT</th>
+                              <th className="px-4 py-2 text-right font-semibold text-gray-900">Cost</th>
+                              <th className="px-4 py-2 text-center font-semibold text-gray-900">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredLogs.map((log) => (
+                              <tr key={log.id} className="border-b border-gray-200 hover:bg-gray-50">
+                                <td className="px-4 py-2 text-gray-900">{formatDate(log.date)}</td>
+                                <td className="px-4 py-2 text-gray-900">{log.roleName} - {log.shiftType}</td>
+                                <td className="px-4 py-2 text-right text-gray-900">{log.hoursRegular}h</td>
+                                <td className="px-4 py-2 text-right text-gray-900">{log.hoursOT}h</td>
+                                <td className="px-4 py-2 text-right text-gray-900 font-semibold">£{(log.subCost || 0).toFixed(2)}</td>
+                                <td className="px-4 py-2 text-center">
+                                  <span className={`px-2 py-1 text-xs rounded-full border ${getStatusBadge(log.status)}`}>
+                                    {log.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       )}
                     </div>
 
-                    {/* Subtotal */}
-                    {filteredLogs.length > 0 && (
-                      <div className="border-t border-gray-200 pt-3 mt-3">
-                        <div className="bg-blue-50 rounded-lg p-3">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-semibold text-gray-700">Total Hours:</span>
-                            <span className="text-lg font-bold text-blue-900">
-                              {filteredLogs.reduce((sum, log) => sum + (log.hoursRegular || 0) + (log.hoursOT || 0), 0).toFixed(1)}h
-                            </span>
+                    {/* Subtotal and Action Buttons */}
+                    {timeLogs.length > 0 && (
+                      <div className="mt-4 space-y-3">
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                          <div className="grid grid-cols-3 gap-4">
+                            <div>
+                              <p className="text-sm text-gray-600">Total Hours</p>
+                              <p className="text-2xl font-bold text-blue-900">
+                                {timeLogs.reduce((sum, log) => sum + (log.hoursRegular || 0) + (log.hoursOT || 0), 0).toFixed(1)}h
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600">Total Cost</p>
+                              <p className="text-2xl font-bold text-blue-900">
+                                £{timeLogs.reduce((sum, log) => sum + (log.subCost || 0), 0).toFixed(2)}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600">Draft Items</p>
+                              <p className="text-2xl font-bold text-blue-900">
+                                {timeLogs.filter((l) => l.status === 'DRAFT').length}
+                              </p>
+                            </div>
                           </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-semibold text-gray-700">Total Cost:</span>
-                            <span className="text-lg font-bold text-blue-900">
-                              £{filteredLogs.reduce((sum, log) => sum + (log.subCost || 0), 0).toFixed(2)}
-                            </span>
-                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <button
+                            disabled={timeLogs.filter((l) => l.status === 'DRAFT').length === 0}
+                            className="flex-1 px-4 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 disabled:opacity-50 font-medium"
+                          >
+                            Save All as Draft
+                          </button>
+                          <button
+                            disabled={timeLogs.filter((l) => l.status === 'DRAFT').length === 0}
+                            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium flex items-center justify-center gap-2"
+                          >
+                            <Send className="w-4 h-4" />
+                            Submit All for Approval
+                          </button>
                         </div>
                       </div>
                     )}
@@ -570,79 +578,73 @@ export default function ProjectModal({
 
               {/* Expenses Tab */}
               {activeTab === 'expenses' && (
-                <div className="grid md:grid-cols-2 gap-6">
-                  {/* Form */}
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Add Expense</h3>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Date *</label>
-                      <input
-                        type="date"
-                        value={expenseForm.date}
-                        onChange={(e) => setExpenseForm((p) => ({ ...p, date: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
+                <div className="space-y-6 flex flex-col h-full">
+                  {/* Add Expense Form */}
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Add Expense</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
+                        <input
+                          type="date"
+                          value={expenseForm.date}
+                          onChange={(e) => setExpenseForm((p) => ({ ...p, date: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        />
+                      </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Expense Type *</label>
-                      <select
-                        value={expenseForm.expenseKey}
-                        onChange={(e) => {
-                          const key = e.target.value;
-                          const selected = expenseOptions.find((opt: any) => opt.key === key);
-                          setExpenseForm((p) => ({
-                            ...p,
-                            expenseKey: key,
-                            amount: selected ? selected.rate : 0,
-                          }));
-                        }}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">Choose...</option>
-                        {expenseOptions.map((o: any) => (
-                          <option key={o.key} value={o.key}>
-                            {o.label} (cap £{o.rate.toFixed(2)})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Expense Type *</label>
+                        <select
+                          value={expenseForm.expenseKey}
+                          onChange={(e) => {
+                            const key = e.target.value;
+                            const selected = expenseOptions.find((opt: any) => opt.key === key);
+                            setExpenseForm((p) => ({
+                              ...p,
+                              expenseKey: key,
+                              amount: selected ? selected.rate : 0,
+                            }));
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        >
+                          <option value="">Choose...</option>
+                          {expenseOptions.map((o: any) => (
+                            <option key={o.key} value={o.key}>
+                              {o.label} (cap £{o.rate.toFixed(2)})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Amount</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={expenseForm.amount}
-                        onChange={(e) => setExpenseForm((p) => ({ ...p, amount: Number(e.target.value) }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={expenseForm.amount}
+                          onChange={(e) => setExpenseForm((p) => ({ ...p, amount: Number(e.target.value) }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        />
+                      </div>
 
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => saveExpense('DRAFT')}
-                        disabled={savingExpense}
-                        className="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 disabled:opacity-50"
-                      >
-                        Save Draft
-                      </button>
-                      <button
-                        onClick={() => saveExpense('SUBMITTED')}
-                        disabled={savingExpense}
-                        className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
-                      >
-                        <Send className="w-4 h-4" />
-                        Submit
-                      </button>
+                      <div className="flex items-end">
+                        <button
+                          onClick={() => saveExpense('DRAFT')}
+                          disabled={savingExpense || !selectedExpense}
+                          className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm font-medium"
+                        >
+                          <Plus className="w-4 h-4 inline mr-1" />
+                          Add
+                        </button>
+                      </div>
                     </div>
                   </div>
 
-                  {/* List */}
-                  <div className="space-y-4 flex flex-col">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-semibold text-gray-900">Expense History</h3>
+                  {/* Expenses Table */}
+                  <div className="flex-1 flex flex-col">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-lg font-semibold text-gray-900">Expenses</h3>
                       <select
                         value={expenseFilter}
                         onChange={(e) => setExpenseFilter(e.target.value as any)}
@@ -655,35 +657,73 @@ export default function ProjectModal({
                       </select>
                     </div>
 
-                    <div className="space-y-3 flex-1 overflow-y-auto">
+                    <div className="flex-1 overflow-x-auto border border-gray-200 rounded-lg">
                       {filteredExpenses.length === 0 ? (
-                        <p className="text-gray-500 text-sm">No expenses found</p>
+                        <div className="flex items-center justify-center h-32 text-gray-500">
+                          <p>No expenses found</p>
+                        </div>
                       ) : (
-                        filteredExpenses.map((exp) => (
-                          <div key={exp.id} className="border border-gray-200 rounded-lg p-3">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm font-semibold text-gray-900">{exp.category}</span>
-                              <span className={`px-2 py-1 text-xs rounded-full border ${getStatusBadge(exp.status)}`}>
-                                {exp.status}
-                              </span>
-                            </div>
-                            <p className="text-xs text-gray-500">{formatDate(exp.date)}</p>
-                            <p className="text-sm text-gray-700 mt-1">£{(exp.amount || 0).toFixed(2)}</p>
-                          </div>
-                        ))
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-100 border-b border-gray-200">
+                            <tr>
+                              <th className="px-4 py-2 text-left font-semibold text-gray-900">Date</th>
+                              <th className="px-4 py-2 text-left font-semibold text-gray-900">Category</th>
+                              <th className="px-4 py-2 text-right font-semibold text-gray-900">Amount</th>
+                              <th className="px-4 py-2 text-center font-semibold text-gray-900">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredExpenses.map((exp) => (
+                              <tr key={exp.id} className="border-b border-gray-200 hover:bg-gray-50">
+                                <td className="px-4 py-2 text-gray-900">{formatDate(exp.date)}</td>
+                                <td className="px-4 py-2 text-gray-900">{exp.category}</td>
+                                <td className="px-4 py-2 text-right text-gray-900 font-semibold">£{(exp.amount || 0).toFixed(2)}</td>
+                                <td className="px-4 py-2 text-center">
+                                  <span className={`px-2 py-1 text-xs rounded-full border ${getStatusBadge(exp.status)}`}>
+                                    {exp.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       )}
                     </div>
 
-                    {/* Subtotal */}
-                    {filteredExpenses.length > 0 && (
-                      <div className="border-t border-gray-200 pt-3 mt-3">
-                        <div className="bg-green-50 rounded-lg p-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-semibold text-gray-700">Total Amount:</span>
-                            <span className="text-lg font-bold text-green-900">
-                              £{filteredExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0).toFixed(2)}
-                            </span>
+                    {/* Subtotal and Action Buttons */}
+                    {expenses.length > 0 && (
+                      <div className="mt-4 space-y-3">
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-sm text-gray-600">Total Amount</p>
+                              <p className="text-2xl font-bold text-green-900">
+                                £{expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0).toFixed(2)}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600">Draft Items</p>
+                              <p className="text-2xl font-bold text-green-900">
+                                {expenses.filter((e) => e.status === 'DRAFT').length}
+                              </p>
+                            </div>
                           </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <button
+                            disabled={expenses.filter((e) => e.status === 'DRAFT').length === 0}
+                            className="flex-1 px-4 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 disabled:opacity-50 font-medium"
+                          >
+                            Save All as Draft
+                          </button>
+                          <button
+                            disabled={expenses.filter((e) => e.status === 'DRAFT').length === 0}
+                            className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium flex items-center justify-center gap-2"
+                          >
+                            <Send className="w-4 h-4" />
+                            Submit All for Approval
+                          </button>
                         </div>
                       </div>
                     )}
