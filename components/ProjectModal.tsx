@@ -48,6 +48,10 @@ export default function ProjectModal({
   const [savingExpense, setSavingExpense] = useState(false);
   const [logFilter, setLogFilter] = useState<'all' | 'draft' | 'submitted' | 'approved'>('all');
   const [expenseFilter, setExpenseFilter] = useState<'all' | 'draft' | 'submitted' | 'approved'>('all');
+  const [showAddLogForm, setShowAddLogForm] = useState(false);
+  const [showAddExpenseForm, setShowAddExpenseForm] = useState(false);
+  const [editingLogId, setEditingLogId] = useState<string | null>(null);
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
 
   const [logForm, setLogForm] = useState({
     date: '',
