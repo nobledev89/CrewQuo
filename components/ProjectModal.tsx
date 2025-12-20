@@ -11,10 +11,11 @@ import {
   doc,
   addDoc,
   updateDoc,
+  deleteDoc,
   serverTimestamp,
   orderBy,
 } from 'firebase/firestore';
-import { X, Clock, DollarSign, BarChart3, Send, RotateCcw } from 'lucide-react';
+import { X, Clock, DollarSign, BarChart3, Send, RotateCcw, Plus, Edit2, Trash2 } from 'lucide-react';
 
 interface ProjectModalProps {
   isOpen: boolean;
@@ -506,7 +507,7 @@ export default function ProjectModal({
                   </div>
 
                   {/* List */}
-                  <div className="space-y-4">
+                  <div className="space-y-4 flex flex-col">
                     <div className="flex items-center justify-between">
                       <h3 className="text-lg font-semibold text-gray-900">Time Log History</h3>
                       <select
@@ -521,7 +522,7 @@ export default function ProjectModal({
                       </select>
                     </div>
 
-                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                    <div className="space-y-3 flex-1 overflow-y-auto">
                       {filteredLogs.length === 0 ? (
                         <p className="text-gray-500 text-sm">No time logs found</p>
                       ) : (
@@ -543,6 +544,26 @@ export default function ProjectModal({
                         ))
                       )}
                     </div>
+
+                    {/* Subtotal */}
+                    {filteredLogs.length > 0 && (
+                      <div className="border-t border-gray-200 pt-3 mt-3">
+                        <div className="bg-blue-50 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-semibold text-gray-700">Total Hours:</span>
+                            <span className="text-lg font-bold text-blue-900">
+                              {filteredLogs.reduce((sum, log) => sum + (log.hoursRegular || 0) + (log.hoursOT || 0), 0).toFixed(1)}h
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-semibold text-gray-700">Total Cost:</span>
+                            <span className="text-lg font-bold text-blue-900">
+                              £{filteredLogs.reduce((sum, log) => sum + (log.subCost || 0), 0).toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -619,7 +640,7 @@ export default function ProjectModal({
                   </div>
 
                   {/* List */}
-                  <div className="space-y-4">
+                  <div className="space-y-4 flex flex-col">
                     <div className="flex items-center justify-between">
                       <h3 className="text-lg font-semibold text-gray-900">Expense History</h3>
                       <select
@@ -634,7 +655,7 @@ export default function ProjectModal({
                       </select>
                     </div>
 
-                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                    <div className="space-y-3 flex-1 overflow-y-auto">
                       {filteredExpenses.length === 0 ? (
                         <p className="text-gray-500 text-sm">No expenses found</p>
                       ) : (
@@ -652,6 +673,20 @@ export default function ProjectModal({
                         ))
                       )}
                     </div>
+
+                    {/* Subtotal */}
+                    {filteredExpenses.length > 0 && (
+                      <div className="border-t border-gray-200 pt-3 mt-3">
+                        <div className="bg-green-50 rounded-lg p-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-semibold text-gray-700">Total Amount:</span>
+                            <span className="text-lg font-bold text-green-900">
+                              £{filteredExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0).toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
