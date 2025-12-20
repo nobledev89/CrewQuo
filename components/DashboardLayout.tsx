@@ -130,7 +130,10 @@ function DashboardContent({ children }: DashboardLayoutProps) {
   // Navigation items - contextual based on workspace
   const getNavItems = () => {
     if (isActingAsSubcontractor()) {
-      return [{ name: 'My Work', href: '/dashboard/my-work', icon: Briefcase }];
+      return [
+        { name: 'Summary', href: '/dashboard/my-work/summary', icon: BarChart3 },
+        { name: 'Projects', href: '/dashboard/my-work/projects', icon: Briefcase }
+      ];
     }
 
     const baseItems = [
