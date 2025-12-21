@@ -24,6 +24,7 @@ import {
   DollarSign,
   Calendar,
   Send,
+  ChevronDown,
 } from 'lucide-react';
 
 interface TimeLog {
@@ -51,6 +52,15 @@ interface Project {
   name: string;
 }
 
+interface GroupedItem {
+  id: string;
+  type: 'timeLog' | 'expense';
+  data: TimeLog | Expense;
+  date: any;
+  status: string;
+  projectId: string;
+}
+
 export default function SubmissionsPage() {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<string>('');
@@ -59,11 +69,12 @@ export default function SubmissionsPage() {
   const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [projects, setProjects] = useState<Record<string, Project>>({});
-  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [filter, setFilter] = useState<'all' | 'draft' | 'submitted' | 'approved'>('draft');
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
+  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
@@ -160,6 +171,7 @@ export default function SubmissionsPage() {
         data: log,
         date: log.date,
         status: log.status,
+        projectId: log.projectId,
       })),
       ...expenses.map(exp => ({
         id: `expense_${exp.id}`,
@@ -167,6 +179,7 @@ export default function SubmissionsPage() {
         data: exp,
         date: exp.date,
         status: exp.status,
+        projectId: exp.projectId,
       })),
     ].sort((a, b) => {
       const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date);
@@ -182,29 +195,50 @@ export default function SubmissionsPage() {
     });
   }, [allItems, filter]);
 
-  const draftItems = filteredItems.filter(item => item.status === 'DRAFT');
+  // Group by project
+  const groupedByProject = useMemo(() => {
+    const grouped: Record<string, GroupedItem[]> = {};
+    filteredItems.forEach(item => {
+      if (!grouped[item.projectId]) {
+        grouped[item.projectId] = [];
+      }
+      grouped[item.projectId].push(item);
+    });
+    return grouped;
+  }, [filteredItems]);
 
-  const handleSelectItem = (itemId: string) => {
-    const newSelected = new Set(selectedItems);
-    if (newSelected.has(itemId)) {
-      newSelected.delete(itemId);
+  // Get draft projects (only DRAFT items)
+  const draftProjects = useMemo(() => {
+    const projects = new Set<string>();
+    allItems.forEach(item => {
+      if (item.status === 'DRAFT') {
+        projects.add(item.projectId);
+      }
+    });
+    return projects;
+  }, [allItems]);
+
+  const handleSelectProject = (projectId: string) => {
+    const newSelected = new Set(selectedProjects);
+    if (newSelected.has(projectId)) {
+      newSelected.delete(projectId);
     } else {
-      newSelected.add(itemId);
+      newSelected.add(projectId);
     }
-    setSelectedItems(newSelected);
+    setSelectedProjects(newSelected);
   };
 
-  const handleSelectAll = () => {
-    if (selectedItems.size === draftItems.length) {
-      setSelectedItems(new Set());
+  const handleSelectAllProjects = () => {
+    if (selectedProjects.size === draftProjects.size) {
+      setSelectedProjects(new Set());
     } else {
-      setSelectedItems(new Set(draftItems.map(item => item.id)));
+      setSelectedProjects(new Set(draftProjects));
     }
   };
 
   const handleSubmit = async () => {
-    if (selectedItems.size === 0) {
-      setError('Please select at least one item to submit');
+    if (selectedProjects.size === 0) {
+      setError('Please select at least one project to submit');
       return;
     }
 
@@ -214,27 +248,33 @@ export default function SubmissionsPage() {
 
     try {
       const batch = writeBatch(db);
+      let itemCount = 0;
 
-      selectedItems.forEach(itemId => {
-        const [type, id] = itemId.split('_', 1);
-        const actualId = itemId.substring(type.length + 1);
+      selectedProjects.forEach(projectId => {
+        const projectItems = groupedByProject[projectId] || [];
         
-        if (type === 'timeLog') {
-          batch.update(doc(db, 'timeLogs', actualId), {
-            status: 'SUBMITTED',
-            updatedAt: Timestamp.now(),
-          });
-        } else if (type === 'expense') {
-          batch.update(doc(db, 'expenses', actualId), {
-            status: 'SUBMITTED',
-            updatedAt: Timestamp.now(),
-          });
-        }
+        projectItems.forEach(item => {
+          const [type, id] = item.id.split('_', 1);
+          const actualId = item.id.substring(type.length + 1);
+          
+          if (type === 'timeLog') {
+            batch.update(doc(db, 'timeLogs', actualId), {
+              status: 'SUBMITTED',
+              updatedAt: Timestamp.now(),
+            });
+          } else if (type === 'expense') {
+            batch.update(doc(db, 'expenses', actualId), {
+              status: 'SUBMITTED',
+              updatedAt: Timestamp.now(),
+            });
+          }
+          itemCount++;
+        });
       });
 
       await batch.commit();
-      setSuccess(`Successfully submitted ${selectedItems.size} item(s)`);
-      setSelectedItems(new Set());
+      setSuccess(`Successfully submitted ${selectedProjects.size} project timesheet(s) with ${itemCount} item(s)`);
+      setSelectedProjects(new Set());
 
       // Refresh the data
       if (activeCompanyId && subcontractorId) {
@@ -249,8 +289,8 @@ export default function SubmissionsPage() {
 
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      console.error('Error submitting items:', err);
-      setError('Failed to submit items. Please try again.');
+      console.error('Error submitting projects:', err);
+      setError('Failed to submit projects. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -289,7 +329,7 @@ export default function SubmissionsPage() {
         {/* Header */}
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Timesheet Submissions</h1>
-          <p className="text-gray-600 mt-1">Submit your hours and expenses for approval</p>
+          <p className="text-gray-600 mt-1">Submit your hours and expenses by project for approval</p>
         </div>
 
         {/* Alerts */}
@@ -327,22 +367,22 @@ export default function SubmissionsPage() {
         </div>
 
         {/* Draft Selection Bar */}
-        {draftItems.length > 0 && filter === 'draft' && (
+        {draftProjects.size > 0 && filter === 'draft' && (
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <input
                 type="checkbox"
-                checked={selectedItems.size === draftItems.length && draftItems.length > 0}
-                onChange={handleSelectAll}
+                checked={selectedProjects.size === draftProjects.size && draftProjects.size > 0}
+                onChange={handleSelectAllProjects}
                 className="w-5 h-5 rounded border-gray-300"
               />
               <span className="text-sm font-medium text-blue-900">
-                {selectedItems.size > 0
-                  ? `${selectedItems.size} item(s) selected`
-                  : `Select items to submit`}
+                {selectedProjects.size > 0
+                  ? `${selectedProjects.size} project timesheet(s) selected`
+                  : `Select projects to submit`}
               </span>
             </div>
-            {selectedItems.size > 0 && (
+            {selectedProjects.size > 0 && (
               <button
                 onClick={handleSubmit}
                 disabled={submitting}
@@ -355,139 +395,174 @@ export default function SubmissionsPage() {
           </div>
         )}
 
-        {/* Items List */}
+        {/* Projects List */}
         <div className="space-y-3">
-          {filteredItems.length === 0 ? (
+          {Object.keys(groupedByProject).length === 0 ? (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
               <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600 font-medium">No {filter !== 'all' ? filter : ''} items</p>
               <p className="text-sm text-gray-500">When you log hours or expenses, they'll appear here</p>
             </div>
           ) : (
-            filteredItems.map(item => {
-              const isSelected = selectedItems.has(item.id);
-              const isDraft = item.status === 'DRAFT';
-              const dateObj = item.date?.toDate ? item.date.toDate() : new Date(item.date);
-              const dateStr = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+            Object.entries(groupedByProject).map(([projectId, items]) => {
+              const projectName = projects[projectId]?.name || 'Unknown Project';
+              const isExpanded = expandedProjects.has(projectId);
+              const isDraftProject = draftProjects.has(projectId);
+              const isSelected = selectedProjects.has(projectId);
 
-              if (item.type === 'timeLog') {
-                const log = item.data as TimeLog;
-                const projectName = projects[log.projectId]?.name || 'Unknown Project';
-                const totalHours = log.hoursRegular + log.hoursOT;
+              const totalHours = items
+                .filter(i => i.type === 'timeLog')
+                .reduce((sum, i) => {
+                  const log = i.data as TimeLog;
+                  return sum + log.hoursRegular + (log.hoursOT || 0);
+                }, 0);
 
-                return (
-                  <div
-                    key={item.id}
-                    className={`bg-white rounded-xl shadow-sm border transition ${
-                      isDraft && isSelected
-                        ? 'border-blue-400 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
+              const totalCost = items.reduce((sum, i) => {
+                if (i.type === 'timeLog') {
+                  return sum + (i.data as TimeLog).subCost;
+                } else {
+                  return sum + (i.data as Expense).amount;
+                }
+              }, 0);
+
+              return (
+                <div
+                  key={projectId}
+                  className={`bg-white rounded-xl shadow-sm border transition ${
+                    isDraftProject && isSelected
+                      ? 'border-blue-400 bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  {/* Project Header */}
+                  <button
+                    onClick={() => {
+                      const newExpanded = new Set(expandedProjects);
+                      if (newExpanded.has(projectId)) {
+                        newExpanded.delete(projectId);
+                      } else {
+                        newExpanded.add(projectId);
+                      }
+                      setExpandedProjects(newExpanded);
+                    }}
+                    className="w-full p-4 flex items-center justify-between hover:bg-gray-50 transition"
                   >
-                    <div className="p-4 flex items-start gap-4">
-                      {isDraft && (
+                    <div className="flex items-center gap-4">
+                      {isDraftProject && (
                         <input
                           type="checkbox"
                           checked={isSelected}
-                          onChange={() => handleSelectItem(item.id)}
-                          className="w-5 h-5 rounded border-gray-300 mt-1"
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            handleSelectProject(projectId);
+                          }}
+                          className="w-5 h-5 rounded border-gray-300"
                         />
                       )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-4">
-                          <div>
-                            <h3 className="font-semibold text-gray-900">{projectName}</h3>
-                            <p className="text-sm text-gray-600 mt-1">{log.roleName}</p>
-                          </div>
-                          <div className="text-right flex-shrink-0">
-                            <div className="flex items-center justify-end gap-2">
-                              <Clock className="w-4 h-4 text-gray-400" />
-                              <span className="font-semibold text-gray-900">{totalHours.toFixed(1)}h</span>
-                            </div>
-                            <p className="text-sm text-gray-600 mt-1">£{log.subCost.toFixed(2)}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-4 mt-3 text-sm text-gray-600">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-4 h-4" />
-                            {dateStr}
-                          </span>
-                          {log.hoursOT > 0 && (
-                            <span className="text-orange-600 font-medium">OT: {log.hoursOT.toFixed(1)}h</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex-shrink-0">
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          item.status === 'DRAFT'
-                            ? 'bg-gray-100 text-gray-700'
-                            : item.status === 'SUBMITTED'
-                            ? 'bg-yellow-100 text-yellow-700'
-                            : 'bg-green-100 text-green-700'
-                        }`}>
-                          {item.status}
-                        </span>
+                      <div className="text-left">
+                        <h3 className="font-semibold text-gray-900">{projectName}</h3>
+                        <p className="text-sm text-gray-600 mt-1">{items.length} item(s)</p>
                       </div>
                     </div>
-                  </div>
-                );
-              } else {
-                const exp = item.data as Expense;
-                const projectName = projects[exp.projectId]?.name || 'Unknown Project';
+                    <div className="flex items-center gap-4">
+                      <div className="text-right flex-shrink-0">
+                        <div className="flex items-center justify-end gap-2">
+                          <Clock className="w-4 h-4 text-gray-400" />
+                          <span className="font-semibold text-gray-900">{totalHours.toFixed(1)}h</span>
+                        </div>
+                        <p className="text-sm text-gray-600 mt-1">£{totalCost.toFixed(2)}</p>
+                      </div>
+                      <ChevronDown
+                        className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                      />
+                    </div>
+                  </button>
 
-                return (
-                  <div
-                    key={item.id}
-                    className={`bg-white rounded-xl shadow-sm border transition ${
-                      isDraft && isSelected
-                        ? 'border-blue-400 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="p-4 flex items-start gap-4">
-                      {isDraft && (
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => handleSelectItem(item.id)}
-                          className="w-5 h-5 rounded border-gray-300 mt-1"
-                        />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-4">
-                          <div>
-                            <h3 className="font-semibold text-gray-900">{projectName}</h3>
-                            <p className="text-sm text-gray-600 mt-1">Expense: {exp.category}</p>
-                          </div>
-                          <div className="text-right flex-shrink-0">
-                            <div className="flex items-center justify-end gap-2">
-                              <DollarSign className="w-4 h-4 text-gray-400" />
-                              <span className="font-semibold text-gray-900">£{exp.amount.toFixed(2)}</span>
+                  {/* Items */}
+                  {isExpanded && (
+                    <div className="border-t border-gray-200 divide-y divide-gray-200">
+                      {items.map(item => {
+                        const dateObj = item.date?.toDate ? item.date.toDate() : new Date(item.date);
+                        const dateStr = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+                        if (item.type === 'timeLog') {
+                          const log = item.data as TimeLog;
+                          const totalHours = log.hoursRegular + (log.hoursOT || 0);
+
+                          return (
+                            <div key={item.id} className="p-4">
+                              <div className="flex items-start justify-between gap-4">
+                                <div>
+                                  <h4 className="font-semibold text-gray-900">{log.roleName}</h4>
+                                  <p className="text-sm text-gray-600 mt-1">Time Log</p>
+                                  <div className="flex items-center gap-4 mt-3 text-sm text-gray-600">
+                                    <span className="flex items-center gap-1">
+                                      <Calendar className="w-4 h-4" />
+                                      {dateStr}
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                      <Clock className="w-4 h-4" />
+                                      {totalHours.toFixed(1)}h
+                                    </span>
+                                    {log.hoursOT && log.hoursOT > 0 && (
+                                      <span className="text-orange-600 font-medium">OT: {log.hoursOT.toFixed(1)}h</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="text-right flex-shrink-0">
+                                  <p className="text-sm text-gray-600">Cost</p>
+                                  <p className="text-lg font-bold text-gray-900">£{log.subCost.toFixed(2)}</p>
+                                  <span className={`inline-block mt-2 px-2 py-1 rounded text-xs font-semibold ${
+                                    item.status === 'DRAFT'
+                                      ? 'bg-gray-100 text-gray-700'
+                                      : item.status === 'SUBMITTED'
+                                      ? 'bg-yellow-100 text-yellow-700'
+                                      : 'bg-green-100 text-green-700'
+                                  }`}>
+                                    {item.status}
+                                  </span>
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        </div>
-                        <div className="mt-3 text-sm text-gray-600">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-4 h-4" />
-                            {dateStr}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex-shrink-0">
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          item.status === 'DRAFT'
-                            ? 'bg-gray-100 text-gray-700'
-                            : item.status === 'SUBMITTED'
-                            ? 'bg-yellow-100 text-yellow-700'
-                            : 'bg-green-100 text-green-700'
-                        }`}>
-                          {item.status}
-                        </span>
-                      </div>
+                          );
+                        } else {
+                          const exp = item.data as Expense;
+
+                          return (
+                            <div key={item.id} className="p-4">
+                              <div className="flex items-start justify-between gap-4">
+                                <div>
+                                  <h4 className="font-semibold text-gray-900">{exp.category}</h4>
+                                  <p className="text-sm text-gray-600 mt-1">Expense</p>
+                                  <div className="mt-3 text-sm text-gray-600">
+                                    <span className="flex items-center gap-1">
+                                      <Calendar className="w-4 h-4" />
+                                      {dateStr}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="text-right flex-shrink-0">
+                                  <p className="text-sm text-gray-600">Amount</p>
+                                  <p className="text-lg font-bold text-gray-900">£{exp.amount.toFixed(2)}</p>
+                                  <span className={`inline-block mt-2 px-2 py-1 rounded text-xs font-semibold ${
+                                    item.status === 'DRAFT'
+                                      ? 'bg-gray-100 text-gray-700'
+                                      : item.status === 'SUBMITTED'
+                                      ? 'bg-yellow-100 text-yellow-700'
+                                      : 'bg-green-100 text-green-700'
+                                  }`}>
+                                    {item.status}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                      })}
                     </div>
-                  </div>
-                );
-              }
+                  )}
+                </div>
+              );
             })
           )}
         </div>

@@ -449,6 +449,14 @@ export interface Expense {
 
 export type SubmissionStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED';
 
+// Line item rejection note (for individual time logs/expenses within a timesheet)
+export interface LineItemRejectionNote {
+  itemId: string;          // timeLog or expense ID
+  itemType: 'timeLog' | 'expense';
+  note: string;            // Admin's reason for rejection
+  addedAt: Timestamp;
+}
+
 export interface ProjectSubmission {
   id: string;
   companyId: string;
@@ -465,7 +473,8 @@ export interface ProjectSubmission {
   submittedAt?: Timestamp; // When submitted for approval
   approvedAt?: Timestamp;  // When approved
   approvedBy?: string;     // userId who approved
-  rejectionReason?: string; // If rejected
+  rejectionReason?: string; // If rejected (whole timesheet)
+  lineItemRejectionNotes?: LineItemRejectionNote[]; // Per-line rejection notes
   
   // Summary totals (denormalized for quick access)
   totalHours: number;
