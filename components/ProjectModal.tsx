@@ -14,8 +14,10 @@ import {
   deleteDoc,
   serverTimestamp,
   orderBy,
+  writeBatch,
+  Timestamp,
 } from 'firebase/firestore';
-import { X, Clock, DollarSign, BarChart3, Send, RotateCcw, Plus, Edit2, Trash2 } from 'lucide-react';
+import { X, Clock, DollarSign, BarChart3, Send, RotateCcw, Plus, Edit2, Trash2, AlertCircle, CheckCircle } from 'lucide-react';
 
 interface ProjectModalProps {
   isOpen: boolean;
@@ -400,9 +402,15 @@ export default function ProjectModal({
               {/* Time Logs Tab */}
               {activeTab === 'logs' && (
                 <div className="space-y-6 flex flex-col h-full">
-                  {/* Add Time Log Form */}
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  {/* Add Time Log Form - Disabled if items already submitted */}
+                  <div className={`bg-gray-50 border border-gray-200 rounded-lg p-4 ${summaryStats.submittedCount > 0 ? 'opacity-50 pointer-events-none' : ''}`}>
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Add Time Log</h3>
+                    {summaryStats.submittedCount > 0 && (
+                      <div className="mb-4 bg-orange-50 border border-orange-200 rounded-lg p-3 flex items-center gap-2">
+                        <AlertCircle className="w-5 h-5 text-orange-600 flex-shrink-0" />
+                        <p className="text-sm text-orange-700">You have submitted items for approval. New items cannot be added until they are approved or rejected.</p>
+                      </div>
+                    )}
                     <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
@@ -726,20 +734,100 @@ export default function ProjectModal({
                       onClick={async () => {
                         setSubmittingTimesheet(true);
                         try {
-                          // TODO: Implement timesheet submission logic
-                          // This should update the status of all draft entries to SUBMITTED
-                          alert('Timesheet submitted for approval!');
+                          const user = auth.currentUser;
+                          if (!user) {
+                            alert('You are not logged in');
+                            return;
+                          }
+
+                          const userDoc = await getDoc(doc(db, 'users', user.uid));
+                          const userData = userDoc.data();
+                          const activeCompanyId = userData?.activeCompanyId || userData?.companyId;
+                          const subRole = userData?.subcontractorRoles?.[activeCompanyId];
+
+                          if (!subRole) {
+                            alert('Subcontractor role not found');
+                            return;
+                          }
+
+                          const batch = writeBatch(db);
+
+                          // Get all draft time logs and expenses for this project
+                          const draftTimeLogs = timeLogs.filter(log => log.status === 'DRAFT');
+                          const draftExpenses = expenses.filter(exp => exp.status === 'DRAFT');
+
+                          if (draftTimeLogs.length === 0 && draftExpenses.length === 0) {
+                            alert('No draft items to submit');
+                            return;
+                          }
+
+                          // Update all draft time logs to SUBMITTED
+                          draftTimeLogs.forEach(log => {
+                            batch.update(doc(db, 'timeLogs', log.id), {
+                              status: 'SUBMITTED',
+                              updatedAt: Timestamp.now(),
+                            });
+                          });
+
+                          // Update all draft expenses to SUBMITTED
+                          draftExpenses.forEach(exp => {
+                            batch.update(doc(db, 'expenses', exp.id), {
+                              status: 'SUBMITTED',
+                              updatedAt: Timestamp.now(),
+                            });
+                          });
+
+                          // Calculate totals
+                          const totalHours = draftTimeLogs.reduce(
+                            (sum, log) => sum + (log.hoursRegular || 0) + (log.hoursOT || 0),
+                            0
+                          );
+                          const totalCost = draftTimeLogs.reduce((sum, log) => sum + (log.subCost || 0), 0);
+                          const totalExpenses = draftExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
+
+                          // Create a project submission document
+                          const submissionRef = await addDoc(collection(db, 'projectSubmissions'), {
+                            companyId: activeCompanyId,
+                            projectId: project.projectId,
+                            subcontractorId: subRole.subcontractorId,
+                            createdByUserId: user.uid,
+                            timeLogIds: draftTimeLogs.map(log => log.id),
+                            expenseIds: draftExpenses.map(exp => exp.id),
+                            status: 'SUBMITTED',
+                            submittedAt: Timestamp.now(),
+                            totalHours,
+                            totalCost,
+                            totalExpenses,
+                            createdAt: Timestamp.now(),
+                            updatedAt: Timestamp.now(),
+                          });
+
+                          // Execute all updates
+                          await batch.commit();
+
+                          // Show success message
+                          setSubmittingTimesheet(false);
+                          
+                          // Show confirmation dialog with success
+                          alert(`Timesheet submitted for approval!\n\nSubmission ID: ${submissionRef.id}\nTotal Hours: ${totalHours.toFixed(1)}h\nTotal Cost: £${totalCost.toFixed(2)}`);
+
+                          // Refresh data
+                          await fetchProjectData();
+                          
+                          // Close modal after successful submission
+                          setTimeout(() => {
+                            onClose();
+                          }, 500);
                         } catch (error) {
                           console.error('Error submitting timesheet:', error);
-                          alert('Failed to submit timesheet');
-                        } finally {
+                          alert(`Failed to submit timesheet: ${error instanceof Error ? error.message : 'Unknown error'}`);
                           setSubmittingTimesheet(false);
                         }
                       }}
                       className="w-full px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
                     >
                       <Send className="w-5 h-5" />
-                      Submit Timesheet for Approval
+                      {submittingTimesheet ? 'Submitting...' : 'Submit Timesheet for Approval'}
                     </button>
                   </div>
                 </div>
