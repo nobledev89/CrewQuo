@@ -249,20 +249,41 @@ export default function SubmissionsPage() {
     try {
       const batch = writeBatch(db);
       let itemCount = 0;
+      const currentUser = auth.currentUser;
+
+      if (!currentUser) {
+        setError('User not authenticated');
+        setSubmitting(false);
+        return;
+      }
 
       selectedProjects.forEach(projectId => {
         const projectItems = groupedByProject[projectId] || [];
-        
+        const timeLogIds: string[] = [];
+        const expenseIds: string[] = [];
+        let totalHours = 0;
+        let totalCost = 0;
+
+        // First pass: collect IDs and calculate totals, update item statuses
         projectItems.forEach(item => {
           const [type, id] = item.id.split('_', 1);
           const actualId = item.id.substring(type.length + 1);
           
           if (type === 'timeLog') {
+            const log = item.data as TimeLog;
+            timeLogIds.push(actualId);
+            totalHours += log.hoursRegular + (log.hoursOT || 0);
+            totalCost += log.subCost;
+            
             batch.update(doc(db, 'timeLogs', actualId), {
               status: 'SUBMITTED',
               updatedAt: Timestamp.now(),
             });
           } else if (type === 'expense') {
+            const exp = item.data as Expense;
+            expenseIds.push(actualId);
+            totalCost += exp.amount;
+            
             batch.update(doc(db, 'expenses', actualId), {
               status: 'SUBMITTED',
               updatedAt: Timestamp.now(),
@@ -270,6 +291,25 @@ export default function SubmissionsPage() {
           }
           itemCount++;
         });
+
+        // Create projectSubmissions document
+        const submissionId = `${activeCompanyId}_${projectId}_${subcontractorId}`;
+        batch.set(doc(db, 'projectSubmissions', submissionId), {
+          id: submissionId,
+          companyId: activeCompanyId,
+          projectId: projectId,
+          subcontractorId: subcontractorId,
+          createdByUserId: currentUser.uid,
+          timeLogIds: timeLogIds,
+          expenseIds: expenseIds,
+          status: 'SUBMITTED',
+          submittedAt: Timestamp.now(),
+          totalHours: totalHours,
+          totalCost: totalCost,
+          totalExpenses: expenseIds.length,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+        }, { merge: true });
       });
 
       await batch.commit();
@@ -278,13 +318,10 @@ export default function SubmissionsPage() {
 
       // Refresh the data
       if (activeCompanyId && subcontractorId) {
-        const currentUser = auth.currentUser;
-        if (currentUser) {
-          await Promise.all([
-            fetchTimeLogs(activeCompanyId, subcontractorId, currentUser.uid),
-            fetchExpenses(activeCompanyId, subcontractorId, currentUser.uid),
-          ]);
-        }
+        await Promise.all([
+          fetchTimeLogs(activeCompanyId, subcontractorId, currentUser.uid),
+          fetchExpenses(activeCompanyId, subcontractorId, currentUser.uid),
+        ]);
       }
 
       setTimeout(() => setSuccess(''), 3000);
