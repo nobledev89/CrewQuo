@@ -513,8 +513,8 @@ export default function TimesheetsPage() {
 
                       {/* Expenses */}
                       {timesheet.expenses.map(exp => {
-                        const date = exp.date?.toDate ? exp.date.toDate() : new Date(exp.date);
-                        const dateStr = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                        const dateObj = exp.date?.toDate ? exp.date.toDate() : (typeof exp.date === 'object' ? exp.date as any : new Date(exp.date));
+                        const dateStr = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
                         const notes = getLineNotes(timesheet.submission, exp.id);
                         const isEditingNote = editingNote?.itemId === exp.id && editingNote.timesheetId === timesheet.submission.id;
 
