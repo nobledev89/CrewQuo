@@ -496,7 +496,7 @@ export default function TimesheetsPage() {
                         const dateObj = log.date?.toDate ? log.date.toDate() : (typeof log.date === 'object' ? log.date as any : new Date(log.date));
                         const dateStr = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
                         const notes = getLineNotes(timesheet.submission, log.id);
-                        const isEditingNote = editingNote?.itemId === log.id && editingNote.timesheetId === timesheet.submission.id;
+                        const isEditingNote = editingNote ? (editingNote.itemId === log.id && editingNote.timesheetId === timesheet.submission.id) : false;
 
                         return (
                           <tr key={`log_${log.id}`} className="hover:bg-gray-50">
@@ -537,7 +537,7 @@ export default function TimesheetsPage() {
                         const dateObj = exp.date?.toDate ? exp.date.toDate() : (typeof exp.date === 'object' ? exp.date as any : new Date(exp.date));
                         const dateStr = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
                         const notes = getLineNotes(timesheet.submission, exp.id);
-                        const isEditingNote = editingNote?.itemId === exp.id && editingNote.timesheetId === timesheet.submission.id;
+                        const isEditingNote = editingNote ? (editingNote.itemId === exp.id && editingNote.timesheetId === timesheet.submission.id) : false;
 
                         return (
                           <tr key={`exp_${exp.id}`} className="hover:bg-gray-50">
