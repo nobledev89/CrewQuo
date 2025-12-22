@@ -174,31 +174,70 @@ export const createTimeLog = functions.https.onCall(async (data, context) => {
   }
   const project = projectDoc.data()!;
 
-  // Resolve rates
-  const resolver = new RateResolver(db);
+  // Parse date once for use throughout
   const date = new Date(input.date);
 
-  const subRate = await resolver.resolveRate(
-    claims.companyId,
-    'SUBCONTRACTOR',
-    input.subcontractorId,
-    input.roleId,
-    input.shiftType as ShiftType,
-    date
-  );
+  // CRITICAL FIX: Look up assigned rate cards from SubcontractorRateAssignment
+  // instead of trying to resolve them by targetType and targetId
+  const rateAssignmentSnap = await db
+    .collection('subcontractorRateAssignments')
+    .where('companyId', '==', claims.companyId)
+    .where('subcontractorId', '==', input.subcontractorId)
+    .where('clientId', '==', project.clientId)
+    .limit(1)
+    .get();
 
-  const clientRate = await resolver.resolveRate(
-    claims.companyId,
-    'CLIENT',
-    project.clientId,
-    input.roleId,
-    input.shiftType as ShiftType,
-    date
-  );
-
-  if (!subRate || !clientRate) {
-    throw new functions.https.HttpsError('failed-precondition', 'Rate cards not found for this combination');
+  if (rateAssignmentSnap.empty) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'No rate card assignment found for this subcontractor and client. Please assign rate cards first.'
+    );
   }
+
+  const rateAssignment = rateAssignmentSnap.docs[0].data();
+  const payRateCardId = rateAssignment.payRateCardId || rateAssignment.rateCardId;
+  const billRateCardId = rateAssignment.billRateCardId;
+
+  if (!payRateCardId) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Pay rate card not assigned for this subcontractor and client'
+    );
+  }
+
+  // Load the actual rate card documents
+  const payCardDoc = await db.collection('rateCards').doc(payRateCardId).get();
+  const billCardDoc = billRateCardId
+    ? await db.collection('rateCards').doc(billRateCardId).get()
+    : payCardDoc; // Fallback to pay card if no bill card
+
+  if (!payCardDoc.exists) {
+    throw new functions.https.HttpsError('not-found', 'Pay rate card not found');
+  }
+
+  if (billRateCardId && !billCardDoc.exists) {
+    throw new functions.https.HttpsError('not-found', 'Bill rate card not found');
+  }
+
+  // Create resolved rates from the actual rate cards
+  const payCardData = payCardDoc.data()!;
+  const billCardData = billCardDoc.data()!;
+
+  const subRate: any = {
+    rateLabel: payCardData.rateLabel || 'Custom',
+    baseRate: payCardData.hourlyRate || payCardData.shiftRate || payCardData.dailyRate || 0,
+    otRate: payCardData.otHourlyRate || (payCardData.hourlyRate || 0) * 1.5 || 0,
+    currency: payCardData.currency || 'GBP',
+    rateCardId: payRateCardId,
+  };
+
+  const clientRate: any = {
+    rateLabel: billCardData.rateLabel || 'Custom',
+    baseRate: billCardData.hourlyRate || billCardData.shiftRate || billCardData.dailyRate || 0,
+    otRate: billCardData.otHourlyRate || (billCardData.hourlyRate || 0) * 1.5 || 0,
+    currency: billCardData.currency || 'GBP',
+    rateCardId: billRateCardId || payRateCardId,
+  };
 
   // Calculate pricing
   const pricing = PriceCalculator.calculate(
