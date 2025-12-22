@@ -11,6 +11,8 @@ import {
   getDoc,
   doc,
   orderBy,
+  writeBatch,
+  Timestamp,
 } from 'firebase/firestore';
 import DashboardLayout from '@/components/DashboardLayout';
 import { 
@@ -20,9 +22,13 @@ import {
   HourglassIcon, 
   TrendingUp, 
   Calendar,
-  BarChart3
+  BarChart3,
+  Trash2,
+  AlertCircle,
+  Check,
 } from 'lucide-react';
 import Link from 'next/link';
+import type { ProjectSubmission } from '@/lib/types';
 
 interface TimeLog {
   id: string;
@@ -42,6 +48,16 @@ interface Expense {
   date: any;
 }
 
+interface Submission {
+  id: string;
+  projectId: string;
+  projectName: string;
+  status: string;
+  submittedAt: any;
+  totalHours: number;
+  totalCost: number;
+}
+
 export default function SummaryPage() {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<string>('');
@@ -49,6 +65,10 @@ export default function SummaryPage() {
   const [subcontractorId, setSubcontractorId] = useState<string>('');
   const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string>('');
+  const [success, setSuccess] = useState<string>('');
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
@@ -72,6 +92,7 @@ export default function SummaryPage() {
         await Promise.all([
           fetchTimeLogs(activeId, subRole.subcontractorId, currentUser.uid),
           fetchExpenses(activeId, subRole.subcontractorId, currentUser.uid),
+          fetchSubmissions(activeId, subRole.subcontractorId),
         ]);
       } catch (err) {
         console.error('Error loading summary', err);
@@ -123,6 +144,86 @@ export default function SummaryPage() {
       date: d.data().date,
     }));
     setExpenses(exps);
+  };
+
+  const fetchSubmissions = async (companyId: string, subId: string) => {
+    const snap = await getDocs(
+      query(
+        collection(db, 'projectSubmissions'),
+        where('companyId', '==', companyId),
+        where('subcontractorId', '==', subId),
+        orderBy('submittedAt', 'desc')
+      )
+    );
+    const subs: Submission[] = [];
+    for (const submissionDoc of snap.docs) {
+      const data = submissionDoc.data();
+      const projectDoc = await getDoc(doc(db, 'projects', data.projectId));
+      subs.push({
+        id: submissionDoc.id,
+        projectId: data.projectId,
+        projectName: projectDoc.exists() ? projectDoc.data().name : 'Unknown Project',
+        status: data.status || 'DRAFT',
+        submittedAt: data.submittedAt,
+        totalHours: data.totalHours || 0,
+        totalCost: data.totalCost || 0,
+      });
+    }
+    setSubmissions(subs);
+  };
+
+  const handleDeleteTimesheet = async (submissionId: string) => {
+    setDeleting(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const batch = writeBatch(db);
+      const submissionDoc = await getDoc(doc(db, 'projectSubmissions', submissionId));
+
+      if (!submissionDoc.exists()) {
+        setError('Submission not found');
+        setDeleting(false);
+        return;
+      }
+
+      const submission = submissionDoc.data();
+      const timeLogIds = submission.timeLogIds || [];
+      const expenseIds = submission.expenseIds || [];
+
+      // Revert all items back to DRAFT status
+      timeLogIds.forEach((logId: string) => {
+        batch.update(doc(db, 'timeLogs', logId), {
+          status: 'DRAFT',
+          updatedAt: Timestamp.now(),
+        });
+      });
+
+      expenseIds.forEach((expId: string) => {
+        batch.update(doc(db, 'expenses', expId), {
+          status: 'DRAFT',
+          updatedAt: Timestamp.now(),
+        });
+      });
+
+      // Delete the submission document
+      batch.delete(doc(db, 'projectSubmissions', submissionId));
+
+      await batch.commit();
+      setSuccess('Timesheet deleted successfully');
+
+      // Refresh the data
+      if (activeCompanyId && subcontractorId) {
+        await fetchSubmissions(activeCompanyId, subcontractorId);
+      }
+
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      console.error('Error deleting timesheet:', err);
+      setError('Failed to delete timesheet. Please try again.');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   // Calculate stats for different periods
@@ -475,6 +576,66 @@ export default function SummaryPage() {
             </div>
           </div>
         </div>
+
+        {/* Alerts */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <p className="text-red-800">{error}</p>
+          </div>
+        )}
+
+        {success && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
+            <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+            <p className="text-green-800">{success}</p>
+          </div>
+        )}
+
+        {/* Timesheet List with Delete Options */}
+        {submissions.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Submitted & Approved Timesheets</h3>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {submissions.map((submission) => (
+                <div
+                  key={submission.id}
+                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition"
+                >
+                  <div className="flex-1">
+                    <h4 className="font-medium text-gray-900">{submission.projectName}</h4>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {submission.totalHours.toFixed(1)}h • £{submission.totalCost.toFixed(2)} •{' '}
+                      <span
+                        className={`font-medium ${
+                          submission.status === 'SUBMITTED'
+                            ? 'text-yellow-600'
+                            : submission.status === 'APPROVED'
+                            ? 'text-green-600'
+                            : 'text-gray-600'
+                        }`}
+                      >
+                        {submission.status}
+                      </span>
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Are you sure you want to delete this timesheet? This will revert all items back to draft status.')) {
+                        handleDeleteTimesheet(submission.id);
+                      }
+                    }}
+                    disabled={deleting}
+                    className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg transition flex items-center gap-2 text-sm font-medium disabled:opacity-50 ml-4"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );

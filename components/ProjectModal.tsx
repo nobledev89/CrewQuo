@@ -135,13 +135,9 @@ export default function ProjectModal({
     ? rateCards.get(rateAssignment.billRateCardId)
     : undefined;
 
-  // Debug logging
-  console.log('🔍 Debug Info:');
-  console.log('- Rate Assignment:', rateAssignment);
-  console.log('- Pay Rate Card ID:', rateAssignment?.payRateCardId);
-  console.log('- Pay Card Object:', payCard);
-  console.log('- Pay Card Rates Array:', payCard?.rates);
-  console.log('- Number of rate options:', payCard?.rates?.length || 0);
+  // Debug logging removed for security - no sensitive data should be logged to console
+REPLACE
+
 
   const rateOptions =
     payCard?.rates?.map((r: any, idx: number) => ({

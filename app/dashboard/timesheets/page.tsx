@@ -470,7 +470,11 @@ export default function TimesheetsPage() {
                     </span>
                     {timesheet.submission.submittedAt && (
                       <span className="text-xs text-gray-600">
-                        Submitted: {timesheet.submission.submittedAt.toDate().toLocaleDateString('en-GB')}
+                        Submitted: {
+                          typeof timesheet.submission.submittedAt.toDate === 'function'
+                            ? timesheet.submission.submittedAt.toDate().toLocaleDateString('en-GB')
+                            : (timesheet.submission.submittedAt as any).toDate().toLocaleDateString('en-GB')
+                        }
                       </span>
                     )}
                   </div>

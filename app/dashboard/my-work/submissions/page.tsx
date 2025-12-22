@@ -25,6 +25,7 @@ import {
   Calendar,
   Send,
   ChevronDown,
+  Trash2,
 } from 'lucide-react';
 
 interface TimeLog {
@@ -71,6 +72,7 @@ export default function SubmissionsPage() {
   const [projects, setProjects] = useState<Record<string, Project>>({});
   const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [filter, setFilter] = useState<'all' | 'draft' | 'submitted' | 'approved'>('draft');
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
@@ -333,6 +335,65 @@ export default function SubmissionsPage() {
     }
   };
 
+  const handleCancelSubmission = async (projectId: string) => {
+    setCancelling(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const batch = writeBatch(db);
+      const currentUser = auth.currentUser;
+
+      if (!currentUser) {
+        setError('User not authenticated');
+        setCancelling(false);
+        return;
+      }
+
+      const projectItems = groupedByProject[projectId] || [];
+      
+      // Revert all items back to DRAFT status
+      projectItems.forEach(item => {
+        const [type, id] = item.id.split('_', 1);
+        const actualId = item.id.substring(type.length + 1);
+        
+        if (type === 'timeLog') {
+          batch.update(doc(db, 'timeLogs', actualId), {
+            status: 'DRAFT',
+            updatedAt: Timestamp.now(),
+          });
+        } else if (type === 'expense') {
+          batch.update(doc(db, 'expenses', actualId), {
+            status: 'DRAFT',
+            updatedAt: Timestamp.now(),
+          });
+        }
+      });
+
+      // Delete the submission document
+      const submissionId = `${activeCompanyId}_${projectId}_${subcontractorId}`;
+      batch.delete(doc(db, 'projectSubmissions', submissionId));
+
+      await batch.commit();
+      setSuccess('Submission cancelled successfully');
+
+      // Refresh the data
+      if (activeCompanyId && subcontractorId) {
+        await Promise.all([
+          fetchTimeLogs(activeCompanyId, subcontractorId, currentUser.uid),
+          fetchExpenses(activeCompanyId, subcontractorId, currentUser.uid),
+        ]);
+      }
+
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      console.error('Error cancelling submission:', err);
+      setError('Failed to cancel submission. Please try again.');
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -462,6 +523,8 @@ export default function SubmissionsPage() {
                 }
               }, 0);
 
+              const isSubmittedProject = items.some(i => i.status === 'SUBMITTED');
+
               return (
                 <div
                   key={projectId}
@@ -472,48 +535,65 @@ export default function SubmissionsPage() {
                   }`}
                 >
                   {/* Project Header */}
-                  <button
-                    onClick={() => {
-                      const newExpanded = new Set(expandedProjects);
-                      if (newExpanded.has(projectId)) {
-                        newExpanded.delete(projectId);
-                      } else {
-                        newExpanded.add(projectId);
-                      }
-                      setExpandedProjects(newExpanded);
-                    }}
-                    className="w-full p-4 flex items-center justify-between hover:bg-gray-50 transition"
-                  >
-                    <div className="flex items-center gap-4">
-                      {isDraftProject && (
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            handleSelectProject(projectId);
-                          }}
-                          className="w-5 h-5 rounded border-gray-300"
-                        />
-                      )}
-                      <div className="text-left">
-                        <h3 className="font-semibold text-gray-900">{projectName}</h3>
-                        <p className="text-sm text-gray-600 mt-1">{items.length} item(s)</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right flex-shrink-0">
-                        <div className="flex items-center justify-end gap-2">
-                          <Clock className="w-4 h-4 text-gray-400" />
-                          <span className="font-semibold text-gray-900">{totalHours.toFixed(1)}h</span>
+                  <div className="p-4 flex items-center justify-between hover:bg-gray-50 transition border-b border-gray-100">
+                    <button
+                      onClick={() => {
+                        const newExpanded = new Set(expandedProjects);
+                        if (newExpanded.has(projectId)) {
+                          newExpanded.delete(projectId);
+                        } else {
+                          newExpanded.add(projectId);
+                        }
+                        setExpandedProjects(newExpanded);
+                      }}
+                      className="flex-1 flex items-center justify-between gap-4 text-left"
+                    >
+                      <div className="flex items-center gap-4">
+                        {isDraftProject && (
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              handleSelectProject(projectId);
+                            }}
+                            className="w-5 h-5 rounded border-gray-300"
+                          />
+                        )}
+                        <div>
+                          <h3 className="font-semibold text-gray-900">{projectName}</h3>
+                          <p className="text-sm text-gray-600 mt-1">{items.length} item(s)</p>
                         </div>
-                        <p className="text-sm text-gray-600 mt-1">£{totalCost.toFixed(2)}</p>
                       </div>
-                      <ChevronDown
-                        className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                      />
-                    </div>
-                  </button>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right flex-shrink-0">
+                          <div className="flex items-center justify-end gap-2">
+                            <Clock className="w-4 h-4 text-gray-400" />
+                            <span className="font-semibold text-gray-900">{totalHours.toFixed(1)}h</span>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-1">£{totalCost.toFixed(2)}</p>
+                        </div>
+                        <ChevronDown
+                          className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                        />
+                      </div>
+                    </button>
+                    {isSubmittedProject && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm('Are you sure you want to cancel this submission? This will revert all items back to draft status.')) {
+                            handleCancelSubmission(projectId);
+                          }
+                        }}
+                        disabled={cancelling}
+                        className="ml-4 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg transition flex items-center gap-2 text-sm font-medium disabled:opacity-50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Cancel
+                      </button>
+                    )}
+                  </div>
 
                   {/* Items */}
                   {isExpanded && (

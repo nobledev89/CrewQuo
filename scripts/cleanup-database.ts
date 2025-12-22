@@ -33,6 +33,7 @@ const COLLECTIONS = [
   'rateCardTemplates',
   'timeLogs',
   'expenses',
+  'projectSubmissions',
   'invoices',
   'notifications',
   'auditLogs',

@@ -362,10 +362,17 @@ service cloud.firestore {
         );
       
       allow delete: if authed() 
-        && sameActiveCompany(resource.data) 
-        && isOwnCompany()
-        && isAdmin()
-        && resource.data.status == 'DRAFT';
+        && sameActiveCompany(resource.data)
+        && (
+          // In own company: admins can delete DRAFT submissions
+          (isOwnCompany() && isAdmin() && resource.data.status == 'DRAFT')
+          ||
+          // Subcontractors can delete their own submissions (allows cancel/revert)
+          (!isOwnCompany()
+            && resource.data.createdByUserId == request.auth.uid
+            && resource.data.subcontractorId == subcontractorIdForActiveCompany()
+            && resource.data.status in ['DRAFT', 'SUBMITTED'])
+        );
     }
     
     // Invoices

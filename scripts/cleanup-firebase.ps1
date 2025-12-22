@@ -20,6 +20,7 @@ $collections = @(
     "rateCardTemplates",
     "timeLogs",
     "expenses",
+    "projectSubmissions",
     "invoices",
     "notifications",
     "auditLogs"
