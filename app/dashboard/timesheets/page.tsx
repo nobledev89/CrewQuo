@@ -132,13 +132,13 @@ export default function TimesheetsPage() {
       // Fetch subcontractor details
       const subconDoc = await getDoc(doc(db, 'subcontractors', submission.subcontractorId));
       const subcontractor = subconDoc.exists()
-        ? (subconDoc.data() as Subcontractor)
+        ? { id: subconDoc.id, ...subconDoc.data() } as Subcontractor
         : null;
 
       // Fetch project details
       const projDoc = await getDoc(doc(db, 'projects', submission.projectId));
       const project = projDoc.exists()
-        ? (projDoc.data() as Project)
+        ? { id: projDoc.id, ...projDoc.data() } as Project
         : null;
 
       // Fetch time logs
@@ -148,7 +148,7 @@ export default function TimesheetsPage() {
         for (const logId of timeLogIds) {
           const logDoc = await getDoc(doc(db, 'timeLogs', logId));
           if (logDoc.exists()) {
-            timeLogs.push(logDoc.data() as TimeLog);
+            timeLogs.push({ id: logDoc.id, ...logDoc.data() } as TimeLog);
           }
         }
       }
@@ -160,7 +160,7 @@ export default function TimesheetsPage() {
         for (const expId of expenseIds) {
           const expDoc = await getDoc(doc(db, 'expenses', expId));
           if (expDoc.exists()) {
-            expenses.push(expDoc.data() as Expense);
+            expenses.push({ id: expDoc.id, ...expDoc.data() } as Expense);
           }
         }
       }
