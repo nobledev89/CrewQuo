@@ -164,7 +164,7 @@ export default function ProjectModal({
     : 0;
   const billRate = matchingBillEntry
     ? (matchingBillEntry.clientRate ?? matchingBillEntry.hourlyRate ?? matchingBillEntry.baseRate ?? payRate)
-    : payRate;
+    : (selectedRateEntry?.clientRate ?? payRate);
 
   const calculatedLog = {
     cost: payRate * (Number(logForm.hoursRegular) + Number(logForm.hoursOT)),
