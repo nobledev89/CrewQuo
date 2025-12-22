@@ -221,6 +221,8 @@ export const createTimeLog = functions.https.onCall(async (data, context) => {
     hoursOT: input.hoursOT,
     notes: input.notes || '',
     ...pricing,
+    payRateCardId: subRate.rateCardId,
+    billRateCardId: clientRate.rateCardId,
     status: 'DRAFT',
     createdByUserId: context.auth!.uid,
     createdAt: FieldValue.serverTimestamp(),

@@ -62,10 +62,14 @@ export default function ReportsPage() {
             const logsQuery = query(collection(db, 'timeLogs'), where('companyId', '==', userCompanyId));
             const logsSnap = await getDocs(logsQuery);
             
+            const expensesQuery = query(collection(db, 'expenses'), where('companyId', '==', userCompanyId));
+            const expensesSnap = await getDocs(expensesQuery);
+            
             // Calculate totals
             let totalRegularHours = 0;
             let totalOTHours = 0;
-            let totalCost = 0;
+            let totalSubCost = 0;
+            let totalExpenses = 0;
             let totalBilling = 0;
             let totalMargin = 0;
             let currency = 'GBP';
@@ -77,7 +81,7 @@ export default function ReportsPage() {
               const log = logDoc.data();
               totalRegularHours += log.hoursRegular || 0;
               totalOTHours += log.hoursOT || 0;
-              totalCost += log.subCost || 0;
+              totalSubCost += log.subCost || 0;
               totalBilling += log.clientBill || 0;
               totalMargin += log.marginValue || 0;
               currency = log.currency || 'GBP';
@@ -93,6 +97,26 @@ export default function ReportsPage() {
               stats.billing += log.clientBill || 0;
               stats.margin += log.marginValue || 0;
             });
+            
+            // Add expenses to totals
+            expensesSnap.forEach(expDoc => {
+              const exp = expDoc.data();
+              totalExpenses += exp.amount || 0;
+              currency = exp.currency || 'GBP';
+              
+              // Aggregate by project
+              const projectId = exp.projectId;
+              if (!projectStatsMap.has(projectId)) {
+                projectStatsMap.set(projectId, { hours: 0, cost: 0, billing: 0, margin: 0 });
+              }
+              const stats = projectStatsMap.get(projectId)!;
+              stats.cost += exp.amount || 0;
+              // Expenses reduce margin
+              stats.margin -= exp.amount || 0;
+            });
+            
+            // Calculate total cost including expenses
+            const totalCost = totalSubCost + totalExpenses;
             
             // Build project stats with names
             const projectsMap = new Map<string, string>();

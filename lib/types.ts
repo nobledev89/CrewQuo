@@ -404,12 +404,13 @@ export interface TimeLog {
   marginValue?: number;    // clientBill - subCost
   marginPct?: number;      // (marginValue / clientBill) * 100
   
-  // Rate card references
-  payRateCardId: string;
-  billRateCardId?: string;
+  // Rate card references - tracks which cards were used for calculation
+  payRateCardId: string;   // Card used to calculate subCost (what we pay subcontractor)
+  billRateCardId?: string; // Card used to calculate clientBill (what we charge client)
   
   // Metadata
   currency: string;        // e.g., 'GBP'
+  status?: string;         // e.g., 'DRAFT', 'SUBMITTED', 'APPROVED'
   
   createdAt: Timestamp;
   updatedAt: Timestamp;
