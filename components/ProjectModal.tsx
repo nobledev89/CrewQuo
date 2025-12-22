@@ -572,9 +572,15 @@ export default function ProjectModal({
               {/* Expenses Tab */}
               {activeTab === 'expenses' && (
                 <div className="space-y-6 flex flex-col h-full">
-                  {/* Add Expense Form */}
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  {/* Add Expense Form - Disabled if items already submitted */}
+                  <div className={`bg-gray-50 border border-gray-200 rounded-lg p-4 ${summaryStats.submittedCount > 0 ? 'opacity-50 pointer-events-none' : ''}`}>
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Add Expense</h3>
+                    {summaryStats.submittedCount > 0 && (
+                      <div className="mb-4 bg-orange-50 border border-orange-200 rounded-lg p-3 flex items-center gap-2">
+                        <AlertCircle className="w-5 h-5 text-orange-600 flex-shrink-0" />
+                        <p className="text-sm text-orange-700">You have submitted items for approval. New items cannot be added until they are approved or rejected.</p>
+                      </div>
+                    )}
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
