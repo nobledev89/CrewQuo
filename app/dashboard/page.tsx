@@ -43,7 +43,7 @@ export default function DashboardPage() {
   const [companyData, setCompanyData] = useState<CompanyData | null>(null);
   const [stats, setStats] = useState<Stats>({ projects: 0, clients: 0, subcontractors: 0, rateCards: 0 });
   const [loading, setLoading] = useState(true);
-  const { cachedData } = useClientData();
+  const { cachedData, prefetchClientData } = useClientData();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -63,6 +63,9 @@ export default function DashboardPage() {
           if (companyDoc.exists()) {
             setCompanyData(companyDoc.data() as CompanyData);
           }
+
+          // Fetch initial dashboard data
+          await prefetchClientData(data.companyId, null);
         }
         
         setLoading(false);
@@ -70,7 +73,7 @@ export default function DashboardPage() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [prefetchClientData]);
 
   // Use cached stats if available
   useEffect(() => {
