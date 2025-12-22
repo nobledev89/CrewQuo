@@ -329,7 +329,7 @@ export default function ProjectModal({
   // Calculate summary stats
   const summaryStats = {
     totalHours: timeLogs.reduce((sum, log) => sum + (log.hoursRegular || 0) + (log.hoursOT || 0), 0),
-    totalEarnings: timeLogs.reduce((sum, log) => sum + (log.subCost || 0), 0),
+    totalEarnings: timeLogs.reduce((sum, log) => sum + (log.subCost || 0), 0) + expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0),
     draftCount: timeLogs.filter((l) => l.status === 'DRAFT').length + expenses.filter((e) => e.status === 'DRAFT').length,
     submittedCount: timeLogs.filter((l) => l.status === 'SUBMITTED').length + expenses.filter((e) => e.status === 'SUBMITTED').length,
     approvedCount: timeLogs.filter((l) => l.status === 'APPROVED').length + expenses.filter((e) => e.status === 'APPROVED').length,
