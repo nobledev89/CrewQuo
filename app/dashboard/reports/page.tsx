@@ -1,12 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { BarChart3, ArrowLeft, TrendingUp, DollarSign, Percent } from 'lucide-react';
-import Link from 'next/link';
+import { BarChart3, TrendingUp, DollarSign, Percent, Download, Calendar, Users, Briefcase, Clock, TrendingDown } from 'lucide-react';
+import DashboardLayout from '@/components/DashboardLayout';
 
 interface ReportData {
   totalProjects: number;
@@ -32,10 +31,19 @@ interface ProjectStats {
   margin: number;
 }
 
+interface SubcontractorStats {
+  subcontractorId: string;
+  subcontractorName: string;
+  hours: number;
+  cost: number;
+  projectsCount: number;
+  marginPercentage: number;
+}
+
 export default function ReportsPage() {
-  const router = useRouter();
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [projectStats, setProjectStats] = useState<ProjectStats[]>([]);
+  const [subcontractorStats, setSubcontractorStats] = useState<SubcontractorStats[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -46,7 +54,7 @@ export default function ReportsPage() {
           const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
           if (userDoc.exists()) {
             const userData = userDoc.data();
-            const userCompanyId = userData.companyId;
+            const userCompanyId = userData.activeCompanyId || userData.companyId;
             
             // Fetch all data
             const projectsQuery = query(collection(db, 'projects'), where('companyId', '==', userCompanyId));
@@ -59,10 +67,18 @@ export default function ReportsPage() {
             const clientsQuery = query(collection(db, 'clients'), where('companyId', '==', userCompanyId));
             const clientsSnap = await getDocs(clientsQuery);
             
-            const logsQuery = query(collection(db, 'timeLogs'), where('companyId', '==', userCompanyId));
+            const logsQuery = query(
+              collection(db, 'timeLogs'),
+              where('companyId', '==', userCompanyId),
+              where('status', '==', 'APPROVED')
+            );
             const logsSnap = await getDocs(logsQuery);
             
-            const expensesQuery = query(collection(db, 'expenses'), where('companyId', '==', userCompanyId));
+            const expensesQuery = query(
+              collection(db, 'expenses'),
+              where('companyId', '==', userCompanyId),
+              where('status', '==', 'APPROVED')
+            );
             const expensesSnap = await getDocs(expensesQuery);
             
             // Calculate totals
@@ -148,6 +164,44 @@ export default function ReportsPage() {
               currency,
             });
             
+            // Build subcontractor stats
+            const subsMap = new Map<string, string>();
+            subsSnap.forEach(doc => {
+              subsMap.set(doc.id, doc.data().name);
+            });
+            
+            const subcontractorStatsMap = new Map<string, { hours: number; cost: number; billing: number; projects: Set<string> }>();
+            
+            logsSnap.forEach(logDoc => {
+              const log = logDoc.data();
+              const subId = log.subcontractorId;
+              
+              if (!subcontractorStatsMap.has(subId)) {
+                subcontractorStatsMap.set(subId, { hours: 0, cost: 0, billing: 0, projects: new Set() });
+              }
+              
+              const stats = subcontractorStatsMap.get(subId)!;
+              stats.hours += (log.hoursRegular || 0) + (log.hoursOT || 0);
+              stats.cost += log.subCost || 0;
+              stats.billing += log.clientBill || 0;
+              stats.projects.add(log.projectId);
+            });
+            
+            const subcontractorStatsArray = Array.from(subcontractorStatsMap.entries())
+              .map(([subId, stats]) => {
+                const margin = stats.billing - stats.cost;
+                return {
+                  subcontractorId: subId,
+                  subcontractorName: subsMap.get(subId) || 'Unknown',
+                  hours: stats.hours,
+                  cost: stats.cost,
+                  projectsCount: stats.projects.size,
+                  marginPercentage: stats.billing > 0 ? (margin / stats.billing) * 100 : 0,
+                };
+              })
+              .sort((a, b) => b.hours - a.hours);
+            
+            setSubcontractorStats(subcontractorStatsArray);
             setProjectStats(projectStatsArray);
           }
         } catch (error) {
@@ -155,13 +209,11 @@ export default function ReportsPage() {
         } finally {
           setLoading(false);
         }
-      } else {
-        router.push('/login');
       }
     });
 
     return () => unsubscribe();
-  }, [router]);
+  }, []);
 
   const formatCurrency = (amount: number, currency: string) => {
     return new Intl.NumberFormat('en-GB', {
@@ -186,34 +238,8 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-4">
-              <Link 
-                href="/dashboard"
-                className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition"
-              >
-                <ArrowLeft className="w-5 h-5" />
-                <span>Back to Dashboard</span>
-              </Link>
-            </div>
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-green-600 to-emerald-600 rounded-xl flex items-center justify-center">
-                <BarChart3 className="w-6 h-6 text-white" />
-              </div>
-              <h1 className="text-xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
-                Reports
-              </h1>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <DashboardLayout>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h2 className="text-2xl font-bold text-gray-900">Business Overview</h2>
           <p className="text-gray-600 mt-1">Comprehensive analytics and insights</p>
@@ -286,11 +312,57 @@ export default function ReportsPage() {
           </div>
         </div>
 
+        {/* Subcontractor Breakdown */}
+        {subcontractorStats.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+            <div className="flex items-center space-x-3 mb-6">
+              <Users className="w-6 h-6 text-purple-600" />
+              <h3 className="text-xl font-bold text-gray-900">Subcontractor Performance</h3>
+            </div>
+            
+            <div className="space-y-4">
+              {subcontractorStats.map((sub, index) => (
+                <div key={sub.subcontractorId} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                        <span className="text-sm font-bold text-purple-600">#{index + 1}</span>
+                      </div>
+                      <h4 className="font-bold text-gray-900">{sub.subcontractorName}</h4>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="text-sm text-gray-600">{sub.projectsCount} {sub.projectsCount === 1 ? 'project' : 'projects'}</span>
+                      <span className="text-sm font-semibold text-gray-900">{sub.hours}h</span>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-red-50 rounded-lg p-3 border border-red-100">
+                      <p className="text-xs text-red-600 mb-1">Cost to Company</p>
+                      <p className="text-lg font-bold text-red-900">{formatCurrency(sub.cost, reportData.currency)}</p>
+                    </div>
+                    <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-100">
+                      <p className="text-xs text-indigo-600 mb-1">Projects Active</p>
+                      <p className="text-lg font-bold text-indigo-900">{sub.projectsCount}</p>
+                    </div>
+                    <div className={`rounded-lg p-3 border ${sub.marginPercentage >= 0 ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}>
+                      <p className={`text-xs mb-1 ${sub.marginPercentage >= 0 ? 'text-green-600' : 'text-red-600'}`}>Margin %</p>
+                      <p className={`text-lg font-bold ${sub.marginPercentage >= 0 ? 'text-green-900' : 'text-red-900'}`}>
+                        {sub.marginPercentage.toFixed(1)}%
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Project Breakdown */}
         {projectStats.length > 0 && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center space-x-3 mb-6">
-              <TrendingUp className="w-6 h-6 text-blue-600" />
+              <Briefcase className="w-6 h-6 text-blue-600" />
               <h3 className="text-xl font-bold text-gray-900">Project Breakdown</h3>
             </div>
             
@@ -337,7 +409,7 @@ export default function ReportsPage() {
             <p className="text-gray-600">Reports will be generated once time logs are created.</p>
           </div>
         )}
-      </main>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }
