@@ -136,8 +136,6 @@ export default function ProjectModal({
     : undefined;
 
   // Debug logging removed for security - no sensitive data should be logged to console
-REPLACE
-
 
   const rateOptions =
     payCard?.rates?.map((r: any, idx: number) => ({
