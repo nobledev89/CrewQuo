@@ -107,8 +107,27 @@ export default function TimesheetsPage() {
     const timesheetsList: TimesheetData[] = [];
 
     for (const submissionDoc of submissionsSnap.docs) {
-      const submission = submissionDoc.data() as ProjectSubmission;
-      submission.id = submissionDoc.id;
+      const submissionData = submissionDoc.data();
+      const submission: ProjectSubmission = {
+        id: submissionDoc.id,
+        companyId: submissionData.companyId,
+        projectId: submissionData.projectId,
+        subcontractorId: submissionData.subcontractorId,
+        createdByUserId: submissionData.createdByUserId,
+        timeLogIds: submissionData.timeLogIds || [],
+        expenseIds: submissionData.expenseIds || [],
+        status: submissionData.status || 'DRAFT',
+        submittedAt: submissionData.submittedAt,
+        approvedAt: submissionData.approvedAt,
+        approvedBy: submissionData.approvedBy,
+        rejectionReason: submissionData.rejectionReason,
+        lineItemRejectionNotes: submissionData.lineItemRejectionNotes,
+        totalHours: submissionData.totalHours || 0,
+        totalCost: submissionData.totalCost || 0,
+        totalExpenses: submissionData.totalExpenses || 0,
+        createdAt: submissionData.createdAt,
+        updatedAt: submissionData.updatedAt,
+      } as ProjectSubmission;
 
       // Fetch subcontractor details
       const subconDoc = await getDoc(doc(db, 'subcontractors', submission.subcontractorId));
@@ -124,8 +143,9 @@ export default function TimesheetsPage() {
 
       // Fetch time logs
       const timeLogs: TimeLog[] = [];
-      if (submission.timeLogIds && submission.timeLogIds.length > 0) {
-        for (const logId of submission.timeLogIds) {
+      const timeLogIds = submission.timeLogIds || [];
+      if (timeLogIds && timeLogIds.length > 0) {
+        for (const logId of timeLogIds) {
           const logDoc = await getDoc(doc(db, 'timeLogs', logId));
           if (logDoc.exists()) {
             timeLogs.push(logDoc.data() as TimeLog);
@@ -135,8 +155,9 @@ export default function TimesheetsPage() {
 
       // Fetch expenses
       const expenses: Expense[] = [];
-      if (submission.expenseIds && submission.expenseIds.length > 0) {
-        for (const expId of submission.expenseIds) {
+      const expenseIds = submission.expenseIds || [];
+      if (expenseIds && expenseIds.length > 0) {
+        for (const expId of expenseIds) {
           const expDoc = await getDoc(doc(db, 'expenses', expId));
           if (expDoc.exists()) {
             expenses.push(expDoc.data() as Expense);
