@@ -481,6 +481,7 @@ export default function ReportsPage() {
                           if (exp.projectId !== project.projectId) return null;
                           const dateObj = exp.date?.toDate ? exp.date.toDate() : new Date(exp.date);
                           const dateStr = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                          const margin = 0; // Expenses have zero margin (cost and billing are equal)
                           
                           return (
                             <tr key={expDoc.id} className="hover:bg-gray-50 bg-gray-50">
@@ -489,8 +490,8 @@ export default function ReportsPage() {
                               <td className="px-6 py-3 text-sm text-gray-900">{exp.category}</td>
                               <td className="px-6 py-3 text-right text-sm text-gray-900">£{(exp.amount || 0).toFixed(2)}</td>
                               <td className="px-6 py-3 text-right text-sm text-gray-900">£{(exp.amount || 0).toFixed(2)}</td>
-                              <td className="px-6 py-3 text-right text-sm font-semibold text-red-700">
-                                -£{(exp.amount || 0).toFixed(2)}
+                              <td className="px-6 py-3 text-right text-sm font-semibold text-gray-700">
+                                £{margin.toFixed(2)}
                               </td>
                               <td className="px-6 py-3 text-right text-sm font-semibold text-gray-700">
                                 0.0%
@@ -628,6 +629,7 @@ export default function ReportsPage() {
                           if (exp.projectId !== selectedProject.projectId) return null;
                           const dateObj = exp.date?.toDate ? exp.date.toDate() : new Date(exp.date);
                           const dateStr = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                          const margin = 0; // Expenses have zero margin (cost and billing are equal)
                           
                           return (
                             <tr key={expDoc.id} className="hover:bg-gray-50 bg-gray-50">
@@ -636,8 +638,8 @@ export default function ReportsPage() {
                               <td className="px-6 py-3 text-sm text-gray-900">{exp.category}</td>
                               <td className="px-6 py-3 text-right text-sm text-gray-900">£{(exp.amount || 0).toFixed(2)}</td>
                               <td className="px-6 py-3 text-right text-sm text-gray-900">£{(exp.amount || 0).toFixed(2)}</td>
-                              <td className="px-6 py-3 text-right text-sm font-semibold text-red-700">
-                                -£{(exp.amount || 0).toFixed(2)}
+                              <td className="px-6 py-3 text-right text-sm font-semibold text-gray-700">
+                                £{margin.toFixed(2)}
                               </td>
                               <td className="px-6 py-3 text-right text-sm font-semibold text-gray-700">
                                 0.0%
