@@ -492,8 +492,8 @@ export default function ReportsPage() {
                               <td className="px-6 py-3 text-right text-sm font-semibold text-red-700">
                                 -£{(exp.amount || 0).toFixed(2)}
                               </td>
-                              <td className="px-6 py-3 text-right text-sm font-semibold text-red-700">
-                                -100.0%
+                              <td className="px-6 py-3 text-right text-sm font-semibold text-gray-700">
+                                0.0%
                               </td>
                             </tr>
                           );
@@ -639,8 +639,8 @@ export default function ReportsPage() {
                               <td className="px-6 py-3 text-right text-sm font-semibold text-red-700">
                                 -£{(exp.amount || 0).toFixed(2)}
                               </td>
-                              <td className="px-6 py-3 text-right text-sm font-semibold text-red-700">
-                                -100.0%
+                              <td className="px-6 py-3 text-right text-sm font-semibold text-gray-700">
+                                0.0%
                               </td>
                             </tr>
                           );
