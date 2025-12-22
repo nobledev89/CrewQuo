@@ -223,18 +223,45 @@ export const createTimeLog = functions.https.onCall(async (data, context) => {
   const payCardData = payCardDoc.data()!;
   const billCardData = billCardDoc.data()!;
 
+  // Helper function to extract rate from a rate card that might have different field names
+  const extractBaseRate = (card: any): number => {
+    // Try multiple possible field names for compatibility
+    return (
+      card.hourlyRate ||
+      card.baseRate ||
+      card.shiftRate ||
+      card.dailyRate ||
+      card.rate ||
+      0
+    );
+  };
+
+  const extractOTRate = (card: any, baseRate: number): number => {
+    return card.otHourlyRate || card.otRate || baseRate * 1.5 || 0;
+  };
+
+  const payBaseRate = extractBaseRate(payCardData);
+  const payOTRate = extractOTRate(payCardData, payBaseRate);
+  
+  const billBaseRate = extractBaseRate(billCardData);
+  const billOTRate = extractOTRate(billCardData, billBaseRate);
+
+  // Log for debugging
+  console.log(`[createTimeLog] Pay Rate - Base: ${payBaseRate}, OT: ${payOTRate}`);
+  console.log(`[createTimeLog] Bill Rate - Base: ${billBaseRate}, OT: ${billOTRate}`);
+
   const subRate: any = {
     rateLabel: payCardData.rateLabel || 'Custom',
-    baseRate: payCardData.hourlyRate || payCardData.shiftRate || payCardData.dailyRate || 0,
-    otRate: payCardData.otHourlyRate || (payCardData.hourlyRate || 0) * 1.5 || 0,
+    baseRate: payBaseRate,
+    otRate: payOTRate,
     currency: payCardData.currency || 'GBP',
     rateCardId: payRateCardId,
   };
 
   const clientRate: any = {
     rateLabel: billCardData.rateLabel || 'Custom',
-    baseRate: billCardData.hourlyRate || billCardData.shiftRate || billCardData.dailyRate || 0,
-    otRate: billCardData.otHourlyRate || (billCardData.hourlyRate || 0) * 1.5 || 0,
+    baseRate: billBaseRate,
+    otRate: billOTRate,
     currency: billCardData.currency || 'GBP',
     rateCardId: billRateCardId || payRateCardId,
   };
