@@ -289,8 +289,8 @@ export default function ProjectModal({
       return;
     }
 
-    const amount = Number(expenseForm.amount);
-    if (amount > selectedExpense.rate) {
+    const calculatedAmount = expenseForm.quantity * selectedExpense.rate;
+    if (calculatedAmount > selectedExpense.rate) {
       alert('Amount cannot exceed rate cap');
       return;
     }
@@ -312,7 +312,11 @@ export default function ProjectModal({
         createdByUserId: user.uid,
         date: new Date(expenseForm.date),
         category: selectedExpense.label,
-        amount,
+        amount: calculatedAmount,
+        // Quantity support - NEW
+        quantity: expenseForm.quantity,
+        unitRate: selectedExpense.rate,
+        unitType: 'per_unit', // Default unit type
         currency: 'GBP',
         payRateCardId: rateAssignment?.payRateCardId || null,
         billRateCardId: rateAssignment?.billRateCardId || null,
@@ -645,7 +649,7 @@ export default function ProjectModal({
                         <p className="text-sm text-orange-700">You have submitted items for approval. New items cannot be added until they are approved or rejected.</p>
                       </div>
                     )}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
                         <input
@@ -666,6 +670,7 @@ export default function ProjectModal({
                             setExpenseForm((p) => ({
                               ...p,
                               expenseKey: key,
+                              quantity: 1,
                               amount: selected ? selected.rate : 0,
                             }));
                           }}
@@ -681,14 +686,29 @@ export default function ProjectModal({
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Qty</label>
                         <input
                           type="number"
-                          step="0.01"
-                          value={expenseForm.amount}
-                          onChange={(e) => setExpenseForm((p) => ({ ...p, amount: Number(e.target.value) }))}
+                          min="1"
+                          step="0.5"
+                          value={expenseForm.quantity}
+                          onChange={(e) => {
+                            const qty = Math.max(0.5, Number(e.target.value));
+                            setExpenseForm((p) => ({
+                              ...p,
+                              quantity: qty,
+                              amount: selectedExpense ? Math.min(qty * selectedExpense.rate, selectedExpense.rate) : 0,
+                            }));
+                          }}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
                         />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                        <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-green-50 text-sm font-bold text-green-900">
+                          £{(selectedExpense ? (expenseForm.quantity * selectedExpense.rate) : 0).toFixed(2)}
+                        </div>
                       </div>
 
                       <div className="flex items-end">
@@ -731,6 +751,7 @@ export default function ProjectModal({
                             <tr>
                               <th className="px-4 py-2 text-left font-semibold text-gray-900">Date</th>
                               <th className="px-4 py-2 text-left font-semibold text-gray-900">Category</th>
+                              <th className="px-4 py-2 text-center font-semibold text-gray-900">Qty</th>
                               <th className="px-4 py-2 text-right font-semibold text-gray-900">Amount</th>
                               <th className="px-4 py-2 text-center font-semibold text-gray-900">Actions</th>
                             </tr>
@@ -740,6 +761,7 @@ export default function ProjectModal({
                               <tr key={exp.id} className="border-b border-gray-200 hover:bg-gray-50">
                                 <td className="px-4 py-2 text-gray-900">{formatDate(exp.date)}</td>
                                 <td className="px-4 py-2 text-gray-900">{exp.category}</td>
+                                <td className="px-4 py-2 text-center text-gray-900">{(exp.quantity || 1).toFixed(1)}</td>
                                 <td className="px-4 py-2 text-right text-gray-900 font-semibold">£{(exp.amount || 0).toFixed(2)}</td>
                                 <td className="px-4 py-2 text-center flex items-center justify-center gap-2">
                                   <button className="p-1 hover:bg-blue-100 rounded transition" disabled={deletingId !== null}>

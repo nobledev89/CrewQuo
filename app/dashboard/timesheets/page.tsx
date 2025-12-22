@@ -488,7 +488,7 @@ export default function TimesheetsPage() {
                         <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Date</th>
                         <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Type</th>
                         <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Description</th>
-                        <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Qty/Hrs</th>
+                        <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Qty</th>
                         <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700">Amount</th>
                         <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Notes</th>
                       </tr>
@@ -548,7 +548,7 @@ export default function TimesheetsPage() {
                             <td className="px-6 py-4 text-sm text-gray-600">{dateStr}</td>
                             <td className="px-6 py-4 text-sm font-medium text-gray-900">Expense</td>
                             <td className="px-6 py-4 text-sm text-gray-900">{exp.category}</td>
-                            <td className="px-6 py-4 text-center text-sm text-gray-900">-</td>
+                            <td className="px-6 py-4 text-center text-sm text-gray-900">{(exp.quantity || 1).toFixed(1)}</td>
                             <td className="px-6 py-4 text-right text-sm font-semibold text-gray-900">£{exp.amount.toFixed(2)}</td>
                             <td className="px-6 py-4 text-center">
                               <button

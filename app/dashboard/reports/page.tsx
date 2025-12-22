@@ -449,6 +449,7 @@ export default function ReportsPage() {
                           <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Type</th>
                           <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Subcontractor</th>
                           <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Description</th>
+                          <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Qty</th>
                           <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700">Cost</th>
                           <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700">Billing</th>
                           <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700">Margin</th>
@@ -498,6 +499,7 @@ export default function ReportsPage() {
                               <td className="px-6 py-3 text-sm font-medium text-gray-900">Expense</td>
                               <td className="px-6 py-3 text-sm text-gray-900">—</td>
                               <td className="px-6 py-3 text-sm text-gray-900">{exp.category}</td>
+                              <td className="px-6 py-3 text-center text-sm text-gray-900">{(exp.quantity || 1).toFixed(1)}</td>
                               <td className="px-6 py-3 text-right text-sm text-gray-900">£{(exp.amount || 0).toFixed(2)}</td>
                               <td className="px-6 py-3 text-right text-sm text-gray-900">£{(exp.amount || 0).toFixed(2)}</td>
                               <td className="px-6 py-3 text-right text-sm font-semibold text-gray-700">
