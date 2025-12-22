@@ -45,6 +45,8 @@ export default function ReportsPage() {
   const [projectStats, setProjectStats] = useState<ProjectStats[]>([]);
   const [subcontractorStats, setSubcontractorStats] = useState<SubcontractorStats[]>([]);
   const [loading, setLoading] = useState(true);
+  const [logsSnap, setLogsSnap] = useState<any>(null);
+  const [expensesSnap, setExpensesSnap] = useState<any>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -203,6 +205,8 @@ export default function ReportsPage() {
             
             setSubcontractorStats(subcontractorStatsArray);
             setProjectStats(projectStatsArray);
+            setLogsSnap(logsSnap);
+            setExpensesSnap(expensesSnap);
           }
         } catch (error) {
           console.error('Error fetching report data:', error);
@@ -407,6 +411,148 @@ export default function ReportsPage() {
             <BarChart3 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No data yet</h3>
             <p className="text-gray-600">Reports will be generated once time logs are created.</p>
+          </div>
+        )}
+
+        {/* Detailed Project Report with Entry Breakdown */}
+        {projectStats.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mt-8">
+            <div className="flex items-center space-x-3 mb-6">
+              <BarChart3 className="w-6 h-6 text-indigo-600" />
+              <h3 className="text-xl font-bold text-gray-900">Detailed Project Report with Margin Analysis</h3>
+            </div>
+
+            <div className="space-y-8">
+              {projectStats.map((project) => (
+                <div key={project.projectId} className="border border-gray-200 rounded-lg overflow-hidden">
+                  {/* Project Header */}
+                  <div className="bg-gradient-to-r from-indigo-50 to-blue-50 px-6 py-4 border-b border-gray-200">
+                    <h4 className="text-lg font-bold text-gray-900">{project.projectName}</h4>
+                    <p className="text-sm text-gray-600 mt-1">{project.hours.toFixed(1)} hours tracked</p>
+                  </div>
+
+                  {/* Entries Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Date</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Type</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Description</th>
+                          <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700">Cost</th>
+                          <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700">Billing</th>
+                          <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700">Margin</th>
+                          <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700">Margin %</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {logsSnap && logsSnap.docs.map((logDoc: any) => {
+                          const log = logDoc.data();
+                          if (log.projectId !== project.projectId) return null;
+                          const dateObj = log.date?.toDate ? log.date.toDate() : new Date(log.date);
+                          const dateStr = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                          const margin = (log.clientBill || 0) - (log.subCost || 0);
+                          const marginPct = (log.clientBill || 0) > 0 ? (margin / (log.clientBill || 1)) * 100 : 0;
+                          
+                          return (
+                            <tr key={logDoc.id} className="hover:bg-gray-50">
+                              <td className="px-6 py-3 text-sm text-gray-600">{dateStr}</td>
+                              <td className="px-6 py-3 text-sm font-medium text-gray-900">Time Log</td>
+                              <td className="px-6 py-3 text-sm text-gray-900">{log.roleName} - {log.shiftType}</td>
+                              <td className="px-6 py-3 text-right text-sm text-gray-900">£{(log.subCost || 0).toFixed(2)}</td>
+                              <td className="px-6 py-3 text-right text-sm text-gray-900">£{(log.clientBill || 0).toFixed(2)}</td>
+                              <td className="px-6 py-3 text-right text-sm font-semibold">
+                                <span className={margin > 0 ? 'text-green-700' : 'text-red-700'}>
+                                  £{margin.toFixed(2)}
+                                </span>
+                              </td>
+                              <td className="px-6 py-3 text-right text-sm font-semibold">
+                                <span className={marginPct > 0 ? 'text-green-700' : 'text-red-700'}>
+                                  {marginPct.toFixed(1)}%
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {expensesSnap && expensesSnap.docs.map((expDoc: any) => {
+                          const exp = expDoc.data();
+                          if (exp.projectId !== project.projectId) return null;
+                          const dateObj = exp.date?.toDate ? exp.date.toDate() : new Date(exp.date);
+                          const dateStr = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                          
+                          return (
+                            <tr key={expDoc.id} className="hover:bg-gray-50 bg-gray-50">
+                              <td className="px-6 py-3 text-sm text-gray-600">{dateStr}</td>
+                              <td className="px-6 py-3 text-sm font-medium text-gray-900">Expense</td>
+                              <td className="px-6 py-3 text-sm text-gray-900">{exp.category}</td>
+                              <td className="px-6 py-3 text-right text-sm text-gray-900">£{(exp.amount || 0).toFixed(2)}</td>
+                              <td className="px-6 py-3 text-right text-sm text-gray-900">£{(exp.amount || 0).toFixed(2)}</td>
+                              <td className="px-6 py-3 text-right text-sm font-semibold text-red-700">
+                                -£{(exp.amount || 0).toFixed(2)}
+                              </td>
+                              <td className="px-6 py-3 text-right text-sm font-semibold text-red-700">
+                                -100.0%
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Project Subtotal */}
+                  <div className="bg-indigo-50 border-t border-gray-200 px-6 py-4">
+                    <div className="grid grid-cols-4 gap-4 text-right">
+                      <div>
+                        <p className="text-xs text-gray-600">Project Cost</p>
+                        <p className="text-lg font-bold text-gray-900">£{project.cost.toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-600">Project Billing</p>
+                        <p className="text-lg font-bold text-gray-900">£{project.billing.toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-600">Project Margin</p>
+                        <p className="text-lg font-bold text-green-700">£{project.margin.toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-600">Margin %</p>
+                        <p className="text-lg font-bold text-green-700">
+                          {project.billing > 0 ? ((project.margin / project.billing) * 100).toFixed(1) : '0.0'}%
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Grand Total */}
+            <div className="mt-8 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-6 border-2 border-green-200">
+              <h4 className="text-lg font-bold text-gray-900 mb-4">Grand Total</h4>
+              <div className="grid grid-cols-5 gap-4">
+                <div>
+                  <p className="text-sm text-gray-600">Total Cost</p>
+                  <p className="text-2xl font-bold text-gray-900">£{reportData.totalCost.toFixed(2)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Total Billing</p>
+                  <p className="text-2xl font-bold text-gray-900">£{reportData.totalBilling.toFixed(2)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Total Margin</p>
+                  <p className="text-2xl font-bold text-green-700">£{reportData.totalMargin.toFixed(2)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Margin %</p>
+                  <p className="text-2xl font-bold text-green-700">{reportData.marginPercentage.toFixed(1)}%</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Total Hours</p>
+                  <p className="text-2xl font-bold text-blue-700">{(reportData.totalRegularHours + reportData.totalOTHours).toFixed(1)}h</p>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
