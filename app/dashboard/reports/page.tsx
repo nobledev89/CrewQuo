@@ -47,6 +47,7 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [logsSnap, setLogsSnap] = useState<any>(null);
   const [expensesSnap, setExpensesSnap] = useState<any>(null);
+  const [selectedProject, setSelectedProject] = useState<ProjectStats | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -372,7 +373,7 @@ export default function ReportsPage() {
             
             <div className="space-y-4">
               {projectStats.map((project, index) => (
-                <div key={project.projectId} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition">
+                <div key={project.projectId} className="border border-gray-200 rounded-lg p-4 hover:bg-blue-50 transition cursor-pointer" onClick={() => setSelectedProject(project)}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center space-x-3">
                       <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -400,6 +401,7 @@ export default function ReportsPage() {
                       </p>
                     </div>
                   </div>
+                  <p className="text-xs text-blue-600 mt-3 font-medium">Click to view detailed breakdown →</p>
                 </div>
               ))}
             </div>
@@ -550,6 +552,127 @@ export default function ReportsPage() {
                 <div>
                   <p className="text-sm text-gray-600">Total Hours</p>
                   <p className="text-2xl font-bold text-blue-700">{(reportData.totalRegularHours + reportData.totalOTHours).toFixed(1)}h</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Project Details Modal */}
+        {selectedProject && reportData && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto">
+              {/* Modal Header */}
+              <div className="sticky top-0 flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-blue-50">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">{selectedProject.projectName}</h2>
+                  <p className="text-sm text-gray-600 mt-1">{selectedProject.hours.toFixed(1)} hours tracked</p>
+                </div>
+                <button
+                  onClick={() => setSelectedProject(null)}
+                  className="text-gray-500 hover:text-gray-700 transition text-2xl font-light"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="p-6">
+                {/* Entries Table */}
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Detailed Breakdown</h3>
+                  <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Date</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Type</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Description</th>
+                          <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700">Cost</th>
+                          <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700">Billing</th>
+                          <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700">Margin</th>
+                          <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700">Margin %</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {logsSnap && logsSnap.docs.map((logDoc: any) => {
+                          const log = logDoc.data();
+                          if (log.projectId !== selectedProject.projectId) return null;
+                          const dateObj = log.date?.toDate ? log.date.toDate() : new Date(log.date);
+                          const dateStr = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                          const margin = (log.clientBill || 0) - (log.subCost || 0);
+                          const marginPct = (log.clientBill || 0) > 0 ? (margin / (log.clientBill || 1)) * 100 : 0;
+                          
+                          return (
+                            <tr key={logDoc.id} className="hover:bg-gray-50">
+                              <td className="px-6 py-3 text-sm text-gray-600">{dateStr}</td>
+                              <td className="px-6 py-3 text-sm font-medium text-gray-900">Time Log</td>
+                              <td className="px-6 py-3 text-sm text-gray-900">{log.roleName} - {log.shiftType}</td>
+                              <td className="px-6 py-3 text-right text-sm text-gray-900">£{(log.subCost || 0).toFixed(2)}</td>
+                              <td className="px-6 py-3 text-right text-sm text-gray-900">£{(log.clientBill || 0).toFixed(2)}</td>
+                              <td className="px-6 py-3 text-right text-sm font-semibold">
+                                <span className={margin > 0 ? 'text-green-700' : 'text-red-700'}>
+                                  £{margin.toFixed(2)}
+                                </span>
+                              </td>
+                              <td className="px-6 py-3 text-right text-sm font-semibold">
+                                <span className={marginPct > 0 ? 'text-green-700' : 'text-red-700'}>
+                                  {marginPct.toFixed(1)}%
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {expensesSnap && expensesSnap.docs.map((expDoc: any) => {
+                          const exp = expDoc.data();
+                          if (exp.projectId !== selectedProject.projectId) return null;
+                          const dateObj = exp.date?.toDate ? exp.date.toDate() : new Date(exp.date);
+                          const dateStr = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                          
+                          return (
+                            <tr key={expDoc.id} className="hover:bg-gray-50 bg-gray-50">
+                              <td className="px-6 py-3 text-sm text-gray-600">{dateStr}</td>
+                              <td className="px-6 py-3 text-sm font-medium text-gray-900">Expense</td>
+                              <td className="px-6 py-3 text-sm text-gray-900">{exp.category}</td>
+                              <td className="px-6 py-3 text-right text-sm text-gray-900">£{(exp.amount || 0).toFixed(2)}</td>
+                              <td className="px-6 py-3 text-right text-sm text-gray-900">£{(exp.amount || 0).toFixed(2)}</td>
+                              <td className="px-6 py-3 text-right text-sm font-semibold text-red-700">
+                                -£{(exp.amount || 0).toFixed(2)}
+                              </td>
+                              <td className="px-6 py-3 text-right text-sm font-semibold text-red-700">
+                                -100.0%
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Project Subtotal */}
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-6 mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Project Subtotal</h3>
+                  <div className="grid grid-cols-4 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-600">Cost</p>
+                      <p className="text-2xl font-bold text-gray-900">£{selectedProject.cost.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-600">Billing</p>
+                      <p className="text-2xl font-bold text-gray-900">£{selectedProject.billing.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-600">Margin</p>
+                      <p className="text-2xl font-bold text-green-700">£{selectedProject.margin.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-600">Margin %</p>
+                      <p className="text-2xl font-bold text-green-700">
+                        {selectedProject.billing > 0 ? ((selectedProject.margin / selectedProject.billing) * 100).toFixed(1) : '0.0'}%
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
