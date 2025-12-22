@@ -142,9 +142,15 @@ export default function SummaryPage() {
       0
     );
 
+    const monthlyExpenses = expenses.filter((exp) => {
+      const expDate = exp.date?.toDate ? exp.date.toDate() : new Date(exp.date);
+      return expDate >= monthStart && exp.status === 'APPROVED';
+    });
+
     const monthlyEarnings = monthlyLogs
       .filter((log) => log.status === 'APPROVED')
-      .reduce((sum, log) => sum + log.subCost, 0);
+      .reduce((sum, log) => sum + log.subCost, 0) +
+      monthlyExpenses.reduce((sum, exp) => sum + exp.amount, 0);
 
     // 30-day stats
     const last30DaysLogs = timeLogs.filter((log) => {
@@ -157,9 +163,15 @@ export default function SummaryPage() {
       0
     );
 
+    const last30DaysExpenses = expenses.filter((exp) => {
+      const expDate = exp.date?.toDate ? exp.date.toDate() : new Date(exp.date);
+      return expDate >= thirtyDaysAgo && exp.status === 'APPROVED';
+    });
+
     const last30DaysEarnings = last30DaysLogs
       .filter((log) => log.status === 'APPROVED')
-      .reduce((sum, log) => sum + log.subCost, 0);
+      .reduce((sum, log) => sum + log.subCost, 0) +
+      last30DaysExpenses.reduce((sum, exp) => sum + exp.amount, 0);
 
     // Status counts
     const pendingCount =
@@ -180,9 +192,12 @@ export default function SummaryPage() {
       0
     );
 
+    const approvedExpenses = expenses.filter((exp) => exp.status === 'APPROVED');
+
     const totalEarnings = timeLogs
       .filter((log) => log.status === 'APPROVED')
-      .reduce((sum, log) => sum + log.subCost, 0);
+      .reduce((sum, log) => sum + log.subCost, 0) +
+      approvedExpenses.reduce((sum, exp) => sum + exp.amount, 0);
 
     // Generate chart data for last 30 days
     const chartData = [];
