@@ -48,6 +48,7 @@ export default function ReportsPage() {
   const [logsSnap, setLogsSnap] = useState<any>(null);
   const [expensesSnap, setExpensesSnap] = useState<any>(null);
   const [selectedProject, setSelectedProject] = useState<ProjectStats | null>(null);
+  const [subsMap, setSubsMap] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -208,6 +209,7 @@ export default function ReportsPage() {
             setProjectStats(projectStatsArray);
             setLogsSnap(logsSnap);
             setExpensesSnap(expensesSnap);
+            setSubsMap(subsMap);
           }
         } catch (error) {
           console.error('Error fetching report data:', error);
@@ -466,7 +468,7 @@ export default function ReportsPage() {
                             <tr key={logDoc.id} className="hover:bg-gray-50">
                               <td className="px-6 py-3 text-sm text-gray-600">{dateStr}</td>
                               <td className="px-6 py-3 text-sm font-medium text-gray-900">Time Log</td>
-                              <td className="px-6 py-3 text-sm text-gray-900">{log.subcontractorName || 'Unknown'}</td>
+                              <td className="px-6 py-3 text-sm text-gray-900">{subsMap.get(log.subcontractorId) || log.subcontractorName || 'Unknown'}</td>
                               <td className="px-6 py-3 text-sm text-gray-900">{log.roleName} - {log.shiftType}</td>
                               <td className="px-6 py-3 text-right text-sm text-gray-900">£{(log.subCost || 0).toFixed(2)}</td>
                               <td className="px-6 py-3 text-right text-sm text-gray-900">£{(log.clientBill || 0).toFixed(2)}</td>
