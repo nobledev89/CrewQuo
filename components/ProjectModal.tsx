@@ -68,12 +68,14 @@ export default function ProjectModal({
     rateKey: '',
     hoursRegular: 8,
     hoursOT: 0,
+    quantity: 1,
     notes: '',
   });
 
   const [expenseForm, setExpenseForm] = useState({
     date: '',
     expenseKey: '',
+    quantity: 1,
     amount: 0,
     notes: '',
   });
@@ -167,8 +169,8 @@ export default function ProjectModal({
     : (selectedRateEntry?.clientRate ?? payRate);
 
   const calculatedLog = {
-    cost: payRate * (Number(logForm.hoursRegular) + Number(logForm.hoursOT)),
-    bill: billRate * (Number(logForm.hoursRegular) + Number(logForm.hoursOT)),
+    cost: payRate * (Number(logForm.hoursRegular) + Number(logForm.hoursOT)) * Number(logForm.quantity),
+    bill: billRate * (Number(logForm.hoursRegular) + Number(logForm.hoursOT)) * Number(logForm.quantity),
   };
   calculatedLog.cost = Math.round(calculatedLog.cost * 100) / 100;
   calculatedLog.bill = Math.round(calculatedLog.bill * 100) / 100;
@@ -229,6 +231,7 @@ export default function ProjectModal({
         rateKey: '',
         hoursRegular: 8,
         hoursOT: 0,
+        quantity: 1,
         notes: '',
       });
       await fetchProjectData();
@@ -321,6 +324,7 @@ export default function ProjectModal({
       setExpenseForm({
         date: '',
         expenseKey: '',
+        quantity: 1,
         amount: 0,
         notes: '',
       });
@@ -448,7 +452,7 @@ export default function ProjectModal({
                         <p className="text-sm text-orange-700">You have submitted items for approval. New items cannot be added until they are approved or rejected.</p>
                       </div>
                     )}
-                    <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
                         <input
@@ -480,6 +484,18 @@ export default function ProjectModal({
                             </option>
                           ))}
                         </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Men</label>
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={logForm.quantity}
+                          onChange={(e) => setLogForm((p) => ({ ...p, quantity: Math.max(1, Number(e.target.value)) }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        />
                       </div>
 
                       <div>
