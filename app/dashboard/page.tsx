@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -44,6 +44,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<Stats>({ projects: 0, clients: 0, subcontractors: 0, rateCards: 0 });
   const [loading, setLoading] = useState(true);
   const { cachedData, prefetchClientData } = useClientData();
+  const fetchedRef = useRef(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -64,8 +65,11 @@ export default function DashboardPage() {
             setCompanyData(companyDoc.data() as CompanyData);
           }
 
-          // Fetch initial dashboard data
-          await prefetchClientData(data.companyId, null);
+          // Fetch initial dashboard data (only once per auth session)
+          if (!fetchedRef.current) {
+            fetchedRef.current = true;
+            await prefetchClientData(data.companyId, null);
+          }
         }
         
         setLoading(false);
@@ -73,7 +77,7 @@ export default function DashboardPage() {
     });
 
     return () => unsubscribe();
-  }, [prefetchClientData]);
+  }, [router, prefetchClientData]);
 
   // Use cached stats if available
   useEffect(() => {
