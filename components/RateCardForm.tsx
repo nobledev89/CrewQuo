@@ -115,6 +115,7 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
       ...prev,
       templateId: template?.id,
       templateName: template?.name,
+      cardType: undefined, // Removed - no longer used
     }));
   };
 
@@ -128,6 +129,10 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
       shiftTypeId: firstShiftType.id,
       rateMultiplier: firstShiftType.rateMultiplier,
       baseRate: 0,
+      subcontractorRate: 0,
+      clientRate: 0,
+      marginValue: 0,
+      marginPercentage: 0,
       startTime: '',
       endTime: '',
       totalHours: undefined,
@@ -603,18 +608,86 @@ function RateEntryRow({ rate, index, onUpdate, onRemove, resourceCategories, shi
         </div>
       </div>
 
-      {/* Section 4: Pricing Fields */}
+      {/* Section 4: Pricing Fields - Combined Subcontractor & Client Rates */}
       <div className="mb-6">
         <h5 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
-          <DollarSign className="w-4 h-4 mr-1" /> 4. Pricing Fields
+          <DollarSign className="w-4 h-4 mr-1" /> 4. Pricing Fields - Subcontractor & Client Rates
         </h5>
+        
+        {/* Primary Rates */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+          <p className="text-xs font-semibold text-blue-900 mb-3">💷 Primary Rates (Required)</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Subcontractor Rate (£/hr) *</label>
+              <input
+                type="number"
+                step="0.01"
+                required
+                value={rate.subcontractorRate ?? ''}
+                onChange={(e) => {
+                  const subRate = e.target.value ? parseFloat(e.target.value) : 0;
+                  const clientRate = rate.clientRate || 0;
+                  const margin = clientRate - subRate;
+                  const marginPct = clientRate > 0 ? (margin / clientRate) * 100 : 0;
+                  onUpdate(index, 'subcontractorRate', subRate);
+                  onUpdate(index, 'marginValue', Math.max(0, margin));
+                  onUpdate(index, 'marginPercentage', Math.max(0, marginPct));
+                }}
+                className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="15.00"
+              />
+              <p className="text-xs text-blue-700 mt-1">What you pay the subcontractor</p>
+            </div>
+            
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Client Rate (£/hr) *</label>
+              <input
+                type="number"
+                step="0.01"
+                required
+                value={rate.clientRate ?? ''}
+                onChange={(e) => {
+                  const clientRate = e.target.value ? parseFloat(e.target.value) : 0;
+                  const subRate = rate.subcontractorRate || 0;
+                  const margin = clientRate - subRate;
+                  const marginPct = clientRate > 0 ? (margin / clientRate) * 100 : 0;
+                  onUpdate(index, 'clientRate', clientRate);
+                  onUpdate(index, 'marginValue', Math.max(0, margin));
+                  onUpdate(index, 'marginPercentage', Math.max(0, marginPct));
+                }}
+                className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="21.00"
+              />
+              <p className="text-xs text-blue-700 mt-1">What you charge the client</p>
+            </div>
+            
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Margin (Read-Only)</label>
+              <div className={`w-full px-3 py-2 text-sm rounded-lg border-2 font-bold text-center ${
+                (rate.marginValue || 0) > 0 
+                  ? 'bg-green-50 border-green-300 text-green-700' 
+                  : (rate.marginValue || 0) > 0 
+                  ? 'bg-amber-50 border-amber-300 text-amber-700'
+                  : 'bg-gray-50 border-gray-300 text-gray-700'
+              }`}>
+                {rate.marginValue !== undefined && rate.marginPercentage !== undefined
+                  ? `£${rate.marginValue.toFixed(2)} (${rate.marginPercentage.toFixed(1)}%)`
+                  : '—'}
+              </div>
+              <p className="text-xs text-gray-600 mt-1">Profit per hour</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Legacy/Additional Rates */}
+        <p className="text-xs font-semibold text-gray-600 mb-2">Legacy Rates (Optional)</p>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Base Rate (GBP) *</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Base Rate (GBP)</label>
             <input
               type="number"
               step="0.01"
-              required
               value={rate.baseRate ?? ''}
               onChange={(e) => onUpdate(index, 'baseRate', e.target.value ? parseFloat(e.target.value) : 0)}
               className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -651,28 +724,6 @@ function RateEntryRow({ rate, index, onUpdate, onRemove, resourceCategories, shi
               step="0.01"
               value={rate.rate8Hours ?? ''}
               onChange={(e) => onUpdate(index, 'rate8Hours', e.target.value ? parseFloat(e.target.value) : null)}
-              className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="0.00"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">9-Hour Rate (GBP)</label>
-            <input
-              type="number"
-              step="0.01"
-              value={rate.rate9Hours ?? ''}
-              onChange={(e) => onUpdate(index, 'rate9Hours', e.target.value ? parseFloat(e.target.value) : null)}
-              className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="0.00"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">10-Hour Rate (GBP)</label>
-            <input
-              type="number"
-              step="0.01"
-              value={rate.rate10Hours ?? ''}
-              onChange={(e) => onUpdate(index, 'rate10Hours', e.target.value ? parseFloat(e.target.value) : null)}
               className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               placeholder="0.00"
             />

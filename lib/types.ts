@@ -278,8 +278,15 @@ export interface RateEntry {
   endTime?: string;              // e.g., "17:00"
   totalHours?: number;           // Total hours worked
   
-  // 4. Pricing Fields
-  baseRate: number;              // Base hourly rate (before multipliers)
+  // 4. Pricing Fields - Combined Subcontractor & Client Rates
+  // Primary rates (new unified approach)
+  subcontractorRate: number;     // What you pay the subcontractor (hourly)
+  clientRate: number;            // What you charge the client (hourly)
+  marginValue?: number;          // Auto-calculated: clientRate - subcontractorRate
+  marginPercentage?: number;     // Auto-calculated: (marginValue / clientRate) * 100
+  
+  // Legacy/additional rate fields (kept for backward compatibility)
+  baseRate: number;              // Base hourly rate (maps to subcontractorRate for legacy)
   hourlyRate?: number | null;    // Effective rate per hour (after multiplier)
   rate4Hours?: number | null;    // 4-hour rate
   rate8Hours?: number | null;    // 8-hour rate

@@ -277,11 +277,33 @@ export default function RateCardsPage() {
                 </div>
 
                 {rateCard.rates && rateCard.rates.length > 0 && (
-                  <div className="bg-blue-50 rounded-lg p-3 border border-blue-100 mb-3">
-                    <p className="text-xs font-semibold text-blue-800 mb-1">
-                      <DollarSign className="w-3 h-3 inline mr-1" />
-                      {rateCard.rates.length} rate {rateCard.rates.length === 1 ? 'entry' : 'entries'}
-                    </p>
+                  <div className="space-y-2 mb-3">
+                    <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+                      <p className="text-xs font-semibold text-blue-800 mb-1">
+                        <DollarSign className="w-3 h-3 inline mr-1" />
+                        {rateCard.rates.length} rate {rateCard.rates.length === 1 ? 'entry' : 'entries'}
+                      </p>
+                    </div>
+                    
+                    {/* Margin Summary */}
+                    {rateCard.rates.some(r => r.marginValue !== undefined) && (
+                      <div className="bg-green-50 rounded-lg p-3 border border-green-100">
+                        <p className="text-xs font-semibold text-green-800 mb-2">💰 Margin Summary:</p>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                          {rateCard.rates.map((rate, idx) => {
+                            if (rate.marginValue !== undefined && rate.marginPercentage !== undefined) {
+                              return (
+                                <div key={idx} className="text-xs">
+                                  <p className="text-green-700 font-medium">{rate.roleName}</p>
+                                  <p className="text-green-600">£{rate.marginValue.toFixed(2)} ({rate.marginPercentage.toFixed(1)}%)</p>
+                                </div>
+                              );
+                            }
+                            return null;
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
