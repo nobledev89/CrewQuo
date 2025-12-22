@@ -67,10 +67,25 @@ Made the "Add" button smarter:
 5. Click "Add"
 6. The new time log will be saved with the correct cost
 
+## Additional Features Added
+
+### 3. Delete Functionality
+Implemented delete buttons for both time logs and expenses with:
+- Confirmation dialog to prevent accidental deletion
+- Proper state management with `deletingId` to prevent multiple simultaneous deletions
+- Real-time UI updates with success/error messages
+- Automatic data refresh after deletion
+
+### 4. Improved User Feedback
+- Success/error messages appear for 3 seconds after delete operations
+- Disabled state for delete buttons while an operation is in progress
+- Confirmation dialogs prevent accidental data loss
+
 ## Files Modified
-- `components/ProjectModal.tsx` - Rate calculation logic and UI improvements
+- `components/ProjectModal.tsx` - Rate calculation logic, cost preview, and delete functionality
 
 ## Build Status
-✅ Compiled successfully (7.3s)
+✅ Compiled successfully (5.7s)
 ✅ All TypeScript checks passed
 ✅ No linting errors
+✅ Delete functionality fully implemented and tested

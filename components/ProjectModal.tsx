@@ -59,6 +59,9 @@ export default function ProjectModal({
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [timesheetStatus, setTimesheetStatus] = useState<'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED'>('DRAFT');
   const [submittingTimesheet, setSubmittingTimesheet] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState<string>('');
+  const [success, setSuccess] = useState<string>('');
 
   const [logForm, setLogForm] = useState({
     date: '',
@@ -234,6 +237,46 @@ export default function ProjectModal({
       alert('Failed to save time log');
     } finally {
       setSavingLog(false);
+    }
+  };
+
+  const deleteTimeLog = async (logId: string) => {
+    if (!window.confirm('Are you sure you want to delete this time log? This action cannot be undone.')) {
+      return;
+    }
+
+    setDeletingId(logId);
+    try {
+      await deleteDoc(doc(db, 'timeLogs', logId));
+      setSuccess('Time log deleted successfully');
+      await fetchProjectData();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      console.error('Error deleting time log:', error);
+      setError('Failed to delete time log');
+      setTimeout(() => setError(''), 3000);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const deleteExpense = async (expenseId: string) => {
+    if (!window.confirm('Are you sure you want to delete this expense? This action cannot be undone.')) {
+      return;
+    }
+
+    setDeletingId(expenseId);
+    try {
+      await deleteDoc(doc(db, 'expenses', expenseId));
+      setSuccess('Expense deleted successfully');
+      await fetchProjectData();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      console.error('Error deleting expense:', error);
+      setError('Failed to delete expense');
+      setTimeout(() => setError(''), 3000);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -531,10 +574,14 @@ export default function ProjectModal({
                                 <td className="px-4 py-2 text-right text-gray-900">{log.hoursOT}h</td>
                                 <td className="px-4 py-2 text-right text-gray-900 font-semibold">£{(log.subCost || 0).toFixed(2)}</td>
                                 <td className="px-4 py-2 text-center flex items-center justify-center gap-2">
-                                  <button className="p-1 hover:bg-blue-100 rounded transition">
+                                  <button className="p-1 hover:bg-blue-100 rounded transition" disabled={deletingId !== null}>
                                     <Edit2 className="w-4 h-4 text-blue-600" />
                                   </button>
-                                  <button className="p-1 hover:bg-red-100 rounded transition">
+                                  <button 
+                                    onClick={() => deleteTimeLog(log.id)}
+                                    className="p-1 hover:bg-red-100 rounded transition disabled:opacity-50" 
+                                    disabled={deletingId !== null}
+                                  >
                                     <Trash2 className="w-4 h-4 text-red-600" />
                                   </button>
                                 </td>
@@ -679,10 +726,14 @@ export default function ProjectModal({
                                 <td className="px-4 py-2 text-gray-900">{exp.category}</td>
                                 <td className="px-4 py-2 text-right text-gray-900 font-semibold">£{(exp.amount || 0).toFixed(2)}</td>
                                 <td className="px-4 py-2 text-center flex items-center justify-center gap-2">
-                                  <button className="p-1 hover:bg-blue-100 rounded transition">
+                                  <button className="p-1 hover:bg-blue-100 rounded transition" disabled={deletingId !== null}>
                                     <Edit2 className="w-4 h-4 text-blue-600" />
                                   </button>
-                                  <button className="p-1 hover:bg-red-100 rounded transition">
+                                  <button 
+                                    onClick={() => deleteExpense(exp.id)}
+                                    className="p-1 hover:bg-red-100 rounded transition disabled:opacity-50" 
+                                    disabled={deletingId !== null}
+                                  >
                                     <Trash2 className="w-4 h-4 text-red-600" />
                                   </button>
                                 </td>
