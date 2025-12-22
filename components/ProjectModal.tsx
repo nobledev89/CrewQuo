@@ -157,10 +157,10 @@ export default function ProjectModal({
     ) || undefined;
 
   const payRate = selectedRateEntry
-    ? (selectedRateEntry.hourlyRate ?? selectedRateEntry.baseRate ?? 0)
+    ? (selectedRateEntry.subcontractorRate ?? selectedRateEntry.hourlyRate ?? selectedRateEntry.baseRate ?? 0)
     : 0;
   const billRate = matchingBillEntry
-    ? (matchingBillEntry.hourlyRate ?? matchingBillEntry.baseRate ?? payRate)
+    ? (matchingBillEntry.clientRate ?? matchingBillEntry.hourlyRate ?? matchingBillEntry.baseRate ?? payRate)
     : payRate;
 
   const calculatedLog = {
@@ -405,7 +405,7 @@ export default function ProjectModal({
                         <p className="text-sm text-orange-700">You have submitted items for approval. New items cannot be added until they are approved or rejected.</p>
                       </div>
                     )}
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
                         <input
@@ -461,10 +461,17 @@ export default function ProjectModal({
                         />
                       </div>
 
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Cost Preview</label>
+                        <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-blue-50 text-sm font-bold text-blue-900">
+                          £{calculatedLog.cost.toFixed(2)}
+                        </div>
+                      </div>
+
                       <div className="flex items-end">
                         <button
                           onClick={() => saveLog('DRAFT')}
-                          disabled={savingLog || rateOptions.length === 0}
+                          disabled={savingLog || rateOptions.length === 0 || payRate === 0}
                           className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
                         >
                           <Plus className="w-4 h-4 inline mr-1" />
