@@ -223,20 +223,37 @@ export const createTimeLog = functions.https.onCall(async (data, context) => {
   const payCardData = payCardDoc.data()!;
   const billCardData = billCardDoc.data()!;
 
-  // Helper function to extract rate from a rate card that might have different field names
+  // Helper function to extract rate from a rate card based on its rateMode
   const extractBaseRate = (card: any): number => {
-    // Try multiple possible field names for compatibility
-    return (
-      card.hourlyRate ||
-      card.baseRate ||
-      card.shiftRate ||
-      card.dailyRate ||
-      card.rate ||
-      0
-    );
+    const rateMode = card.rateMode || 'HOURLY';
+    console.log(`[extractBaseRate] Card rateMode: ${rateMode}, Card data:`, {
+      hourlyRate: card.hourlyRate,
+      shiftRate: card.shiftRate,
+      dailyRate: card.dailyRate,
+      baseRate: card.baseRate,
+      rate: card.rate,
+    });
+    
+    // Extract based on rateMode
+    switch (rateMode) {
+      case 'SHIFT':
+        return card.shiftRate || card.baseRate || card.rate || 0;
+      case 'DAILY':
+        return card.dailyRate || card.baseRate || card.rate || 0;
+      case 'HOURLY':
+      default:
+        return card.hourlyRate || card.baseRate || card.rate || 0;
+    }
   };
 
   const extractOTRate = (card: any, baseRate: number): number => {
+    const rateMode = card.rateMode || 'HOURLY';
+    
+    // Only hourly rates have OT
+    if (rateMode !== 'HOURLY') {
+      return 0;
+    }
+    
     return card.otHourlyRate || card.otRate || baseRate * 1.5 || 0;
   };
 
@@ -247,8 +264,10 @@ export const createTimeLog = functions.https.onCall(async (data, context) => {
   const billOTRate = extractOTRate(billCardData, billBaseRate);
 
   // Log for debugging
-  console.log(`[createTimeLog] Pay Rate - Base: ${payBaseRate}, OT: ${payOTRate}`);
-  console.log(`[createTimeLog] Bill Rate - Base: ${billBaseRate}, OT: ${billOTRate}`);
+  console.log(`[createTimeLog] Pay Card ID: ${payRateCardId}, RateMode: ${payCardData.rateMode}, Base: ${payBaseRate}, OT: ${payOTRate}`);
+  console.log(`[createTimeLog] Bill Card ID: ${billRateCardId || payRateCardId}, RateMode: ${billCardData.rateMode}, Base: ${billBaseRate}, OT: ${billOTRate}`);
+  console.log(`[createTimeLog] Full pay card:`, JSON.stringify(payCardData, null, 2));
+  console.log(`[createTimeLog] Full bill card:`, JSON.stringify(billCardData, null, 2));
 
   const subRate: any = {
     rateLabel: payCardData.rateLabel || 'Custom',
