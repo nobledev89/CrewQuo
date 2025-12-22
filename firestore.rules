@@ -339,11 +339,11 @@ service cloud.firestore {
           // In own company: admins/managers can create
           (isOwnCompany() && isAdminOrManager())
           ||
-          // In subcontractor context: can create own submissions
+          // In subcontractor context: can create own submissions (DRAFT or SUBMITTED)
           (!isOwnCompany() 
             && request.resource.data.createdByUserId == request.auth.uid
             && request.resource.data.subcontractorId == subcontractorIdForActiveCompany()
-            && request.resource.data.status == 'DRAFT')
+            && request.resource.data.status in ['DRAFT', 'SUBMITTED'])
         );
       
       allow update: if authed()
