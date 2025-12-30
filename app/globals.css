@@ -65,7 +65,7 @@
   }
   
   .dark .bg-gradient-to-br.from-blue-50.to-indigo-50 {
-    @apply from-gray-800 to-gray-850;
+    @apply from-gray-800 to-gray-900;
   }
   
   .dark .text-gray-900 {
