@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, Timestamp } from 'firebase/firestore';
-import { User, Lock, Building2, Users, Mail, Save, AlertCircle, CheckCircle2, Trash2 } from 'lucide-react';
+import { User, Lock, Building2, Users, Mail, Save, AlertCircle, CheckCircle2, Trash2, Moon, Sun } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
+import { useTheme } from '@/lib/ThemeContext';
 
 interface UserData {
   uid: string;
@@ -33,6 +34,7 @@ interface CompanyUser {
 }
 
 export default function SettingsPage() {
+  const { theme, setTheme } = useTheme();
   const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [companyData, setCompanyData] = useState<CompanyData | null>(null);
@@ -556,6 +558,60 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
+
+          {/* Appearance Settings */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center space-x-3 mb-6">
+              <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                {theme === 'dark' ? (
+                  <Moon className="w-6 h-6 text-indigo-600" />
+                ) : (
+                  <Sun className="w-6 h-6 text-indigo-600" />
+                )}
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Appearance</h3>
+                <p className="text-sm text-gray-600">Customize how CrewQuo looks</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Theme Mode
+                </label>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setTheme('light')}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 transition ${
+                      theme === 'light'
+                        ? 'border-blue-600 bg-blue-50 text-blue-700'
+                        : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                    }`}
+                  >
+                    <Sun className="w-5 h-5" />
+                    <span className="font-medium">Light</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTheme('dark')}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 transition ${
+                      theme === 'dark'
+                        ? 'border-blue-600 bg-blue-50 text-blue-700'
+                        : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                    }`}
+                  >
+                    <Moon className="w-5 h-5" />
+                    <span className="font-medium">Dark</span>
+                  </button>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500">
+                Choose between light and dark mode. Your preference will be saved.
+              </p>
+            </div>
+          </div>
 
           {/* Subscription Info */}
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100 p-6">
