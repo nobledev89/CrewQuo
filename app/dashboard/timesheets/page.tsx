@@ -366,11 +366,15 @@ export default function TimesheetsPage() {
 
   // Download timesheet as CSV
   const handleDownloadTimesheet = (timesheet: TimesheetData) => {
+    console.time('CSV Generation');
+    console.log('Starting CSV download for timesheet:', timesheet.submission.id);
+    
     const rows: string[][] = [];
     
     // Header row
     rows.push(['Date', 'Type', 'Description', 'Regular Hours', 'OT Hours', 'Quantity', 'Amount', 'Notes']);
     
+    console.log('Processing time logs:', timesheet.timeLogs.length);
     // Time logs
     timesheet.timeLogs.forEach(log => {
       const dateObj = parseDate(log.date);
@@ -388,6 +392,7 @@ export default function TimesheetsPage() {
       ]);
     });
     
+    console.log('Processing expenses:', timesheet.expenses.length);
     // Expenses
     timesheet.expenses.forEach(exp => {
       const dateObj = parseDate(exp.date);
@@ -408,20 +413,40 @@ export default function TimesheetsPage() {
     // Totals row
     rows.push(['', '', 'TOTAL', timesheet.totalHours.toFixed(1), '', '', `£${timesheet.totalAmount.toFixed(2)}`, '']);
     
+    console.log('Converting to CSV string...');
     // Convert to CSV
     const csvContent = rows.map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(',')).join('\n');
+    console.log('CSV content length:', csvContent.length);
     
-    // Create download
+    console.log('Creating blob and download link...');
+    // Create download using a more direct approach
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
+    console.log('Blob created, size:', blob.size);
+    
     const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
+    console.log('Object URL created:', url);
+    
     const fileName = `timesheet_${timesheet.subcontractor?.name?.replace(/\s+/g, '_') || 'unknown'}_${timesheet.project?.name?.replace(/\s+/g, '_') || 'project'}_${new Date().toISOString().split('T')[0]}.csv`;
-    link.setAttribute('download', fileName);
-    link.style.visibility = 'hidden';
+    console.log('File name:', fileName);
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    
+    console.log('Triggering download...');
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    console.log('Click triggered');
+    
+    // Clean up after a short delay
+    setTimeout(() => {
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      console.log('Cleanup completed');
+    }, 100);
+    
+    console.timeEnd('CSV Generation');
+    console.log('Download function completed');
   };
 
   // Download all filtered timesheets
