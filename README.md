@@ -64,6 +64,7 @@ CrewQuo is an all-in-one platform that streamlines project management, time trac
 
 - 💻 [Development Guide](./DEVELOPMENT.md) - Setup, workflows, email system, and architecture
 - 🚀 [Deployment Guide](./DEPLOYMENT.md) - Deploy to production and manage infrastructure
+- 📝 [Changelog](./CHANGELOG.md) - Feature history and implementation details
 
 ---
 
