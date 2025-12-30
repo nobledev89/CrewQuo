@@ -355,6 +355,15 @@ export default function TimesheetsPage() {
 
   const noteKey = editingNote ? `${editingNote.timesheetId}_${editingNote.itemId}` : '';
 
+  // Helper function to safely parse dates
+  const parseDate = (date: any): Date | null => {
+    if (!date) return null;
+    if (typeof date.toDate === 'function') return date.toDate();
+    if (date instanceof Date) return date;
+    if (typeof date === 'string' || typeof date === 'number') return new Date(date);
+    return null;
+  };
+
   // Download timesheet as CSV
   const handleDownloadTimesheet = (timesheet: TimesheetData) => {
     const rows: string[][] = [];
@@ -364,8 +373,8 @@ export default function TimesheetsPage() {
     
     // Time logs
     timesheet.timeLogs.forEach(log => {
-      const dateObj = log.date?.toDate ? log.date.toDate() : (typeof log.date === 'object' ? log.date as any : new Date(log.date));
-      const dateStr = dateObj.toLocaleDateString('en-GB');
+      const dateObj = parseDate(log.date);
+      const dateStr = dateObj ? dateObj.toLocaleDateString('en-GB') : 'N/A';
       const notes = getLineNotes(timesheet.submission, log.id).map(n => n.note).join('; ');
       rows.push([
         dateStr,
@@ -381,8 +390,8 @@ export default function TimesheetsPage() {
     
     // Expenses
     timesheet.expenses.forEach(exp => {
-      const dateObj = exp.date?.toDate ? exp.date.toDate() : (typeof exp.date === 'object' ? exp.date as any : new Date(exp.date));
-      const dateStr = dateObj.toLocaleDateString('en-GB');
+      const dateObj = parseDate(exp.date);
+      const dateStr = dateObj ? dateObj.toLocaleDateString('en-GB') : 'N/A';
       const notes = getLineNotes(timesheet.submission, exp.id).map(n => n.note).join('; ');
       rows.push([
         dateStr,
@@ -425,8 +434,8 @@ export default function TimesheetsPage() {
     filteredTimesheets.forEach(timesheet => {
       // Time logs
       timesheet.timeLogs.forEach(log => {
-        const dateObj = log.date?.toDate ? log.date.toDate() : (typeof log.date === 'object' ? log.date as any : new Date(log.date));
-        const dateStr = dateObj.toLocaleDateString('en-GB');
+        const dateObj = parseDate(log.date);
+        const dateStr = dateObj ? dateObj.toLocaleDateString('en-GB') : 'N/A';
         const notes = getLineNotes(timesheet.submission, log.id).map(n => n.note).join('; ');
         rows.push([
           timesheet.subcontractor?.name || 'Unknown',
@@ -445,8 +454,8 @@ export default function TimesheetsPage() {
       
       // Expenses
       timesheet.expenses.forEach(exp => {
-        const dateObj = exp.date?.toDate ? exp.date.toDate() : (typeof exp.date === 'object' ? exp.date as any : new Date(exp.date));
-        const dateStr = dateObj.toLocaleDateString('en-GB');
+        const dateObj = parseDate(exp.date);
+        const dateStr = dateObj ? dateObj.toLocaleDateString('en-GB') : 'N/A';
         const notes = getLineNotes(timesheet.submission, exp.id).map(n => n.note).join('; ');
         rows.push([
           timesheet.subcontractor?.name || 'Unknown',
@@ -646,8 +655,8 @@ export default function TimesheetsPage() {
                       {/* Time Logs */}
                       {timesheet.timeLogs.map(log => {
                         const totalHours = (log.hoursRegular || 0) + (log.hoursOT || 0);
-                        const dateObj = log.date?.toDate ? log.date.toDate() : (typeof log.date === 'object' ? log.date as any : new Date(log.date));
-                        const dateStr = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                        const dateObj = parseDate(log.date);
+                        const dateStr = dateObj ? dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'N/A';
                         const notes = getLineNotes(timesheet.submission, log.id);
                         const isEditingNote = editingNote ? (editingNote.itemId === log.id && editingNote.timesheetId === timesheet.submission.id) : false;
                         const currentNoteKey = `${timesheet.submission.id}_${log.id}`;
@@ -728,8 +737,8 @@ export default function TimesheetsPage() {
 
                       {/* Expenses */}
                       {timesheet.expenses.map(exp => {
-                        const dateObj = exp.date?.toDate ? exp.date.toDate() : (typeof exp.date === 'object' ? exp.date as any : new Date(exp.date));
-                        const dateStr = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                        const dateObj = parseDate(exp.date);
+                        const dateStr = dateObj ? dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'N/A';
                         const notes = getLineNotes(timesheet.submission, exp.id);
                         const isEditingNote = editingNote ? (editingNote.itemId === exp.id && editingNote.timesheetId === timesheet.submission.id) : false;
                         const currentNoteKey = `${timesheet.submission.id}_${exp.id}`;
