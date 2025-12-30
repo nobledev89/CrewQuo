@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import * as functions from 'firebase-functions';
 import {FieldValue, Timestamp} from 'firebase-admin/firestore';
 import {getUserClaims, refreshUserClaims, buildUserClaims, setCustomUserClaims} from './auth';
-import {RateResolver, PriceCalculator, ShiftType} from './rates';
+import {PriceCalculator, ShiftType} from './rates';
 import {
   CreateTimeLogSchema,
   ProjectSummarySchema,
