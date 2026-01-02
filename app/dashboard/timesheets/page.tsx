@@ -105,7 +105,12 @@ export default function TimesheetsPage() {
       )
     );
 
-    const timesheetsList: TimesheetData[] = [];
+    // Parse all submissions first and collect all IDs we need to fetch
+    const submissions: ProjectSubmission[] = [];
+    const subcontractorIds = new Set<string>();
+    const projectIds = new Set<string>();
+    const allTimeLogIds: string[] = [];
+    const allExpenseIds: string[] = [];
 
     for (const submissionDoc of submissionsSnap.docs) {
       const submissionData = submissionDoc.data();
@@ -130,48 +135,81 @@ export default function TimesheetsPage() {
         updatedAt: submissionData.updatedAt,
       } as ProjectSubmission;
 
-      // Fetch subcontractor details
-      const subconDoc = await getDoc(doc(db, 'subcontractors', submission.subcontractorId));
-      const subcontractor = subconDoc.exists()
-        ? { id: subconDoc.id, ...subconDoc.data() } as Subcontractor
-        : null;
+      submissions.push(submission);
+      subcontractorIds.add(submission.subcontractorId);
+      projectIds.add(submission.projectId);
+      allTimeLogIds.push(...(submission.timeLogIds || []));
+      allExpenseIds.push(...(submission.expenseIds || []));
+    }
 
-      // Fetch project details
-      const projDoc = await getDoc(doc(db, 'projects', submission.projectId));
-      const project = projDoc.exists()
-        ? { id: projDoc.id, ...projDoc.data() } as Project
-        : null;
+    // Batch fetch all related documents in parallel
+    const [subcontractorDocs, projectDocs, timeLogDocs, expenseDocs] = await Promise.all([
+      // Fetch all subcontractors
+      Promise.all(
+        Array.from(subcontractorIds).map(id => getDoc(doc(db, 'subcontractors', id)))
+      ),
+      // Fetch all projects
+      Promise.all(
+        Array.from(projectIds).map(id => getDoc(doc(db, 'projects', id)))
+      ),
+      // Fetch all time logs
+      Promise.all(
+        allTimeLogIds.map(id => getDoc(doc(db, 'timeLogs', id)))
+      ),
+      // Fetch all expenses
+      Promise.all(
+        allExpenseIds.map(id => getDoc(doc(db, 'expenses', id)))
+      ),
+    ]);
 
-      // Fetch time logs
-      const timeLogs: TimeLog[] = [];
-      const timeLogIds = submission.timeLogIds || [];
-      if (timeLogIds && timeLogIds.length > 0) {
-        for (const logId of timeLogIds) {
-          const logDoc = await getDoc(doc(db, 'timeLogs', logId));
-          if (logDoc.exists()) {
-            timeLogs.push({ id: logDoc.id, ...logDoc.data() } as TimeLog);
-          }
-        }
+    // Build lookup maps for quick access
+    const subcontractorMap = new Map<string, Subcontractor>();
+    subcontractorDocs.forEach(docSnap => {
+      if (docSnap.exists()) {
+        subcontractorMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Subcontractor);
       }
+    });
 
-      // Fetch expenses
-      const expenses: Expense[] = [];
-      const expenseIds = submission.expenseIds || [];
-      if (expenseIds && expenseIds.length > 0) {
-        for (const expId of expenseIds) {
-          const expDoc = await getDoc(doc(db, 'expenses', expId));
-          if (expDoc.exists()) {
-            expenses.push({ id: expDoc.id, ...expDoc.data() } as Expense);
-          }
-        }
+    const projectMap = new Map<string, Project>();
+    projectDocs.forEach(docSnap => {
+      if (docSnap.exists()) {
+        projectMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Project);
       }
+    });
+
+    const timeLogMap = new Map<string, TimeLog>();
+    timeLogDocs.forEach(docSnap => {
+      if (docSnap.exists()) {
+        timeLogMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as TimeLog);
+      }
+    });
+
+    const expenseMap = new Map<string, Expense>();
+    expenseDocs.forEach(docSnap => {
+      if (docSnap.exists()) {
+        expenseMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Expense);
+      }
+    });
+
+    // Assemble timesheet data using lookup maps
+    const timesheetsList: TimesheetData[] = submissions.map(submission => {
+      const subcontractor = subcontractorMap.get(submission.subcontractorId) || null;
+      const project = projectMap.get(submission.projectId) || null;
+      
+      const timeLogs = (submission.timeLogIds || [])
+        .map(id => timeLogMap.get(id))
+        .filter((log): log is TimeLog => log !== undefined);
+      
+      const expenses = (submission.expenseIds || [])
+        .map(id => expenseMap.get(id))
+        .filter((exp): exp is Expense => exp !== undefined);
 
       // Calculate totals
       const totalHours = timeLogs.reduce((sum, log) => sum + (log.hoursRegular || 0) + (log.hoursOT || 0), 0);
       const totalAmount = timeLogs.reduce((sum, log) => sum + (log.subCost || 0), 0) +
         expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
 
-      timesheetsList.push({
+      return {
         submission,
         subcontractor,
         project,
@@ -179,8 +217,8 @@ export default function TimesheetsPage() {
         expenses,
         totalHours,
         totalAmount,
-      });
-    }
+      };
+    });
 
     setTimesheets(timesheetsList);
   };
