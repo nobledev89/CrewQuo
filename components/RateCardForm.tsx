@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
-import { X, Plus, Trash2, DollarSign, Tag, Calendar, Truck, Clock, Receipt, TimerIcon } from 'lucide-react';
-import { RateCard, RateEntry, ResourceCategory, ShiftType, RateCardTemplate, ExpenseEntry, TimeBasedRate } from '@/lib/types';
+import { X, Plus, Trash2, DollarSign, Tag, Calendar, Truck, Clock, Receipt, TimerIcon, AlertTriangle } from 'lucide-react';
+import { RateCard, RateEntry, ResourceCategory, ShiftType, RateCardTemplate, ExpenseEntry, TimeBasedRate, DayOfWeek } from '@/lib/types';
 
 interface RateCardFormProps {
   rateCard: RateCard | null;
@@ -259,6 +259,30 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
     }));
   };
 
+  const toggleTimeBasedRateDay = (rateIndex: number, timeRateId: string, day: DayOfWeek) => {
+    setFormData(prev => ({
+      ...prev,
+      rates: prev.rates.map((rate, i) => {
+        if (i === rateIndex) {
+          return {
+            ...rate,
+            timeBasedRates: (rate.timeBasedRates || []).map(tr => {
+              if (tr.id === timeRateId) {
+                const currentDays = tr.applicableDays || [];
+                const newDays = currentDays.includes(day)
+                  ? currentDays.filter(d => d !== day)
+                  : [...currentDays, day];
+                return { ...tr, applicableDays: newDays };
+              }
+              return tr;
+            }),
+          };
+        }
+        return rate;
+      })
+    }));
+  };
+
   const addExpenseEntry = () => {
     if (!selectedTemplate || selectedTemplate.expenseCategories.length === 0) {
       alert('Please select a template with expense categories first');
@@ -317,6 +341,23 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate time-based rates for overlaps
+    const allOverlaps: string[] = [];
+    formData.rates.forEach((rate, idx) => {
+      if (rate.timeBasedRates && rate.timeBasedRates.length > 1) {
+        const overlaps = detectTimeRateOverlaps(rate.timeBasedRates);
+        if (overlaps.length > 0) {
+          allOverlaps.push(`Rate Entry #${idx + 1} (${rate.roleName || 'Unnamed'}): ${overlaps.join('; ')}`);
+        }
+      }
+    });
+    
+    if (allOverlaps.length > 0) {
+      alert('Cannot save: Time-based rate overlaps detected:\n\n' + allOverlaps.join('\n\n') + '\n\nPlease fix the overlaps before saving.');
+      return;
+    }
+    
     await onSave(formData);
   };
 
@@ -526,6 +567,57 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
   );
 }
 
+// Utility: Convert time string to minutes since midnight
+function timeToMinutes(time: string): number {
+  const [hours, minutes] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+// Utility: Detect overlapping time-based rates
+function detectTimeRateOverlaps(timeBasedRates: TimeBasedRate[]): string[] {
+  const overlaps: string[] = [];
+  const allDays: DayOfWeek[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
+  for (let i = 0; i < timeBasedRates.length; i++) {
+    for (let j = i + 1; j < timeBasedRates.length; j++) {
+      const rate1 = timeBasedRates[i];
+      const rate2 = timeBasedRates[j];
+
+      // Determine applicable days (empty = all days)
+      const days1 = rate1.applicableDays && rate1.applicableDays.length > 0 ? rate1.applicableDays : allDays;
+      const days2 = rate2.applicableDays && rate2.applicableDays.length > 0 ? rate2.applicableDays : allDays;
+      
+      // Find shared days
+      const sharedDays = days1.filter(day => days2.includes(day));
+
+      if (sharedDays.length > 0) {
+        // Check if time ranges overlap
+        const start1 = timeToMinutes(rate1.startTime);
+        const end1 = timeToMinutes(rate1.endTime);
+        const start2 = timeToMinutes(rate2.startTime);
+        const end2 = timeToMinutes(rate2.endTime);
+
+        // Handle overnight shifts (e.g., 23:00 to 06:00)
+        const actualEnd1 = end1 <= start1 ? end1 + 24 * 60 : end1;
+        const actualEnd2 = end2 <= start2 ? end2 + 24 * 60 : end2;
+
+        // Check for time overlap: NOT (end1 <= start2 OR end2 <= start1)
+        const hasTimeOverlap = !(actualEnd1 <= start2 || actualEnd2 <= start1);
+
+        if (hasTimeOverlap) {
+          const rate1Desc = rate1.description || `${rate1.startTime}-${rate1.endTime}`;
+          const rate2Desc = rate2.description || `${rate2.startTime}-${rate2.endTime}`;
+          const dayList = sharedDays.map(d => d.charAt(0).toUpperCase() + d.slice(1, 3)).join(', ');
+          
+          overlaps.push(`"${rate1Desc}" overlaps with "${rate2Desc}" on ${dayList}`);
+        }
+      }
+    }
+  }
+
+  return overlaps;
+}
+
 // Individual Rate Entry Row Component
 function RateEntryRow({ rate, index, onUpdate, onRemove, resourceCategories, shiftTypes, onAddTimeBasedRate, onRemoveTimeBasedRate, onUpdateTimeBasedRate }: {
   rate: RateEntry;
@@ -538,6 +630,32 @@ function RateEntryRow({ rate, index, onUpdate, onRemove, resourceCategories, shi
   onRemoveTimeBasedRate: (rateIndex: number, timeRateId: string) => void;
   onUpdateTimeBasedRate: (rateIndex: number, timeRateId: string, field: keyof TimeBasedRate, value: any) => void;
 }) {
+  // Detect overlaps in time-based rates
+  const timeRateOverlaps = rate.timeBasedRates && rate.timeBasedRates.length > 1
+    ? detectTimeRateOverlaps(rate.timeBasedRates)
+    : [];
+
+  const toggleDay = (timeRateId: string, day: DayOfWeek) => {
+    const timeRate = rate.timeBasedRates?.find(tr => tr.id === timeRateId);
+    if (timeRate) {
+      const currentDays = timeRate.applicableDays || [];
+      const newDays = currentDays.includes(day)
+        ? currentDays.filter(d => d !== day)
+        : [...currentDays, day];
+      onUpdateTimeBasedRate(index, timeRateId, 'applicableDays', newDays);
+    }
+  };
+
+  const allDays: DayOfWeek[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  const dayLabels: Record<DayOfWeek, string> = {
+    monday: 'Mon',
+    tuesday: 'Tue',
+    wednesday: 'Wed',
+    thursday: 'Thu',
+    friday: 'Fri',
+    saturday: 'Sat',
+    sunday: 'Sun'
+  };
   return (
     <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
       <div className="flex items-center justify-between mb-4">
@@ -682,6 +800,28 @@ function RateEntryRow({ rate, index, onUpdate, onRemove, resourceCategories, shi
           </p>
         </div>
 
+        {/* Overlap Error Display */}
+        {timeRateOverlaps.length > 0 && (
+          <div className="bg-red-50 border border-red-300 rounded-lg p-3 mb-3">
+            <div className="flex items-start">
+              <AlertTriangle className="w-4 h-4 text-red-600 mr-2 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h6 className="text-xs font-semibold text-red-900 mb-1">
+                  ⚠️ Time Range Overlaps Detected
+                </h6>
+                <ul className="text-xs text-red-800 space-y-1 list-disc list-inside">
+                  {timeRateOverlaps.map((error, idx) => (
+                    <li key={idx}>{error}</li>
+                  ))}
+                </ul>
+                <p className="text-xs text-red-700 mt-2">
+                  Please adjust the time ranges or day selections to remove conflicts before saving.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {rate.timeBasedRates && rate.timeBasedRates.length > 0 ? (
           <div className="space-y-2">
             {rate.timeBasedRates.map((timeRate) => (
@@ -699,7 +839,7 @@ function RateEntryRow({ rate, index, onUpdate, onRemove, resourceCategories, shi
                   </button>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
                     <input
@@ -754,6 +894,46 @@ function RateEntryRow({ rate, index, onUpdate, onRemove, resourceCategories, shi
                       placeholder="0.00"
                     />
                   </div>
+                </div>
+
+                {/* Day Checkboxes */}
+                <div className="border-t border-indigo-100 pt-3">
+                  <label className="block text-xs font-medium text-gray-700 mb-2">
+                    📅 Applicable Days <span className="text-gray-500">(leave all unchecked for all days)</span>
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {allDays.map(day => {
+                      const isChecked = timeRate.applicableDays?.includes(day) || false;
+                      return (
+                        <label
+                          key={day}
+                          className={`flex items-center px-3 py-1.5 border rounded-lg cursor-pointer transition ${
+                            isChecked
+                              ? 'bg-indigo-100 border-indigo-400 text-indigo-900'
+                              : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleDay(timeRate.id, day)}
+                            className="w-3 h-3 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 mr-1.5"
+                          />
+                          <span className="text-xs font-medium">{dayLabels[day]}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {timeRate.applicableDays && timeRate.applicableDays.length > 0 && (
+                    <p className="text-xs text-indigo-700 mt-2">
+                      ✓ This rate applies only on: {timeRate.applicableDays.map(d => dayLabels[d]).join(', ')}
+                    </p>
+                  )}
+                  {(!timeRate.applicableDays || timeRate.applicableDays.length === 0) && (
+                    <p className="text-xs text-gray-600 mt-2 italic">
+                      This rate applies on all days of the week
+                    </p>
+                  )}
                 </div>
               </div>
             ))}

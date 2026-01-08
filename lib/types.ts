@@ -316,6 +316,8 @@ export interface RateEntry {
 // TIME-BASED RATE MODEL (NEW)
 // ============================================
 
+export type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
+
 export interface TimeBasedRate {
   id: string;                    // Unique identifier for this time range
   startTime: string;             // e.g., "08:00" (24-hour format)
@@ -323,6 +325,7 @@ export interface TimeBasedRate {
   subcontractorRate: number;     // Hourly rate for subcontractor during this time range
   clientRate: number;            // Hourly rate for client during this time range
   description?: string;          // e.g., "Day rate", "Evening rate", "Night rate"
+  applicableDays?: DayOfWeek[];  // Days this rate applies to (empty = all days)
 }
 
 export interface ExpenseEntry {
