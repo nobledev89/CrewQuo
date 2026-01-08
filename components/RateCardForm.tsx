@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
-import { X, Plus, Trash2, DollarSign, Tag, Calendar, Truck, Clock, Receipt } from 'lucide-react';
-import { RateCard, RateEntry, ResourceCategory, ShiftType, RateCardTemplate, ExpenseEntry } from '@/lib/types';
+import { X, Plus, Trash2, DollarSign, Tag, Calendar, Truck, Clock, Receipt, TimerIcon } from 'lucide-react';
+import { RateCard, RateEntry, ResourceCategory, ShiftType, RateCardTemplate, ExpenseEntry, TimeBasedRate } from '@/lib/types';
 
 interface RateCardFormProps {
   rateCard: RateCard | null;
@@ -194,6 +194,65 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
           }
           
           return updatedRate;
+        }
+        return rate;
+      })
+    }));
+  };
+
+  const addTimeBasedRate = (rateIndex: number) => {
+    setFormData(prev => ({
+      ...prev,
+      rates: prev.rates.map((rate, i) => {
+        if (i === rateIndex) {
+          const timeBasedRates = rate.timeBasedRates || [];
+          const newTimeRate: TimeBasedRate = {
+            id: crypto.randomUUID(),
+            startTime: '08:00',
+            endTime: '17:00',
+            subcontractorRate: rate.subcontractorRate || 0,
+            clientRate: rate.clientRate || 0,
+            description: 'Day rate',
+          };
+          return {
+            ...rate,
+            timeBasedRates: [...timeBasedRates, newTimeRate],
+          };
+        }
+        return rate;
+      })
+    }));
+  };
+
+  const removeTimeBasedRate = (rateIndex: number, timeRateId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      rates: prev.rates.map((rate, i) => {
+        if (i === rateIndex) {
+          return {
+            ...rate,
+            timeBasedRates: (rate.timeBasedRates || []).filter(tr => tr.id !== timeRateId),
+          };
+        }
+        return rate;
+      })
+    }));
+  };
+
+  const updateTimeBasedRate = (rateIndex: number, timeRateId: string, field: keyof TimeBasedRate, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      rates: prev.rates.map((rate, i) => {
+        if (i === rateIndex) {
+          return {
+            ...rate,
+            timeBasedRates: (rate.timeBasedRates || []).map(tr => {
+              if (tr.id === timeRateId) {
+                return { ...tr, [field]: value };
+              }
+              return tr;
+            }),
+          };
         }
         return rate;
       })
@@ -392,7 +451,7 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
               </div>
             ) : (
               <div className="space-y-6">
-                {formData.rates.map((rate, index) => (
+                  {formData.rates.map((rate, index) => (
                   <RateEntryRow
                     key={index}
                     rate={rate}
@@ -401,6 +460,9 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
                     onRemove={removeRateEntry}
                     resourceCategories={resourceCategories}
                     shiftTypes={shiftTypes}
+                    onAddTimeBasedRate={addTimeBasedRate}
+                    onRemoveTimeBasedRate={removeTimeBasedRate}
+                    onUpdateTimeBasedRate={updateTimeBasedRate}
                   />
                 ))}
               </div>
@@ -465,13 +527,16 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
 }
 
 // Individual Rate Entry Row Component
-function RateEntryRow({ rate, index, onUpdate, onRemove, resourceCategories, shiftTypes }: {
+function RateEntryRow({ rate, index, onUpdate, onRemove, resourceCategories, shiftTypes, onAddTimeBasedRate, onRemoveTimeBasedRate, onUpdateTimeBasedRate }: {
   rate: RateEntry;
   index: number;
   onUpdate: (index: number, field: keyof RateEntry, value: any) => void;
   onRemove: (index: number) => void;
   resourceCategories: string[];
   shiftTypes: Array<{ id: string; name: string; rateMultiplier: number }>;
+  onAddTimeBasedRate: (rateIndex: number) => void;
+  onRemoveTimeBasedRate: (rateIndex: number, timeRateId: string) => void;
+  onUpdateTimeBasedRate: (rateIndex: number, timeRateId: string, field: keyof TimeBasedRate, value: any) => void;
 }) {
   return (
     <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
@@ -591,6 +656,113 @@ function RateEntryRow({ rate, index, onUpdate, onRemove, resourceCategories, shi
             />
           </div>
         </div>
+      </div>
+
+      {/* Section 3a: Time-Based Rates (NEW) */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h5 className="text-sm font-semibold text-gray-700 flex items-center">
+            <TimerIcon className="w-4 h-4 mr-1" /> 3a. Time-Based Rates (Optional - Advanced)
+          </h5>
+          <button
+            type="button"
+            onClick={() => onAddTimeBasedRate(index)}
+            className="flex items-center gap-1 px-3 py-1 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-700 transition"
+          >
+            <Plus className="w-3 h-3" />
+            Add Time Range
+          </button>
+        </div>
+        
+        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 mb-3">
+          <p className="text-xs text-indigo-900 font-medium mb-1">💡 Time-Based Rates Feature</p>
+          <p className="text-xs text-indigo-700">
+            Define different rates for specific time ranges (e.g., 8am-5pm = £20/hr, 5pm-midnight = £30/hr). 
+            When subcontractors log time, the system will automatically calculate hours and costs based on these ranges.
+          </p>
+        </div>
+
+        {rate.timeBasedRates && rate.timeBasedRates.length > 0 ? (
+          <div className="space-y-2">
+            {rate.timeBasedRates.map((timeRate) => (
+              <div key={timeRate.id} className="bg-white border border-indigo-200 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-indigo-900">
+                    {timeRate.description || 'Time Range'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onRemoveTimeBasedRate(index, timeRate.id)}
+                    className="p-1 text-red-600 hover:bg-red-50 rounded transition"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
+                    <input
+                      type="text"
+                      value={timeRate.description || ''}
+                      onChange={(e) => onUpdateTimeBasedRate(index, timeRate.id, 'description', e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
+                      placeholder="e.g., Day rate"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Start Time</label>
+                    <input
+                      type="time"
+                      value={timeRate.startTime}
+                      onChange={(e) => onUpdateTimeBasedRate(index, timeRate.id, 'startTime', e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">End Time</label>
+                    <input
+                      type="time"
+                      value={timeRate.endTime}
+                      onChange={(e) => onUpdateTimeBasedRate(index, timeRate.id, 'endTime', e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Sub Rate (£/hr)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={timeRate.subcontractorRate}
+                      onChange={(e) => onUpdateTimeBasedRate(index, timeRate.id, 'subcontractorRate', parseFloat(e.target.value) || 0)}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Client Rate (£/hr)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={timeRate.clientRate}
+                      onChange={(e) => onUpdateTimeBasedRate(index, timeRate.id, 'clientRate', parseFloat(e.target.value) || 0)}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
+            <p className="text-xs text-gray-600">No time-based rates configured. Click "Add Time Range" to set up different rates for specific hours.</p>
+          </div>
+        )}
       </div>
 
       {/* Section 4: Pricing Fields - Combined Subcontractor & Client Rates */}

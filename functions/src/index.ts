@@ -11,6 +11,8 @@ import {
   sendSubcontractorInviteEmail,
   sendRegistrationConfirmationEmail,
   sendInviteAcceptedNotificationEmail,
+  resendApiKey,
+  appUrl,
 } from './email';
 
 // Initialize Firebase Admin
@@ -42,7 +44,9 @@ export const onUserCreated = functions.firestore
  * Complete user signup - creates company and user documents with proper setup
  * This bypasses security rules by using Admin SDK
  */
-export const completeSignup = functions.https.onRequest(async (req, res) => {
+export const completeSignup = functions
+  .runWith({ secrets: [resendApiKey, appUrl] })
+  .https.onRequest(async (req, res) => {
   // Set CORS headers
   const allowedOrigins = ['https://www.crewquo.com', 'https://crewquo.com', 'http://localhost:3000'];
   const origin = req.headers.origin || '';
@@ -772,7 +776,9 @@ export const validateInviteToken = functions.https.onCall(async (data, context) 
  * Send Subcontractor Invite Email
  * Callable function to send invite email to a subcontractor
  */
-export const sendSubcontractorInvite = functions.https.onCall(async (data, context) => {
+export const sendSubcontractorInvite = functions
+  .runWith({ secrets: [resendApiKey, appUrl] })
+  .https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
   }
@@ -848,7 +854,9 @@ export const sendSubcontractorInvite = functions.https.onCall(async (data, conte
 /**
  * Firestore Trigger: Send email when subcontractor invite is created
  */
-export const onSubcontractorInviteCreated = functions.firestore
+export const onSubcontractorInviteCreated = functions
+  .runWith({ secrets: [resendApiKey, appUrl] })
+  .firestore
   .document('subcontractors/{subcontractorId}')
   .onCreate(async (snap, context) => {
     const subcontractor = snap.data();
@@ -890,7 +898,9 @@ export const onSubcontractorInviteCreated = functions.firestore
 /**
  * Firestore Trigger: Send notification when subcontractor accepts invite
  */
-export const onSubcontractorInviteAccepted = functions.firestore
+export const onSubcontractorInviteAccepted = functions
+  .runWith({ secrets: [resendApiKey, appUrl] })
+  .firestore
   .document('subcontractors/{subcontractorId}')
   .onUpdate(async (change, context) => {
     const before = change.before.data();

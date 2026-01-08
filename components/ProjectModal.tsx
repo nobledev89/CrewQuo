@@ -17,7 +17,8 @@ import {
   writeBatch,
   Timestamp,
 } from 'firebase/firestore';
-import { X, Clock, DollarSign, BarChart3, Send, RotateCcw, Plus, Edit2, Trash2, AlertCircle, CheckCircle } from 'lucide-react';
+import { X, Clock, DollarSign, BarChart3, Send, RotateCcw, Plus, Edit2, Trash2, AlertCircle, CheckCircle, TimerIcon, Info } from 'lucide-react';
+import { calculateTimeBasedCost, calculateSimpleCost } from '@/lib/timeBasedRateCalculator';
 
 interface ProjectModalProps {
   isOpen: boolean;
@@ -63,14 +64,18 @@ export default function ProjectModal({
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
 
+  const [useTimePicker, setUseTimePicker] = useState(false);
   const [logForm, setLogForm] = useState({
     date: '',
     rateKey: '',
+    startTime: '',
+    endTime: '',
     hoursRegular: 8,
     hoursOT: 0,
     quantity: 1,
     notes: '',
   });
+  const [calculationBreakdown, setCalculationBreakdown] = useState<any[]>([]);
 
   const [expenseForm, setExpenseForm] = useState({
     date: '',
@@ -168,10 +173,49 @@ export default function ProjectModal({
     ? (matchingBillEntry.clientRate ?? matchingBillEntry.hourlyRate ?? matchingBillEntry.baseRate ?? payRate)
     : (selectedRateEntry?.clientRate ?? payRate);
 
-  const calculatedLog = {
-    cost: payRate * (Number(logForm.hoursRegular) + Number(logForm.hoursOT)) * Number(logForm.quantity),
-    bill: billRate * (Number(logForm.hoursRegular) + Number(logForm.hoursOT)) * Number(logForm.quantity),
-  };
+  // Calculate cost based on time picker or manual entry
+  let calculatedLog = { cost: 0, bill: 0, hours: 0 };
+  
+  if (useTimePicker && logForm.startTime && logForm.endTime && selectedRateEntry) {
+    const timeBasedRates = selectedRateEntry.timeBasedRates;
+    
+    if (timeBasedRates && timeBasedRates.length > 0) {
+      // Use time-based calculation
+      const result = calculateTimeBasedCost(
+        logForm.startTime,
+        logForm.endTime,
+        timeBasedRates,
+        payRate,
+        billRate
+      );
+      
+      calculatedLog.hours = result.totalHours;
+      calculatedLog.cost = result.subcontractorCost * Number(logForm.quantity);
+      calculatedLog.bill = result.clientBill * Number(logForm.quantity);
+      setCalculationBreakdown(result.breakdown);
+    } else {
+      // Calculate hours from times, use standard rates
+      const startMinutes = parseInt(logForm.startTime.split(':')[0]) * 60 + parseInt(logForm.startTime.split(':')[1]);
+      let endMinutes = parseInt(logForm.endTime.split(':')[0]) * 60 + parseInt(logForm.endTime.split(':')[1]);
+      
+      if (endMinutes <= startMinutes) {
+        endMinutes += 24 * 60;
+      }
+      
+      const hours = (endMinutes - startMinutes) / 60;
+      calculatedLog.hours = Math.round(hours * 100) / 100;
+      calculatedLog.cost = payRate * hours * Number(logForm.quantity);
+      calculatedLog.bill = billRate * hours * Number(logForm.quantity);
+      setCalculationBreakdown([]);
+    }
+  } else {
+    // Manual entry
+    calculatedLog.hours = Number(logForm.hoursRegular) + Number(logForm.hoursOT);
+    calculatedLog.cost = payRate * calculatedLog.hours * Number(logForm.quantity);
+    calculatedLog.bill = billRate * calculatedLog.hours * Number(logForm.quantity);
+    setCalculationBreakdown([]);
+  }
+  
   calculatedLog.cost = Math.round(calculatedLog.cost * 100) / 100;
   calculatedLog.bill = Math.round(calculatedLog.bill * 100) / 100;
 
@@ -229,6 +273,8 @@ export default function ProjectModal({
       setLogForm({
         date: '',
         rateKey: '',
+        startTime: '',
+        endTime: '',
         hoursRegular: 8,
         hoursOT: 0,
         quantity: 1,

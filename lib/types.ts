@@ -278,6 +278,9 @@ export interface RateEntry {
   endTime?: string;              // e.g., "17:00"
   totalHours?: number;           // Total hours worked
   
+  // 3a. Time-based rate configuration (NEW)
+  timeBasedRates?: TimeBasedRate[];  // Array of time ranges with rates
+  
   // 4. Pricing Fields - Combined Subcontractor & Client Rates
   // Primary rates (new unified approach)
   subcontractorRate: number;     // What you pay the subcontractor (hourly)
@@ -307,6 +310,19 @@ export interface RateEntry {
   overtimeRules?: string;
   specialConditions?: string;
   invoicingNotes?: string;
+}
+
+// ============================================
+// TIME-BASED RATE MODEL (NEW)
+// ============================================
+
+export interface TimeBasedRate {
+  id: string;                    // Unique identifier for this time range
+  startTime: string;             // e.g., "08:00" (24-hour format)
+  endTime: string;               // e.g., "17:00" (24-hour format)
+  subcontractorRate: number;     // Hourly rate for subcontractor during this time range
+  clientRate: number;            // Hourly rate for client during this time range
+  description?: string;          // e.g., "Day rate", "Evening rate", "Night rate"
 }
 
 export interface ExpenseEntry {

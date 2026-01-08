@@ -37,7 +37,7 @@ git push origin main
 In Vercel Dashboard → Your Project → **Settings** → **Environment Variables**:
 
 ```env
-# Firebase Configuration
+# Firebase Configuration (Client-side)
 NEXT_PUBLIC_FIREBASE_API_KEY=your_value
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_value
 NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_value
@@ -45,11 +45,25 @@ NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_value
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_value
 NEXT_PUBLIC_FIREBASE_APP_ID=your_value
 
+# Firebase Admin SDK (Server-side) - Required for API routes (create-user, etc.)
+# Get these from Firebase Console → Project Settings → Service Accounts → Generate new private key
+FIREBASE_ADMIN_PROJECT_ID=your_project_id
+FIREBASE_ADMIN_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your_project_id.iam.gserviceaccount.com
+FIREBASE_ADMIN_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYOUR_PRIVATE_KEY...\n-----END PRIVATE KEY-----\n"
+
 # Gumroad Configuration
 NEXT_PUBLIC_GUMROAD_PRODUCT_PERMALINK=zxjxzj
+
+# Email Configuration (Resend)
+RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Application URL
+APP_URL=https://crewquo.com
 ```
 
-**Important**: Apply to all environments (Production, Preview, Development)
+**Important**: 
+- Apply to all environments (Production, Preview, Development)
+- For `FIREBASE_ADMIN_PRIVATE_KEY`: When pasting in Vercel, replace `\n` with actual newlines, or wrap the entire value in double quotes
 
 ### 4. Configure Custom Domain
 

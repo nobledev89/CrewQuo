@@ -1,24 +1,31 @@
 import { Resend } from 'resend';
+import { defineSecret } from 'firebase-functions/params';
 
-// Lazy initialization of Resend to avoid build-time errors
-let resend: Resend | null = null;
+// Define Firebase secrets for email configuration
+export const resendApiKey = defineSecret('RESEND_API_KEY');
+export const appUrl = defineSecret('APP_URL');
+
+// Create Resend client - called at runtime when secret is available
 function getResendClient(): Resend {
-  if (!resend) {
-    const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey) {
-      console.warn('RESEND_API_KEY not set, email functionality will be limited');
-      // Create a dummy instance that won't actually send emails
-      resend = new Resend('re_dummy_key_for_build');
-    } else {
-      resend = new Resend(apiKey);
-    }
+  const apiKey = resendApiKey.value();
+  if (!apiKey || apiKey === 'not-set') {
+    console.error('RESEND_API_KEY secret not set! Emails will not be sent.');
+    throw new Error('Email service not configured: RESEND_API_KEY is missing');
   }
-  return resend;
+  return new Resend(apiKey);
 }
 
 const FROM_EMAIL = 'support@crewquo.com';
 const COMPANY_NAME = 'CrewQuo';
-const APP_URL = process.env.APP_URL || 'https://crewquo.com';
+
+function getAppUrl(): string {
+  try {
+    const url = appUrl.value();
+    return url && url !== 'not-set' ? url : 'https://crewquo.com';
+  } catch {
+    return 'https://crewquo.com';
+  }
+}
 
 /**
  * Email Templates
@@ -32,7 +39,7 @@ const getEmailHeader = () => `
     </div>
 `;
 
-const getEmailFooter = () => `
+const getEmailFooter = (baseUrl: string) => `
     <div style="background-color: #f9fafb; padding: 30px; text-align: center; border-top: 1px solid #e5e7eb;">
       <p style="color: #6b7280; font-size: 14px; margin: 0 0 10px 0;">
         This email was sent from ${COMPANY_NAME}
@@ -41,8 +48,8 @@ const getEmailFooter = () => `
         ${COMPANY_NAME} • Streamline your subcontractor management
       </p>
       <div style="margin-top: 15px;">
-        <a href="${APP_URL}" style="color: #2563eb; text-decoration: none; font-size: 12px; margin: 0 10px;">Visit Website</a>
-        <a href="${APP_URL}/login" style="color: #2563eb; text-decoration: none; font-size: 12px; margin: 0 10px;">Login</a>
+        <a href="${baseUrl}" style="color: #2563eb; text-decoration: none; font-size: 12px; margin: 0 10px;">Visit Website</a>
+        <a href="${baseUrl}/login" style="color: #2563eb; text-decoration: none; font-size: 12px; margin: 0 10px;">Login</a>
       </div>
     </div>
   </div>
@@ -59,7 +66,8 @@ export async function sendSubcontractorInviteEmail(
   inviterName?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const inviteLink = `${APP_URL}/signup/subcontractor?token=${inviteToken}`;
+    const baseUrl = getAppUrl();
+    const inviteLink = `${baseUrl}/signup/subcontractor?token=${inviteToken}`;
     
     const html = `
       ${getEmailHeader()}
@@ -106,7 +114,7 @@ export async function sendSubcontractorInviteEmail(
           <a href="${inviteLink}" style="color: #2563eb; word-break: break-all;">${inviteLink}</a>
         </p>
       </div>
-      ${getEmailFooter()}
+      ${getEmailFooter(baseUrl)}
     `;
 
     const { data, error } = await getResendClient().emails.send({
@@ -139,8 +147,9 @@ export async function sendRegistrationConfirmationEmail(
   trialEndsAt: Date
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const loginLink = `${APP_URL}/login`;
-    const dashboardLink = `${APP_URL}/dashboard`;
+    const baseUrl = getAppUrl();
+    const loginLink = `${baseUrl}/login`;
+    const dashboardLink = `${baseUrl}/dashboard`;
     const trialEndDate = trialEndsAt.toLocaleDateString('en-GB', { 
       day: 'numeric', 
       month: 'long', 
@@ -196,10 +205,10 @@ export async function sendRegistrationConfirmationEmail(
           </p>
           <ul style="color: #6b7280; font-size: 14px; margin: 0; padding-left: 20px; list-style: none;">
             <li style="margin-bottom: 8px;">
-              ✓ <a href="${APP_URL}/introduction" style="color: #2563eb; text-decoration: none;">Getting Started Guide</a>
+              ✓ <a href="${baseUrl}/introduction" style="color: #2563eb; text-decoration: none;">Getting Started Guide</a>
             </li>
             <li style="margin-bottom: 8px;">
-              ✓ <a href="${APP_URL}/pricing" style="color: #2563eb; text-decoration: none;">View Pricing Plans</a>
+              ✓ <a href="${baseUrl}/pricing" style="color: #2563eb; text-decoration: none;">View Pricing Plans</a>
             </li>
             <li style="margin-bottom: 8px;">
               ✓ Need help? Reply to this email for support
@@ -228,7 +237,7 @@ export async function sendRegistrationConfirmationEmail(
           Your login URL: <a href="${loginLink}" style="color: #2563eb;">${loginLink}</a>
         </p>
       </div>
-      ${getEmailFooter()}
+      ${getEmailFooter(baseUrl)}
     `;
 
     const { data, error } = await getResendClient().emails.send({
@@ -261,6 +270,7 @@ export async function sendInviteAcceptedNotificationEmail(
   subcontractorEmail: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const baseUrl = getAppUrl();
     const html = `
       ${getEmailHeader()}
       <div style="padding: 40px 30px;">
@@ -285,12 +295,12 @@ export async function sendInviteAcceptedNotificationEmail(
         </p>
         
         <div style="text-align: center; margin: 40px 0;">
-          <a href="${APP_URL}/dashboard/subcontractors" style="background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: #ffffff; padding: 16px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; display: inline-block;">
+          <a href="${baseUrl}/dashboard/subcontractors" style="background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: #ffffff; padding: 16px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; display: inline-block;">
             View Subcontractors
           </a>
         </div>
       </div>
-      ${getEmailFooter()}
+      ${getEmailFooter(baseUrl)}
     `;
 
     const { data, error } = await getResendClient().emails.send({
