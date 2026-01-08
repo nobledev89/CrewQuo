@@ -150,7 +150,7 @@ export default function ProjectModal({
   const rateOptions =
     payCard?.rates?.map((r: any, idx: number) => ({
       key: `${idx}`,
-      label: `${r.roleName} - ${r.shiftType}`,
+      label: `${r.roleName} - ${r.timeframeName || r.shiftType || 'Standard'}`,
       value: r,
     })) || [];
 
@@ -161,9 +161,14 @@ export default function ProjectModal({
 
   const matchingBillEntry =
     billCard?.rates?.find(
-      (r: any) =>
-        r.roleName === selectedRateEntry?.roleName &&
-        r.shiftType === selectedRateEntry?.shiftType
+      (r: any) => {
+        // Match by roleName and either timeframeId (new) or shiftType (old)
+        const roleMatch = r.roleName === selectedRateEntry?.roleName;
+        const timeframeMatch = selectedRateEntry?.timeframeId
+          ? r.timeframeId === selectedRateEntry.timeframeId
+          : r.shiftType === selectedRateEntry?.shiftType;
+        return roleMatch && timeframeMatch;
+      }
     ) || undefined;
 
   const payRate = selectedRateEntry
@@ -244,7 +249,8 @@ export default function ProjectModal({
       const activeCompanyId = userData?.activeCompanyId || userData?.companyId;
       const subRole = userData?.subcontractorRoles?.[activeCompanyId];
 
-      await addDoc(collection(db, 'timeLogs'), {
+      // Build time log data with support for both new and old rate card systems
+      const timeLogData: any = {
         companyId: activeCompanyId,
         projectId: project.projectId,
         clientId: project.clientId,
@@ -252,9 +258,9 @@ export default function ProjectModal({
         createdByUserId: user.uid,
         date: new Date(logForm.date),
         roleName: selectedRateEntry.roleName,
-        shiftType: selectedRateEntry.shiftType,
         hoursRegular: Number(logForm.hoursRegular),
         hoursOT: Number(logForm.hoursOT),
+        quantity: Number(logForm.quantity),
         subCost: calculatedLog.cost,
         clientBill: calculatedLog.bill,
         marginValue: calculatedLog.bill - calculatedLog.cost,
@@ -262,13 +268,25 @@ export default function ProjectModal({
           calculatedLog.bill > 0
             ? ((calculatedLog.bill - calculatedLog.cost) / calculatedLog.bill) * 100
             : 0,
+        unitSubCost: payRate,
+        unitClientBill: billRate,
         currency: 'GBP',
         payRateCardId: rateAssignment?.payRateCardId || null,
         billRateCardId: rateAssignment?.billRateCardId || null,
         status,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-      });
+      };
+
+      // Add timeframe fields (new system) or shiftType (old system)
+      if (selectedRateEntry.timeframeId && selectedRateEntry.timeframeName) {
+        timeLogData.timeframeId = selectedRateEntry.timeframeId;
+        timeLogData.timeframeName = selectedRateEntry.timeframeName;
+      } else if (selectedRateEntry.shiftType) {
+        timeLogData.shiftType = selectedRateEntry.shiftType;
+      }
+
+      await addDoc(collection(db, 'timeLogs'), timeLogData);
 
       setLogForm({
         date: '',

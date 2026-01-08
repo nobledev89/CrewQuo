@@ -421,7 +421,7 @@ export default function TimesheetsPage() {
       rows.push([
         dateStr,
         'Time Log',
-        log.roleName || '',
+        `${log.roleName || ''}${(log.timeframeName || log.shiftType) ? ' - ' + (log.timeframeName || log.shiftType) : ''}`,
         log.hoursRegular?.toFixed(1) || '0',
         log.hoursOT?.toFixed(1) || '0',
         '',
@@ -506,7 +506,7 @@ export default function TimesheetsPage() {
           timesheet.submission.status,
           dateStr,
           'Time Log',
-          log.roleName || '',
+          `${log.roleName || ''}${(log.timeframeName || log.shiftType) ? ' - ' + (log.timeframeName || log.shiftType) : ''}`,
           log.hoursRegular?.toFixed(1) || '0',
           log.hoursOT?.toFixed(1) || '0',
           '',
@@ -728,7 +728,14 @@ export default function TimesheetsPage() {
                           <tr key={`log_${log.id}`} className="hover:bg-gray-50">
                             <td className="px-4 py-4 text-sm text-gray-600">{dateStr}</td>
                             <td className="px-4 py-4 text-sm font-medium text-gray-900">Time Log</td>
-                            <td className="px-4 py-4 text-sm text-gray-900">{log.roleName}</td>
+                            <td className="px-4 py-4 text-sm text-gray-900">
+                              <div>{log.roleName}</div>
+                              {(log.timeframeName || log.shiftType) && (
+                                <div className="text-xs text-gray-500 mt-0.5">
+                                  {log.timeframeName || log.shiftType}
+                                </div>
+                              )}
+                            </td>
                             <td className="px-4 py-4 text-center text-sm text-gray-900">
                               {log.hoursRegular.toFixed(1)}h
                               {log.hoursOT && log.hoursOT > 0 && (

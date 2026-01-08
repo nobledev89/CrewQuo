@@ -415,35 +415,42 @@ export interface TimeLog {
   clientId: string;
   subcontractorId: string;
   createdByUserId: string;
-  
+
   // Work details
   date: Timestamp;
   roleName: string;
-  shiftType: string;
+
+  // Timeframe reference (NEW - preferred)
+  timeframeId?: string;      // References TimeframeDefinition from template
+  timeframeName?: string;    // Denormalized for display
+
+  // Legacy field (for backward compatibility)
+  shiftType?: string;        // Old field - still supported for existing logs
+
   hoursRegular: number;
   hoursOT?: number;
-  
+
   // Quantity support (NEW)
   quantity: number;        // Number of people (default: 1)
-  
+
   // Financial details
   subCost: number;         // What we pay the subcontractor (total: quantity × hoursRegular × unitSubCost + quantity × hoursOT × unitSubCost)
   clientBill?: number;     // What we bill the client (optional)
   marginValue?: number;    // clientBill - subCost
   marginPct?: number;      // (marginValue / clientBill) * 100
-  
+
   // Unit rates (NEW) - for reference/calculation
   unitSubCost?: number;    // Per person hourly cost (before multiplying by quantity & hours)
   unitClientBill?: number; // Per person hourly billing (before multiplying by quantity & hours)
-  
+
   // Rate card references - tracks which cards were used for calculation
   payRateCardId: string;   // Card used to calculate subCost (what we pay subcontractor)
   billRateCardId?: string; // Card used to calculate clientBill (what we charge client)
-  
+
   // Metadata
   currency: string;        // e.g., 'GBP'
   status?: string;         // e.g., 'DRAFT', 'SUBMITTED', 'APPROVED'
-  
+
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

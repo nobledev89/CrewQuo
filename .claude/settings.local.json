@@ -3,7 +3,9 @@
     "allow": [
       "Bash(npm run build:*)",
       "Bash(npx tsc:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat: Complete Rate Card System refactoring with timeframe-based rates\n\nMajor Updates:\n- Simplified RateCardForm.tsx from 1282 to 794 lines (38% reduction)\n- Added accordion UI for rate entries (one expanded at a time)\n- Replaced shift types with timeframe definitions system\n- Removed all legacy fields (time-based rates, multipliers, base rates, etc.)\n- Auto-calculated margins displayed in real-time\n- Updated Rate Cards page to show timeframe information\n- Enhanced rate card display with first 3 entries preview\n\nTechnical Changes:\n- RateEntry now uses timeframeId/timeframeName instead of shiftType\n- Simplified rate structure: only subcontractorRate, clientRate, margin\n- Templates now required (prevents inconsistent data)\n- Backward compatible with existing rate cards\n- All TypeScript types updated and validated\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
