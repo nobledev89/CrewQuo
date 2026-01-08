@@ -4,6 +4,57 @@ All notable changes and implemented features for CrewQuo.
 
 ---
 
+## January 2026
+
+### Time-Based Rate Card System
+**Status:** ✅ Complete
+
+- **Dynamic Rate Configuration by Time of Day**
+  - Configure multiple time ranges with different rates (e.g., 08:00-17:00 day rate, 17:00-23:00 evening rate)
+  - Support for overnight shifts (e.g., 23:00-06:00 automatically calculates 7 hours)
+  - Each time range has separate subcontractor and client rates
+  - Optional description field for each range
+
+- **Automatic Calculation Engine** (`lib/timeBasedRateCalculator.ts`)
+  - Smart algorithm splits work hours across multiple rate ranges
+  - Automatically calculates total hours and costs
+  - Provides detailed breakdown by time range
+  - Handles edge cases (same start/end time, invalid ranges, overnight shifts)
+  - Falls back to standard flat rates when no time-based config exists
+
+- **Enhanced Rate Card UI** (`components/RateCardForm.tsx`)
+  - New "Time-Based Rates" section with indigo theme
+  - Add/remove time ranges dynamically
+  - Time pickers for start/end times (24-hour format)
+  - Real-time validation
+  - Visual indicators for configured ranges
+  - Backward compatible with existing rate cards
+
+- **Subcontractor Experience** (`components/ProjectModal.tsx`)
+  - Integrated calculation on time entry
+  - Automatic cost preview based on time ranges
+  - System detects and applies time-based rates automatically
+  - Seamless experience for subcontractors
+
+- **Database Schema**
+  - Added `timeBasedRates[]` array to `RateEntry` interface
+  - Each time range includes: `startTime`, `endTime`, `subcontractorRate`, `clientRate`, `description`
+  - Fully backward compatible - existing rate cards work unchanged
+
+- **Documentation**
+  - Comprehensive implementation guide in `TIME_BASED_RATES_IMPLEMENTATION.md`
+  - User workflows for admins and subcontractors
+  - Testing scenarios and examples
+  - Troubleshooting guide
+
+**Use Cases:**
+- Different rates for day vs night shifts
+- Premium rates for evening/weekend work
+- Multiple pricing tiers within a single day
+- Overnight shift support
+
+---
+
 ## December 2025
 
 ### Timesheet & Approval System

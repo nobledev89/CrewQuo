@@ -23,7 +23,10 @@ CrewQuo is an all-in-one platform that streamlines project management, time trac
 
 ### 💰 Rate Card System
 - Create custom rate cards for different service categories
+- **Time-Based Rates**: Configure different rates for different times of day (e.g., day/evening/night rates)
+- **Automatic Calculation**: System automatically calculates hours and costs based on start/end times
 - Assign specific rate cards to client-subcontractor relationships
+- Support for overnight shifts and multiple rate ranges
 - Track billing rates per project
 
 ### 📧 Email System

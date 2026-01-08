@@ -219,13 +219,32 @@ npm start
 firebase emulators:start
 ```
 
-### 4. Commit & Push
+### 4. Commit & Deploy
+
+**Vercel Deployment (Automatic):**
 ```bash
 git add .
 git commit -m "feat: description of changes"
 git push origin main
-# Auto-deploys to Vercel
+# Automatically triggers Vercel deployment
+# Check status at https://vercel.com/dashboard
 ```
+
+**Manual Deployment (if needed):**
+```bash
+# Install Vercel CLI
+npm i -g vercel
+
+# Deploy
+vercel --prod
+```
+
+**Environment Variables (Vercel):**
+- Set in Vercel Dashboard → Project → Settings → Environment Variables
+- Required for production:
+  - All NEXT_PUBLIC_FIREBASE_* variables
+  - RESEND_API_KEY
+  - APP_URL (your production URL)
 
 ---
 
