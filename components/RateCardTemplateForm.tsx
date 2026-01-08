@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { X, Plus, Trash2, Clock, Receipt, Tag } from 'lucide-react';
-import { RateCardTemplate, CustomShiftType, ExpenseCategory } from '@/lib/types';
+import { RateCardTemplate, TimeframeDefinition, ExpenseCategory, DayOfWeek } from '@/lib/types';
 
 interface RateCardTemplateFormProps {
   template: RateCardTemplate | null;
@@ -14,21 +14,53 @@ interface RateCardTemplateFormProps {
 export interface RateCardTemplateFormData {
   name: string;
   description: string;
-  shiftTypes: CustomShiftType[];
+  timeframeDefinitions: TimeframeDefinition[];
   expenseCategories: ExpenseCategory[];
   resourceCategories: string[];
   active: boolean;
   isDefault: boolean;
 }
 
+const allDays: DayOfWeek[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+const dayLabels: Record<DayOfWeek, string> = {
+  monday: 'Mon',
+  tuesday: 'Tue',
+  wednesday: 'Wed',
+  thursday: 'Thu',
+  friday: 'Fri',
+  saturday: 'Sat',
+  sunday: 'Sun'
+};
+
 export default function RateCardTemplateForm({ template, onSave, onClose, saving }: RateCardTemplateFormProps) {
   const [formData, setFormData] = useState<RateCardTemplateFormData>({
     name: template?.name || '',
     description: template?.description || '',
-    shiftTypes: template?.shiftTypes || [
-      { id: crypto.randomUUID(), name: 'Standard Weekday', rateMultiplier: 1.0, description: 'Mon-Fri standard hours' },
-      { id: crypto.randomUUID(), name: 'Saturday', rateMultiplier: 1.5, description: 'Saturday rate (time and a half)' },
-      { id: crypto.randomUUID(), name: 'Sunday', rateMultiplier: 2.0, description: 'Sunday rate (double time)' },
+    timeframeDefinitions: template?.timeframeDefinitions || template?.shiftTypes || [
+      { 
+        id: crypto.randomUUID(), 
+        name: 'Day Rate Mon-Fri', 
+        description: 'Standard weekday working hours',
+        startTime: '08:00',
+        endTime: '17:00',
+        applicableDays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday']
+      },
+      { 
+        id: crypto.randomUUID(), 
+        name: 'Saturday Rate', 
+        description: 'Saturday working hours',
+        startTime: '08:00',
+        endTime: '17:00',
+        applicableDays: ['saturday']
+      },
+      { 
+        id: crypto.randomUUID(), 
+        name: 'Sunday Rate', 
+        description: 'Sunday working hours',
+        startTime: '08:00',
+        endTime: '17:00',
+        applicableDays: ['sunday']
+      },
     ],
     expenseCategories: template?.expenseCategories || [
       { id: crypto.randomUUID(), name: 'Mileage', unitType: 'per_mile', defaultRate: 0.45, taxable: false },
@@ -48,35 +80,53 @@ export default function RateCardTemplateForm({ template, onSave, onClose, saving
     }));
   };
 
-  // Shift Type Management
-  const addShiftType = () => {
+  // Timeframe Management
+  const addTimeframe = () => {
     setFormData(prev => ({
       ...prev,
-      shiftTypes: [
-        ...prev.shiftTypes,
+      timeframeDefinitions: [
+        ...prev.timeframeDefinitions,
         {
           id: crypto.randomUUID(),
           name: '',
           description: '',
-          rateMultiplier: 1.0,
+          startTime: '08:00',
+          endTime: '17:00',
+          applicableDays: []
         }
       ]
     }));
   };
 
-  const removeShiftType = (index: number) => {
+  const removeTimeframe = (index: number) => {
     setFormData(prev => ({
       ...prev,
-      shiftTypes: prev.shiftTypes.filter((_, i) => i !== index)
+      timeframeDefinitions: prev.timeframeDefinitions.filter((_, i) => i !== index)
     }));
   };
 
-  const updateShiftType = (index: number, field: keyof CustomShiftType, value: any) => {
+  const updateTimeframe = (index: number, field: keyof TimeframeDefinition, value: any) => {
     setFormData(prev => ({
       ...prev,
-      shiftTypes: prev.shiftTypes.map((st, i) => 
-        i === index ? { ...st, [field]: value } : st
+      timeframeDefinitions: prev.timeframeDefinitions.map((tf, i) => 
+        i === index ? { ...tf, [field]: value } : tf
       )
+    }));
+  };
+
+  const toggleTimeframeDay = (index: number, day: DayOfWeek) => {
+    setFormData(prev => ({
+      ...prev,
+      timeframeDefinitions: prev.timeframeDefinitions.map((tf, i) => {
+        if (i === index) {
+          const currentDays = tf.applicableDays || [];
+          const newDays = currentDays.includes(day)
+            ? currentDays.filter(d => d !== day)
+            : [...currentDays, day];
+          return { ...tf, applicableDays: newDays };
+        }
+        return tf;
+      })
     }));
   };
 
@@ -141,14 +191,14 @@ export default function RateCardTemplateForm({ template, onSave, onClose, saving
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validate shift types
-    if (formData.shiftTypes.length === 0) {
-      alert('Please add at least one shift type');
+    // Validate timeframes
+    if (formData.timeframeDefinitions.length === 0) {
+      alert('Please add at least one timeframe definition');
       return;
     }
     
-    if (formData.shiftTypes.some(st => !st.name || st.rateMultiplier <= 0)) {
-      alert('Please ensure all shift types have a name and valid multiplier');
+    if (formData.timeframeDefinitions.some(tf => !tf.name || !tf.startTime || !tf.endTime)) {
+      alert('Please ensure all timeframes have a name, start time, and end time');
       return;
     }
 
@@ -240,32 +290,40 @@ export default function RateCardTemplateForm({ template, onSave, onClose, saving
             </div>
           </div>
 
-          {/* Shift Types */}
+          {/* Timeframe Definitions */}
           <div className="space-y-4 border-t border-gray-200 pt-6">
             <div className="flex items-center justify-between">
               <h4 className="text-lg font-semibold text-gray-900 flex items-center">
                 <Clock className="w-5 h-5 mr-2 text-blue-600" />
-                Shift Types ({formData.shiftTypes.length})
+                Timeframe Definitions ({formData.timeframeDefinitions.length})
               </h4>
               <button
                 type="button"
-                onClick={addShiftType}
+                onClick={addTimeframe}
                 className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
               >
                 <Plus className="w-4 h-4" />
-                <span>Add Shift Type</span>
+                <span>Add Timeframe</span>
               </button>
             </div>
 
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <p className="text-sm text-blue-900 font-semibold mb-2">💡 What are Timeframe Definitions?</p>
+              <p className="text-sm text-blue-800">
+                Timeframes define when different rates apply (e.g., "Day Rate Mon-Fri 08:00-17:00", "Night Rate 18:00-06:00", "Weekend Rate"). 
+                When creating rate cards, you'll select from these timeframes and specify the actual rates for each role.
+              </p>
+            </div>
+
             <div className="space-y-3">
-              {formData.shiftTypes.map((shiftType, index) => (
-                <div key={shiftType.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              {formData.timeframeDefinitions.map((timeframe, index) => (
+                <div key={timeframe.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                   <div className="flex items-start justify-between mb-3">
-                    <span className="text-sm font-bold text-gray-900">Shift #{index + 1}</span>
-                    {formData.shiftTypes.length > 1 && (
+                    <span className="text-sm font-bold text-gray-900">Timeframe #{index + 1}</span>
+                    {formData.timeframeDefinitions.length > 1 && (
                       <button
                         type="button"
-                        onClick={() => removeShiftType(index)}
+                        onClick={() => removeTimeframe(index)}
                         className="p-1 text-red-600 hover:bg-red-50 rounded transition"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -273,48 +331,95 @@ export default function RateCardTemplateForm({ template, onSave, onClose, saving
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Shift Name *</label>
-                      <input
-                        type="text"
-                        required
-                        value={shiftType.name}
-                        onChange={(e) => updateShiftType(index, 'name', e.target.value)}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        placeholder="e.g., Sunday, Night Shift"
-                      />
+                  <div className="space-y-4">
+                    {/* Name and Description */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Timeframe Name *</label>
+                        <input
+                          type="text"
+                          required
+                          value={timeframe.name}
+                          onChange={(e) => updateTimeframe(index, 'name', e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          placeholder="e.g., Day Rate Mon-Fri, Night Rate"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
+                        <input
+                          type="text"
+                          value={timeframe.description || ''}
+                          onChange={(e) => updateTimeframe(index, 'description', e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          placeholder="Optional description"
+                        />
+                      </div>
                     </div>
 
+                    {/* Time Range */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Start Time *</label>
+                        <input
+                          type="time"
+                          required
+                          value={timeframe.startTime}
+                          onChange={(e) => updateTimeframe(index, 'startTime', e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">End Time *</label>
+                        <input
+                          type="time"
+                          required
+                          value={timeframe.endTime}
+                          onChange={(e) => updateTimeframe(index, 'endTime', e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Applicable Days */}
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Rate Multiplier *</label>
-                      <input
-                        type="number"
-                        required
-                        step="0.1"
-                        min="0.1"
-                        value={shiftType.rateMultiplier}
-                        onChange={(e) => updateShiftType(index, 'rateMultiplier', parseFloat(e.target.value))}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        placeholder="1.5"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        {shiftType.rateMultiplier === 1 ? 'Standard rate' : 
-                         shiftType.rateMultiplier === 1.5 ? 'Time and a half' :
-                         shiftType.rateMultiplier === 2 ? 'Double time' :
-                         `${shiftType.rateMultiplier}x base rate`}
-                      </p>
-                    </div>
-
-                    <div className="md:col-span-1">
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
-                      <input
-                        type="text"
-                        value={shiftType.description || ''}
-                        onChange={(e) => updateShiftType(index, 'description', e.target.value)}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        placeholder="Optional"
-                      />
+                      <label className="block text-xs font-medium text-gray-700 mb-2">
+                        📅 Applicable Days *
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {allDays.map(day => {
+                          const isChecked = timeframe.applicableDays?.includes(day) || false;
+                          return (
+                            <label
+                              key={day}
+                              className={`flex items-center px-3 py-2 border rounded-lg cursor-pointer transition ${
+                                isChecked
+                                  ? 'bg-blue-100 border-blue-400 text-blue-900'
+                                  : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => toggleTimeframeDay(index, day)}
+                                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-2"
+                              />
+                              <span className="text-sm font-medium">{dayLabels[day]}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      {timeframe.applicableDays && timeframe.applicableDays.length > 0 ? (
+                        <p className="text-xs text-blue-700 mt-2">
+                          ✓ This timeframe applies on: {timeframe.applicableDays.map(d => dayLabels[d]).join(', ')}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-red-600 mt-2">
+                          ⚠️ Please select at least one day
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>

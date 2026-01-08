@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
-import { X, Plus, Trash2, DollarSign, Tag, Calendar, Truck, Clock, Receipt, TimerIcon, AlertTriangle } from 'lucide-react';
-import { RateCard, RateEntry, ResourceCategory, ShiftType, RateCardTemplate, ExpenseEntry, TimeBasedRate, DayOfWeek } from '@/lib/types';
+import { X, Plus, Trash2, DollarSign, Tag, Receipt, ChevronDown, ChevronUp, Clock } from 'lucide-react';
+import { RateCard, RateEntry, ResourceCategory, RateCardTemplate, ExpenseEntry, TimeframeDefinition } from '@/lib/types';
 
 interface RateCardFormProps {
   rateCard: RateCard | null;
@@ -27,18 +27,13 @@ export interface RateCardFormData {
 
 // Legacy defaults for backward compatibility
 const LEGACY_RESOURCE_CATEGORIES: ResourceCategory[] = ['Labour', 'Vehicle', 'Specialist Service', 'Other'];
-const LEGACY_SHIFT_TYPES: ShiftType[] = [
-  'Mon–Fri (1st 8 hours)',
-  'Friday & Saturday nights',
-  'Saturday & Mon–Thurs nights',
-  'Sunday'
-];
 
 export default function RateCardForm({ rateCard, onSave, onClose, saving, companyId }: RateCardFormProps) {
   const [templates, setTemplates] = useState<RateCardTemplate[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<RateCardTemplate | null>(null);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
-  
+  const [expandedRateIndex, setExpandedRateIndex] = useState<number | null>(0); // First entry expanded by default
+
   const [formData, setFormData] = useState<RateCardFormData>({
     name: rateCard?.name || '',
     description: rateCard?.description || '',
@@ -64,9 +59,9 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
           id: doc.id,
           ...doc.data(),
         } as RateCardTemplate));
-        
+
         setTemplates(templatesData);
-        
+
         // Set selected template if editing
         if (rateCard?.templateId) {
           const template = templatesData.find(t => t.id === rateCard.templateId);
@@ -95,10 +90,9 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
     fetchTemplates();
   }, [companyId, rateCard]);
 
-  // Get resource categories and shift types from template or use legacy
+  // Get resource categories and timeframe definitions from template or use legacy
   const resourceCategories = selectedTemplate?.resourceCategories || LEGACY_RESOURCE_CATEGORIES;
-  const shiftTypes = selectedTemplate?.shiftTypes || 
-    LEGACY_SHIFT_TYPES.map(st => ({ id: st, name: st, rateMultiplier: 1.0 }));
+  const timeframeDefinitions = selectedTemplate?.timeframeDefinitions || [];
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -115,49 +109,43 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
       ...prev,
       templateId: template?.id,
       templateName: template?.name,
-      cardType: undefined, // Removed - no longer used
+      rates: [], // Clear rates when template changes
     }));
   };
 
   const addRateEntry = () => {
-    const firstShiftType = shiftTypes[0];
+    if (timeframeDefinitions.length === 0) {
+      alert('Please select a template with timeframe definitions first');
+      return;
+    }
+
+    const firstTimeframe = timeframeDefinitions[0];
     const newEntry: RateEntry = {
       roleName: '',
       category: resourceCategories[0] || 'Labour',
       description: '',
-      shiftType: firstShiftType.name,
-      shiftTypeId: firstShiftType.id,
-      rateMultiplier: firstShiftType.rateMultiplier,
-      baseRate: 0,
+      timeframeId: firstTimeframe.id,
+      timeframeName: firstTimeframe.name,
       subcontractorRate: 0,
       clientRate: 0,
       marginValue: 0,
       marginPercentage: 0,
-      startTime: '',
-      endTime: '',
-      totalHours: undefined,
-      hourlyRate: null,
-      rate4Hours: null,
-      rate8Hours: null,
-      rate9Hours: null,
-      rate10Hours: null,
-      rate12Hours: null,
-      flatShiftRate: null,
       congestionChargeApplicable: false,
       congestionChargeAmount: 15,
-      additionalPerPersonCharge: undefined,
-      dropOffCharge: undefined,
       vehicleIncluded: false,
       driverIncluded: false,
       overtimeRules: '',
       specialConditions: '',
       invoicingNotes: '',
     };
-    
+
     setFormData(prev => ({
       ...prev,
       rates: [...prev.rates, newEntry]
     }));
+
+    // Expand the newly added entry
+    setExpandedRateIndex(formData.rates.length);
   };
 
   const removeRateEntry = (index: number) => {
@@ -165,6 +153,13 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
       ...prev,
       rates: prev.rates.filter((_, i) => i !== index)
     }));
+
+    // Adjust expanded index if needed
+    if (expandedRateIndex === index) {
+      setExpandedRateIndex(null);
+    } else if (expandedRateIndex !== null && expandedRateIndex > index) {
+      setExpandedRateIndex(expandedRateIndex - 1);
+    }
   };
 
   const updateRateEntry = (index: number, field: keyof RateEntry, value: any) => {
@@ -173,110 +168,26 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
       rates: prev.rates.map((rate, i) => {
         if (i === index) {
           const updatedRate = { ...rate, [field]: value };
-          
-          // If shift type changed, update multiplier and calculated rates
-          if (field === 'shiftType') {
-            const shiftType = shiftTypes.find(st => st.name === value);
-            if (shiftType) {
-              updatedRate.shiftTypeId = shiftType.id;
-              updatedRate.rateMultiplier = shiftType.rateMultiplier;
-              
-              // Recalculate hourly rate if base rate exists
-              if (updatedRate.baseRate) {
-                updatedRate.hourlyRate = updatedRate.baseRate * shiftType.rateMultiplier;
-              }
+
+          // Auto-calculate margin when rates change
+          if (field === 'subcontractorRate' || field === 'clientRate') {
+            const subRate = field === 'subcontractorRate' ? value : updatedRate.subcontractorRate;
+            const clientRate = field === 'clientRate' ? value : updatedRate.clientRate;
+            const margin = clientRate - subRate;
+            const marginPct = clientRate > 0 ? (margin / clientRate) * 100 : 0;
+            updatedRate.marginValue = Math.max(0, margin);
+            updatedRate.marginPercentage = Math.max(0, marginPct);
+          }
+
+          // Update timeframe name if timeframe changed
+          if (field === 'timeframeId') {
+            const timeframe = timeframeDefinitions.find(tf => tf.id === value);
+            if (timeframe) {
+              updatedRate.timeframeName = timeframe.name;
             }
           }
-          
-          // If base rate changed, recalculate hourly rate
-          if (field === 'baseRate' && updatedRate.rateMultiplier) {
-            updatedRate.hourlyRate = value * updatedRate.rateMultiplier;
-          }
-          
+
           return updatedRate;
-        }
-        return rate;
-      })
-    }));
-  };
-
-  const addTimeBasedRate = (rateIndex: number) => {
-    setFormData(prev => ({
-      ...prev,
-      rates: prev.rates.map((rate, i) => {
-        if (i === rateIndex) {
-          const timeBasedRates = rate.timeBasedRates || [];
-          const newTimeRate: TimeBasedRate = {
-            id: crypto.randomUUID(),
-            startTime: '08:00',
-            endTime: '17:00',
-            subcontractorRate: rate.subcontractorRate || 0,
-            clientRate: rate.clientRate || 0,
-            description: 'Day rate',
-          };
-          return {
-            ...rate,
-            timeBasedRates: [...timeBasedRates, newTimeRate],
-          };
-        }
-        return rate;
-      })
-    }));
-  };
-
-  const removeTimeBasedRate = (rateIndex: number, timeRateId: string) => {
-    setFormData(prev => ({
-      ...prev,
-      rates: prev.rates.map((rate, i) => {
-        if (i === rateIndex) {
-          return {
-            ...rate,
-            timeBasedRates: (rate.timeBasedRates || []).filter(tr => tr.id !== timeRateId),
-          };
-        }
-        return rate;
-      })
-    }));
-  };
-
-  const updateTimeBasedRate = (rateIndex: number, timeRateId: string, field: keyof TimeBasedRate, value: any) => {
-    setFormData(prev => ({
-      ...prev,
-      rates: prev.rates.map((rate, i) => {
-        if (i === rateIndex) {
-          return {
-            ...rate,
-            timeBasedRates: (rate.timeBasedRates || []).map(tr => {
-              if (tr.id === timeRateId) {
-                return { ...tr, [field]: value };
-              }
-              return tr;
-            }),
-          };
-        }
-        return rate;
-      })
-    }));
-  };
-
-  const toggleTimeBasedRateDay = (rateIndex: number, timeRateId: string, day: DayOfWeek) => {
-    setFormData(prev => ({
-      ...prev,
-      rates: prev.rates.map((rate, i) => {
-        if (i === rateIndex) {
-          return {
-            ...rate,
-            timeBasedRates: (rate.timeBasedRates || []).map(tr => {
-              if (tr.id === timeRateId) {
-                const currentDays = tr.applicableDays || [];
-                const newDays = currentDays.includes(day)
-                  ? currentDays.filter(d => d !== day)
-                  : [...currentDays, day];
-                return { ...tr, applicableDays: newDays };
-              }
-              return tr;
-            }),
-          };
         }
         return rate;
       })
@@ -288,7 +199,7 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
       alert('Please select a template with expense categories first');
       return;
     }
-    
+
     const firstExpense = selectedTemplate.expenseCategories[0];
     const newExpense: ExpenseEntry = {
       id: crypto.randomUUID(),
@@ -300,7 +211,7 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
       taxable: firstExpense.taxable || false,
       notes: '',
     };
-    
+
     setFormData(prev => ({
       ...prev,
       expenses: [...(prev.expenses || []), newExpense]
@@ -320,7 +231,7 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
       expenses: (prev.expenses || []).map((expense, i) => {
         if (i === index) {
           const updated = { ...expense, [field]: value };
-          
+
           // If category changed, update related fields
           if (field === 'categoryId' && selectedTemplate) {
             const category = selectedTemplate.expenseCategories.find(ec => ec.id === value);
@@ -331,7 +242,7 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
               updated.taxable = category.taxable || false;
             }
           }
-          
+
           return updated;
         }
         return expense;
@@ -341,29 +252,16 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Validate time-based rates for overlaps
-    const allOverlaps: string[] = [];
-    formData.rates.forEach((rate, idx) => {
-      if (rate.timeBasedRates && rate.timeBasedRates.length > 1) {
-        const overlaps = detectTimeRateOverlaps(rate.timeBasedRates);
-        if (overlaps.length > 0) {
-          allOverlaps.push(`Rate Entry #${idx + 1} (${rate.roleName || 'Unnamed'}): ${overlaps.join('; ')}`);
-        }
-      }
-    });
-    
-    if (allOverlaps.length > 0) {
-      alert('Cannot save: Time-based rate overlaps detected:\n\n' + allOverlaps.join('\n\n') + '\n\nPlease fix the overlaps before saving.');
-      return;
-    }
-    
     await onSave(formData);
+  };
+
+  const toggleRateExpansion = (index: number) => {
+    setExpandedRateIndex(expandedRateIndex === index ? null : index);
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-7xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white z-10">
           <h3 className="text-xl font-bold text-gray-900">
             {rateCard ? 'Edit Rate Card' : 'Create New Rate Card'}
@@ -387,14 +285,15 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
             {!loadingTemplates && templates.length > 0 && (
               <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
                 <label className="block text-sm font-semibold text-purple-900 mb-2">
-                  📋 Rate Card Template
+                  Rate Card Template
                 </label>
                 <select
                   value={formData.templateId || ''}
                   onChange={(e) => handleTemplateChange(e.target.value)}
                   className="w-full px-4 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
+                  required
                 >
-                  <option value="">No Template (Legacy Mode)</option>
+                  <option value="">Select a template...</option>
                   {templates.map(template => (
                     <option key={template.id} value={template.id}>
                       {template.name} {template.isDefault ? '(Default)' : ''}
@@ -402,7 +301,7 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
                   ))}
                 </select>
                 <p className="text-xs text-purple-700 mt-2 font-medium">
-                  💡 Choose a template to automatically use predefined shift types, resource categories, and expense types - making rate card creation faster and more consistent!
+                  Choose a template to use predefined timeframes and expense categories
                 </p>
               </div>
             )}
@@ -412,7 +311,7 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
                 <p className="text-sm text-gray-600">Loading templates...</p>
               </div>
             )}
-            
+
             <div className="grid grid-cols-1 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -429,7 +328,7 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
                 />
               </div>
 
-              <div className="md:col-span-2">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Description
                 </label>
@@ -469,41 +368,50 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
               <button
                 type="button"
                 onClick={addRateEntry}
-                className="flex items-center space-x-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm"
+                disabled={!selectedTemplate || timeframeDefinitions.length === 0}
+                className="flex items-center space-x-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Rate Entry</span>
               </button>
             </div>
 
+            {timeframeDefinitions.length === 0 && selectedTemplate && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <p className="text-sm text-amber-800">
+                  The selected template has no timeframe definitions. Please select a different template or add timeframes to the current template.
+                </p>
+              </div>
+            )}
+
             {formData.rates.length === 0 ? (
               <div className="bg-gray-50 rounded-lg p-8 text-center border-2 border-dashed border-gray-300">
-                <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                <Clock className="w-12 h-12 text-gray-400 mx-auto mb-3" />
                 <p className="text-gray-600 mb-3">No rate entries yet</p>
-                <p className="text-sm text-gray-500 mb-4">Add rows for each role/resource, shift type, and pricing combination</p>
+                <p className="text-sm text-gray-500 mb-4">Add entries for each role/resource and timeframe combination</p>
                 <button
                   type="button"
                   onClick={addRateEntry}
-                  className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                  disabled={!selectedTemplate || timeframeDefinitions.length === 0}
+                  className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Add First Entry</span>
                 </button>
               </div>
             ) : (
-              <div className="space-y-6">
-                  {formData.rates.map((rate, index) => (
+              <div className="space-y-3">
+                {formData.rates.map((rate, index) => (
                   <RateEntryRow
                     key={index}
                     rate={rate}
                     index={index}
+                    isExpanded={expandedRateIndex === index}
+                    onToggleExpansion={() => toggleRateExpansion(index)}
                     onUpdate={updateRateEntry}
                     onRemove={removeRateEntry}
                     resourceCategories={resourceCategories}
-                    shiftTypes={shiftTypes}
-                    onAddTimeBasedRate={addTimeBasedRate}
-                    onRemoveTimeBasedRate={removeTimeBasedRate}
-                    onUpdateTimeBasedRate={updateTimeBasedRate}
+                    timeframeDefinitions={timeframeDefinitions}
                   />
                 ))}
               </div>
@@ -567,637 +475,241 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
   );
 }
 
-// Utility: Convert time string to minutes since midnight
-function timeToMinutes(time: string): number {
-  const [hours, minutes] = time.split(':').map(Number);
-  return hours * 60 + minutes;
-}
-
-// Utility: Detect overlapping time-based rates
-function detectTimeRateOverlaps(timeBasedRates: TimeBasedRate[]): string[] {
-  const overlaps: string[] = [];
-  const allDays: DayOfWeek[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-
-  for (let i = 0; i < timeBasedRates.length; i++) {
-    for (let j = i + 1; j < timeBasedRates.length; j++) {
-      const rate1 = timeBasedRates[i];
-      const rate2 = timeBasedRates[j];
-
-      // Determine applicable days (empty = all days)
-      const days1 = rate1.applicableDays && rate1.applicableDays.length > 0 ? rate1.applicableDays : allDays;
-      const days2 = rate2.applicableDays && rate2.applicableDays.length > 0 ? rate2.applicableDays : allDays;
-      
-      // Find shared days
-      const sharedDays = days1.filter(day => days2.includes(day));
-
-      if (sharedDays.length > 0) {
-        // Check if time ranges overlap
-        const start1 = timeToMinutes(rate1.startTime);
-        const end1 = timeToMinutes(rate1.endTime);
-        const start2 = timeToMinutes(rate2.startTime);
-        const end2 = timeToMinutes(rate2.endTime);
-
-        // Handle overnight shifts (e.g., 23:00 to 06:00)
-        const actualEnd1 = end1 <= start1 ? end1 + 24 * 60 : end1;
-        const actualEnd2 = end2 <= start2 ? end2 + 24 * 60 : end2;
-
-        // Check for time overlap: NOT (end1 <= start2 OR end2 <= start1)
-        const hasTimeOverlap = !(actualEnd1 <= start2 || actualEnd2 <= start1);
-
-        if (hasTimeOverlap) {
-          const rate1Desc = rate1.description || `${rate1.startTime}-${rate1.endTime}`;
-          const rate2Desc = rate2.description || `${rate2.startTime}-${rate2.endTime}`;
-          const dayList = sharedDays.map(d => d.charAt(0).toUpperCase() + d.slice(1, 3)).join(', ');
-          
-          overlaps.push(`"${rate1Desc}" overlaps with "${rate2Desc}" on ${dayList}`);
-        }
-      }
-    }
-  }
-
-  return overlaps;
-}
-
-// Individual Rate Entry Row Component
-function RateEntryRow({ rate, index, onUpdate, onRemove, resourceCategories, shiftTypes, onAddTimeBasedRate, onRemoveTimeBasedRate, onUpdateTimeBasedRate }: {
+// Individual Rate Entry Row Component with Accordion
+function RateEntryRow({
+  rate,
+  index,
+  isExpanded,
+  onToggleExpansion,
+  onUpdate,
+  onRemove,
+  resourceCategories,
+  timeframeDefinitions
+}: {
   rate: RateEntry;
   index: number;
+  isExpanded: boolean;
+  onToggleExpansion: () => void;
   onUpdate: (index: number, field: keyof RateEntry, value: any) => void;
   onRemove: (index: number) => void;
   resourceCategories: string[];
-  shiftTypes: Array<{ id: string; name: string; rateMultiplier: number }>;
-  onAddTimeBasedRate: (rateIndex: number) => void;
-  onRemoveTimeBasedRate: (rateIndex: number, timeRateId: string) => void;
-  onUpdateTimeBasedRate: (rateIndex: number, timeRateId: string, field: keyof TimeBasedRate, value: any) => void;
+  timeframeDefinitions: TimeframeDefinition[];
 }) {
-  // Detect overlaps in time-based rates
-  const timeRateOverlaps = rate.timeBasedRates && rate.timeBasedRates.length > 1
-    ? detectTimeRateOverlaps(rate.timeBasedRates)
-    : [];
+  // Get timeframe details for display
+  const timeframe = timeframeDefinitions.find(tf => tf.id === rate.timeframeId);
+  const timeframeDisplay = timeframe
+    ? `${timeframe.name} (${timeframe.startTime}-${timeframe.endTime})`
+    : rate.timeframeName || 'Unknown';
 
-  const toggleDay = (timeRateId: string, day: DayOfWeek) => {
-    const timeRate = rate.timeBasedRates?.find(tr => tr.id === timeRateId);
-    if (timeRate) {
-      const currentDays = timeRate.applicableDays || [];
-      const newDays = currentDays.includes(day)
-        ? currentDays.filter(d => d !== day)
-        : [...currentDays, day];
-      onUpdateTimeBasedRate(index, timeRateId, 'applicableDays', newDays);
-    }
-  };
-
-  const allDays: DayOfWeek[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-  const dayLabels: Record<DayOfWeek, string> = {
-    monday: 'Mon',
-    tuesday: 'Tue',
-    wednesday: 'Wed',
-    thursday: 'Thu',
-    friday: 'Fri',
-    saturday: 'Sat',
-    sunday: 'Sun'
-  };
   return (
-    <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-      <div className="flex items-center justify-between mb-4">
-        <span className="text-sm font-bold text-gray-900">Entry #{index + 1}</span>
-        <button
-          type="button"
-          onClick={() => onRemove(index)}
-          className="p-1 text-red-600 hover:bg-red-50 rounded transition"
-          title="Remove"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* Section 1: Role / Resource Details */}
-      <div className="mb-6">
-        <h5 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
-          <Tag className="w-4 h-4 mr-1" /> 1. Role / Resource Details
-        </h5>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Role / Resource Name *</label>
-            <input
-              type="text"
-              required
-              value={rate.roleName}
-              onChange={(e) => onUpdate(index, 'roleName', e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g., Supervisor, Fitter, Driver"
-            />
-          </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Category *</label>
-              <select
-                required
-                value={rate.category}
-                onChange={(e) => onUpdate(index, 'category', e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                {resourceCategories.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
+    <div className="bg-white rounded-lg border-2 border-gray-200 overflow-hidden hover:border-blue-300 transition">
+      {/* Collapsed Header - Always Visible */}
+      <div
+        className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50"
+        onClick={onToggleExpansion}
+      >
+        <div className="flex-1 flex items-center gap-4">
+          <span className="text-sm font-bold text-gray-900 min-w-[60px]">#{index + 1}</span>
+          <div className="flex-1">
+            <div className="font-semibold text-gray-900">
+              {rate.roleName || <span className="text-gray-400 italic">Unnamed Role</span>}
             </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Description / Notes</label>
-            <input
-              type="text"
-              value={rate.description || ''}
-              onChange={(e) => onUpdate(index, 'description', e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="Optional notes"
-            />
+            <div className="text-xs text-gray-600 flex items-center gap-2 mt-1">
+              <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{rate.category}</span>
+              <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded">{timeframeDisplay}</span>
+              {rate.marginValue !== undefined && rate.marginValue > 0 && (
+                <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">
+                  Margin: £{rate.marginValue.toFixed(2)} ({rate.marginPercentage?.toFixed(1)}%)
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-sm text-gray-600">
+              Sub: £{rate.subcontractorRate.toFixed(2)}/hr | Client: £{rate.clientRate.toFixed(2)}/hr
+            </div>
           </div>
         </div>
-      </div>
-
-      {/* Section 2: Shift Type */}
-      <div className="mb-6">
-        <h5 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
-          <Clock className="w-4 h-4 mr-1" /> 2. Shift Type
-        </h5>
-        <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Shift Type *</label>
-            <select
-              required
-              value={rate.shiftType}
-              onChange={(e) => onUpdate(index, 'shiftType', e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              {shiftTypes.map(shift => (
-                <option key={shift.id} value={shift.name}>
-                  {shift.name} ({shift.rateMultiplier}x)
-                </option>
-              ))}
-            </select>
-            {rate.rateMultiplier && rate.rateMultiplier !== 1 && (
-              <p className="text-xs text-blue-600 mt-1">Multiplier: {rate.rateMultiplier}x</p>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Section 3: Time & Duration */}
-      <div className="mb-6">
-        <h5 className="text-sm font-semibold text-gray-700 mb-3">3. Time & Duration (Optional)</h5>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Start Time</label>
-            <input
-              type="time"
-              value={rate.startTime || ''}
-              onChange={(e) => onUpdate(index, 'startTime', e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">End Time</label>
-            <input
-              type="time"
-              value={rate.endTime || ''}
-              onChange={(e) => onUpdate(index, 'endTime', e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Total Hours</label>
-            <input
-              type="number"
-              step="0.5"
-              value={rate.totalHours || ''}
-              onChange={(e) => onUpdate(index, 'totalHours', e.target.value ? parseFloat(e.target.value) : undefined)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g., 8"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Section 3a: Time-Based Rates (NEW) */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <h5 className="text-sm font-semibold text-gray-700 flex items-center">
-            <TimerIcon className="w-4 h-4 mr-1" /> 3a. Time-Based Rates (Optional - Advanced)
-          </h5>
+        <div className="flex items-center gap-2 ml-4">
           <button
             type="button"
-            onClick={() => onAddTimeBasedRate(index)}
-            className="flex items-center gap-1 px-3 py-1 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-700 transition"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(index);
+            }}
+            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+            title="Remove"
           >
-            <Plus className="w-3 h-3" />
-            Add Time Range
+            <Trash2 className="w-4 h-4" />
           </button>
+          {isExpanded ? (
+            <ChevronUp className="w-5 h-5 text-gray-600" />
+          ) : (
+            <ChevronDown className="w-5 h-5 text-gray-600" />
+          )}
         </div>
-        
-        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 mb-3">
-          <p className="text-xs text-indigo-900 font-medium mb-1">💡 Time-Based Rates Feature</p>
-          <p className="text-xs text-indigo-700">
-            Define different rates for specific time ranges (e.g., 8am-5pm = £20/hr, 5pm-midnight = £30/hr). 
-            When subcontractors log time, the system will automatically calculate hours and costs based on these ranges.
-          </p>
-        </div>
+      </div>
 
-        {/* Overlap Error Display */}
-        {timeRateOverlaps.length > 0 && (
-          <div className="bg-red-50 border border-red-300 rounded-lg p-3 mb-3">
-            <div className="flex items-start">
-              <AlertTriangle className="w-4 h-4 text-red-600 mr-2 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <h6 className="text-xs font-semibold text-red-900 mb-1">
-                  ⚠️ Time Range Overlaps Detected
-                </h6>
-                <ul className="text-xs text-red-800 space-y-1 list-disc list-inside">
-                  {timeRateOverlaps.map((error, idx) => (
-                    <li key={idx}>{error}</li>
+      {/* Expanded Content */}
+      {isExpanded && (
+        <div className="border-t border-gray-200 bg-gray-50 p-6 space-y-6">
+          {/* Section 1: Role Details */}
+          <div>
+            <h5 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+              <Tag className="w-4 h-4 mr-1" /> Role / Resource Details
+            </h5>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Role Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={rate.roleName}
+                  onChange={(e) => onUpdate(index, 'roleName', e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                  placeholder="e.g., Supervisor, Fitter"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Category *</label>
+                <select
+                  required
+                  value={rate.category}
+                  onChange={(e) => onUpdate(index, 'category', e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  {resourceCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
                   ))}
-                </ul>
-                <p className="text-xs text-red-700 mt-2">
-                  Please adjust the time ranges or day selections to remove conflicts before saving.
-                </p>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
+                <input
+                  type="text"
+                  value={rate.description || ''}
+                  onChange={(e) => onUpdate(index, 'description', e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                  placeholder="Optional notes"
+                />
               </div>
             </div>
           </div>
-        )}
 
-        {rate.timeBasedRates && rate.timeBasedRates.length > 0 ? (
-          <div className="space-y-2">
-            {rate.timeBasedRates.map((timeRate) => (
-              <div key={timeRate.id} className="bg-white border border-indigo-200 rounded-lg p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-semibold text-indigo-900">
-                    {timeRate.description || 'Time Range'}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => onRemoveTimeBasedRate(index, timeRate.id)}
-                    className="p-1 text-red-600 hover:bg-red-50 rounded transition"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
-                    <input
-                      type="text"
-                      value={timeRate.description || ''}
-                      onChange={(e) => onUpdateTimeBasedRate(index, timeRate.id, 'description', e.target.value)}
-                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
-                      placeholder="e.g., Day rate"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Start Time</label>
-                    <input
-                      type="time"
-                      value={timeRate.startTime}
-                      onChange={(e) => onUpdateTimeBasedRate(index, timeRate.id, 'startTime', e.target.value)}
-                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">End Time</label>
-                    <input
-                      type="time"
-                      value={timeRate.endTime}
-                      onChange={(e) => onUpdateTimeBasedRate(index, timeRate.id, 'endTime', e.target.value)}
-                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Sub Rate (£/hr)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={timeRate.subcontractorRate}
-                      onChange={(e) => onUpdateTimeBasedRate(index, timeRate.id, 'subcontractorRate', parseFloat(e.target.value) || 0)}
-                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
-                      placeholder="0.00"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Client Rate (£/hr)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={timeRate.clientRate}
-                      onChange={(e) => onUpdateTimeBasedRate(index, timeRate.id, 'clientRate', parseFloat(e.target.value) || 0)}
-                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
-                      placeholder="0.00"
-                    />
-                  </div>
+          {/* Section 2: Timeframe Selection */}
+          <div>
+            <h5 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+              <Clock className="w-4 h-4 mr-1" /> Timeframe
+            </h5>
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Timeframe *</label>
+                <select
+                  required
+                  value={rate.timeframeId}
+                  onChange={(e) => onUpdate(index, 'timeframeId', e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  {timeframeDefinitions.map(tf => {
+                    const daysDisplay = tf.applicableDays.length > 0
+                      ? tf.applicableDays.map(d => d.slice(0, 3)).join(', ')
+                      : 'All days';
+                    return (
+                      <option key={tf.id} value={tf.id}>
+                        {tf.name} - {tf.startTime} to {tf.endTime} ({daysDisplay})
+                      </option>
+                    );
+                  })}
+                </select>
+                {timeframe?.description && (
+                  <p className="text-xs text-gray-600 mt-1">{timeframe.description}</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: Rates */}
+          <div>
+            <h5 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+              <DollarSign className="w-4 h-4 mr-1" /> Rates
+            </h5>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Subcontractor Rate (£/hr) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    min="0"
+                    value={rate.subcontractorRate}
+                    onChange={(e) => onUpdate(index, 'subcontractorRate', parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                    placeholder="15.00"
+                  />
+                  <p className="text-xs text-blue-700 mt-1">What you pay</p>
                 </div>
 
-                {/* Day Checkboxes */}
-                <div className="border-t border-indigo-100 pt-3">
-                  <label className="block text-xs font-medium text-gray-700 mb-2">
-                    📅 Applicable Days <span className="text-gray-500">(leave all unchecked for all days)</span>
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {allDays.map(day => {
-                      const isChecked = timeRate.applicableDays?.includes(day) || false;
-                      return (
-                        <label
-                          key={day}
-                          className={`flex items-center px-3 py-1.5 border rounded-lg cursor-pointer transition ${
-                            isChecked
-                              ? 'bg-indigo-100 border-indigo-400 text-indigo-900'
-                              : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => toggleDay(timeRate.id, day)}
-                            className="w-3 h-3 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 mr-1.5"
-                          />
-                          <span className="text-xs font-medium">{dayLabels[day]}</span>
-                        </label>
-                      );
-                    })}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Client Rate (£/hr) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    min="0"
+                    value={rate.clientRate}
+                    onChange={(e) => onUpdate(index, 'clientRate', parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                    placeholder="21.00"
+                  />
+                  <p className="text-xs text-blue-700 mt-1">What you charge</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Margin (Auto-calculated)</label>
+                  <div className={`w-full px-3 py-2 text-sm rounded-lg border-2 font-bold text-center ${
+                    (rate.marginValue || 0) > 0
+                      ? 'bg-green-50 border-green-300 text-green-700'
+                      : 'bg-gray-50 border-gray-300 text-gray-700'
+                  }`}>
+                    {rate.marginValue !== undefined && rate.marginPercentage !== undefined
+                      ? `£${rate.marginValue.toFixed(2)} (${rate.marginPercentage.toFixed(1)}%)`
+                      : '—'}
                   </div>
-                  {timeRate.applicableDays && timeRate.applicableDays.length > 0 && (
-                    <p className="text-xs text-indigo-700 mt-2">
-                      ✓ This rate applies only on: {timeRate.applicableDays.map(d => dayLabels[d]).join(', ')}
-                    </p>
-                  )}
-                  {(!timeRate.applicableDays || timeRate.applicableDays.length === 0) && (
-                    <p className="text-xs text-gray-600 mt-2 italic">
-                      This rate applies on all days of the week
-                    </p>
-                  )}
+                  <p className="text-xs text-gray-600 mt-1">Profit per hour</p>
                 </div>
               </div>
-            ))}
+            </div>
           </div>
-        ) : (
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
-            <p className="text-xs text-gray-600">No time-based rates configured. Click "Add Time Range" to set up different rates for specific hours.</p>
-          </div>
-        )}
-      </div>
 
-      {/* Section 4: Pricing Fields - Combined Subcontractor & Client Rates */}
-      <div className="mb-6">
-        <h5 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
-          <DollarSign className="w-4 h-4 mr-1" /> 4. Pricing Fields - Subcontractor & Client Rates
-        </h5>
-        
-        {/* Primary Rates */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-          <p className="text-xs font-semibold text-blue-900 mb-3">💷 Primary Rates (Required)</p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Subcontractor Rate (£/hr) *</label>
-              <input
-                type="number"
-                step="0.01"
-                required
-                value={rate.subcontractorRate ?? ''}
-                onChange={(e) => {
-                  const subRate = e.target.value ? parseFloat(e.target.value) : 0;
-                  const clientRate = rate.clientRate || 0;
-                  const margin = clientRate - subRate;
-                  const marginPct = clientRate > 0 ? (margin / clientRate) * 100 : 0;
-                  onUpdate(index, 'subcontractorRate', subRate);
-                  onUpdate(index, 'marginValue', Math.max(0, margin));
-                  onUpdate(index, 'marginPercentage', Math.max(0, marginPct));
-                }}
-                className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="15.00"
-              />
-              <p className="text-xs text-blue-700 mt-1">What you pay the subcontractor</p>
-            </div>
-            
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Client Rate (£/hr) *</label>
-              <input
-                type="number"
-                step="0.01"
-                required
-                value={rate.clientRate ?? ''}
-                onChange={(e) => {
-                  const clientRate = e.target.value ? parseFloat(e.target.value) : 0;
-                  const subRate = rate.subcontractorRate || 0;
-                  const margin = clientRate - subRate;
-                  const marginPct = clientRate > 0 ? (margin / clientRate) * 100 : 0;
-                  onUpdate(index, 'clientRate', clientRate);
-                  onUpdate(index, 'marginValue', Math.max(0, margin));
-                  onUpdate(index, 'marginPercentage', Math.max(0, marginPct));
-                }}
-                className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="21.00"
-              />
-              <p className="text-xs text-blue-700 mt-1">What you charge the client</p>
-            </div>
-            
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Margin (Read-Only)</label>
-              <div className={`w-full px-3 py-2 text-sm rounded-lg border-2 font-bold text-center ${
-                (rate.marginValue || 0) > 0 
-                  ? 'bg-green-50 border-green-300 text-green-700' 
-                  : (rate.marginValue || 0) > 0 
-                  ? 'bg-amber-50 border-amber-300 text-amber-700'
-                  : 'bg-gray-50 border-gray-300 text-gray-700'
-              }`}>
-                {rate.marginValue !== undefined && rate.marginPercentage !== undefined
-                  ? `£${rate.marginValue.toFixed(2)} (${rate.marginPercentage.toFixed(1)}%)`
-                  : '—'}
+          {/* Section 4: Additional Options (Optional) */}
+          <div>
+            <h5 className="text-sm font-semibold text-gray-700 mb-3">Additional Options (Optional)</h5>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Overtime Rules</label>
+                <input
+                  type="text"
+                  value={rate.overtimeRules || ''}
+                  onChange={(e) => onUpdate(index, 'overtimeRules', e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                  placeholder="e.g., 1.5x after 8 hours"
+                />
               </div>
-              <p className="text-xs text-gray-600 mt-1">Profit per hour</p>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Special Conditions</label>
+                <input
+                  type="text"
+                  value={rate.specialConditions || ''}
+                  onChange={(e) => onUpdate(index, 'specialConditions', e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                  placeholder="Any special conditions"
+                />
+              </div>
             </div>
           </div>
         </div>
-
-        {/* Legacy/Additional Rates */}
-        <p className="text-xs font-semibold text-gray-600 mb-2">Legacy Rates (Optional)</p>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Base Rate (GBP)</label>
-            <input
-              type="number"
-              step="0.01"
-              value={rate.baseRate ?? ''}
-              onChange={(e) => onUpdate(index, 'baseRate', e.target.value ? parseFloat(e.target.value) : 0)}
-              className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="0.00"
-            />
-            <p className="text-xs text-gray-500 mt-1">Before multiplier</p>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Hourly Rate (GBP)</label>
-            <input
-              type="number"
-              step="0.01"
-              value={rate.hourlyRate ?? ''}
-              onChange={(e) => onUpdate(index, 'hourlyRate', e.target.value ? parseFloat(e.target.value) : null)}
-              className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="0.00"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">4-Hour Rate (GBP)</label>
-            <input
-              type="number"
-              step="0.01"
-              value={rate.rate4Hours ?? ''}
-              onChange={(e) => onUpdate(index, 'rate4Hours', e.target.value ? parseFloat(e.target.value) : null)}
-              className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="0.00"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">8-Hour Rate (GBP)</label>
-            <input
-              type="number"
-              step="0.01"
-              value={rate.rate8Hours ?? ''}
-              onChange={(e) => onUpdate(index, 'rate8Hours', e.target.value ? parseFloat(e.target.value) : null)}
-              className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="0.00"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">12-Hour Rate (GBP)</label>
-            <input
-              type="number"
-              step="0.01"
-              value={rate.rate12Hours ?? ''}
-              onChange={(e) => onUpdate(index, 'rate12Hours', e.target.value ? parseFloat(e.target.value) : null)}
-              className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="0.00"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Flat Shift Rate (GBP)</label>
-            <input
-              type="number"
-              step="0.01"
-              value={rate.flatShiftRate ?? ''}
-              onChange={(e) => onUpdate(index, 'flatShiftRate', e.target.value ? parseFloat(e.target.value) : null)}
-              className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="0.00"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Section 5: Additional Charges */}
-      <div className="mb-6">
-        <h5 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
-          <Truck className="w-4 h-4 mr-1" /> 5. Additional Charges
-        </h5>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div>
-            <label className="flex items-center text-xs font-medium text-gray-700 mb-2">
-              <input
-                type="checkbox"
-                checked={rate.congestionChargeApplicable}
-                onChange={(e) => onUpdate(index, 'congestionChargeApplicable', e.target.checked)}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-2"
-              />
-              Congestion Charge Applicable
-            </label>
-            {rate.congestionChargeApplicable && (
-              <input
-                type="number"
-                step="0.01"
-                value={rate.congestionChargeAmount || 15}
-                onChange={(e) => onUpdate(index, 'congestionChargeAmount', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="15.00"
-              />
-            )}
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Per-Person Charge (GBP)</label>
-            <input
-              type="number"
-              step="0.01"
-              value={rate.additionalPerPersonCharge || ''}
-              onChange={(e) => onUpdate(index, 'additionalPerPersonCharge', e.target.value ? parseFloat(e.target.value) : undefined)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="0.00"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Drop-off Charge (GBP)</label>
-            <input
-              type="number"
-              step="0.01"
-              value={rate.dropOffCharge || ''}
-              onChange={(e) => onUpdate(index, 'dropOffCharge', e.target.value ? parseFloat(e.target.value) : undefined)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="0.00"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="flex items-center text-xs font-medium text-gray-700">
-              <input
-                type="checkbox"
-                checked={rate.vehicleIncluded}
-                onChange={(e) => onUpdate(index, 'vehicleIncluded', e.target.checked)}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-2"
-              />
-              Vehicle Included
-            </label>
-            <label className="flex items-center text-xs font-medium text-gray-700">
-              <input
-                type="checkbox"
-                checked={rate.driverIncluded}
-                onChange={(e) => onUpdate(index, 'driverIncluded', e.target.checked)}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-2"
-              />
-              Driver Included
-            </label>
-          </div>
-        </div>
-      </div>
-
-      {/* Section 6: Comments & Rules */}
-      <div>
-        <h5 className="text-sm font-semibold text-gray-700 mb-3">6. Comments & Rules</h5>
-        <div className="grid grid-cols-1 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Overtime Rules</label>
-            <input
-              type="text"
-              value={rate.overtimeRules || ''}
-              onChange={(e) => onUpdate(index, 'overtimeRules', e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g., 1.5x after 8 hours"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Special Conditions</label>
-            <input
-              type="text"
-              value={rate.specialConditions || ''}
-              onChange={(e) => onUpdate(index, 'specialConditions', e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="Any special conditions or requirements"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Notes for Invoicing</label>
-            <input
-              type="text"
-              value={rate.invoicingNotes || ''}
-              onChange={(e) => onUpdate(index, 'invoicingNotes', e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="Internal notes for invoicing"
-            />
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -1240,7 +752,7 @@ function ExpenseEntryRow({ expense, index, onUpdate, onRemove, expenseCategories
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Rate (GBP) *</label>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Rate (£) *</label>
           <input
             type="number"
             step="0.01"

@@ -122,7 +122,7 @@ export default function RateTemplatesPage() {
       const newTemplate = {
         name: `${template.name} (Copy)`,
         description: template.description,
-        shiftTypes: template.shiftTypes,
+        timeframeDefinitions: template.timeframeDefinitions || template.shiftTypes || [],
         expenseCategories: template.expenseCategories,
         resourceCategories: template.resourceCategories,
         companyId,
@@ -157,7 +157,7 @@ export default function RateTemplatesPage() {
       const templateData = {
         name: data.name,
         description: data.description,
-        shiftTypes: data.shiftTypes,
+        timeframeDefinitions: data.timeframeDefinitions,
         expenseCategories: data.expenseCategories,
         resourceCategories: data.resourceCategories,
         active: data.active,
@@ -228,7 +228,7 @@ export default function RateTemplatesPage() {
             <div>
               <h2 className="text-2xl font-bold text-gray-900">Rate Card Templates</h2>
               <p className="text-gray-600 mt-1">
-                Define custom shift types, multipliers, and expense categories
+                Define custom timeframes, resource categories, and expense types
               </p>
             </div>
             {canEdit && (
@@ -325,15 +325,15 @@ export default function RateTemplatesPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
                   <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
-                    <p className="text-xs font-semibold text-blue-800 mb-1">Shift Types</p>
-                    <p className="text-2xl font-bold text-blue-900">{template.shiftTypes.length}</p>
-                    {template.shiftTypes.slice(0, 2).map(st => (
-                      <p key={st.id} className="text-xs text-blue-700 mt-1">
-                        {st.name} ({st.rateMultiplier}x)
+                    <p className="text-xs font-semibold text-blue-800 mb-1">Timeframes</p>
+                    <p className="text-2xl font-bold text-blue-900">{(template.timeframeDefinitions || template.shiftTypes || []).length}</p>
+                    {(template.timeframeDefinitions || template.shiftTypes || []).slice(0, 2).map(tf => (
+                      <p key={tf.id} className="text-xs text-blue-700 mt-1">
+                        {tf.name} ({tf.startTime}-{tf.endTime})
                       </p>
                     ))}
-                    {template.shiftTypes.length > 2 && (
-                      <p className="text-xs text-blue-600 mt-1">+{template.shiftTypes.length - 2} more</p>
+                    {(template.timeframeDefinitions || template.shiftTypes || []).length > 2 && (
+                      <p className="text-xs text-blue-600 mt-1">+{(template.timeframeDefinitions || template.shiftTypes || []).length - 2} more</p>
                     )}
                   </div>
 

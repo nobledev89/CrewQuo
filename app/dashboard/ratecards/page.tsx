@@ -276,19 +276,38 @@ export default function RateCardsPage() {
                 {rateCard.rates && rateCard.rates.length > 0 && (
                   <div className="space-y-2 mb-3">
                     <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
-                      <p className="text-xs font-semibold text-blue-800 mb-1">
+                      <p className="text-xs font-semibold text-blue-800 mb-2">
                         <DollarSign className="w-3 h-3 inline mr-1" />
                         {rateCard.rates.length} rate {rateCard.rates.length === 1 ? 'entry' : 'entries'}
                       </p>
+                      {/* Display first few rate entries with timeframe */}
+                      <div className="space-y-1 mt-2">
+                        {rateCard.rates.slice(0, 3).map((rate, idx) => (
+                          <div key={idx} className="text-xs text-blue-900">
+                            <span className="font-medium">{rate.roleName}</span>
+                            {rate.timeframeName && (
+                              <span className="text-blue-700"> - {rate.timeframeName}</span>
+                            )}
+                            <span className="text-blue-600">
+                              {' '}(Sub: £{rate.subcontractorRate.toFixed(2)}/hr, Client: £{rate.clientRate.toFixed(2)}/hr)
+                            </span>
+                          </div>
+                        ))}
+                        {rateCard.rates.length > 3 && (
+                          <p className="text-xs text-blue-700 italic">
+                            +{rateCard.rates.length - 3} more {rateCard.rates.length - 3 === 1 ? 'entry' : 'entries'}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    
+
                     {/* Margin Summary */}
-                    {rateCard.rates.some(r => r.marginValue !== undefined) && (
+                    {rateCard.rates.some(r => r.marginValue !== undefined && r.marginValue > 0) && (
                       <div className="bg-green-50 rounded-lg p-3 border border-green-100">
-                        <p className="text-xs font-semibold text-green-800 mb-2">💰 Margin Summary:</p>
+                        <p className="text-xs font-semibold text-green-800 mb-2">Margin Summary</p>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                           {rateCard.rates.map((rate, idx) => {
-                            if (rate.marginValue !== undefined && rate.marginPercentage !== undefined) {
+                            if (rate.marginValue !== undefined && rate.marginPercentage !== undefined && rate.marginValue > 0) {
                               return (
                                 <div key={idx} className="text-xs">
                                   <p className="text-green-700 font-medium">{rate.roleName}</p>

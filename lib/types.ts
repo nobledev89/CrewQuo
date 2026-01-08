@@ -212,14 +212,15 @@ export const SUBSCRIPTION_LIMITS: Record<SubscriptionPlan, PlanLimits> = {
 // RATE CARD TEMPLATE MODEL (TIER 1)
 // ============================================
 
-export interface CustomShiftType {
+export type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
+
+export interface TimeframeDefinition {
   id: string;
-  name: string;                    // e.g., "Sunday", "Night Shift", "Bank Holiday"
+  name: string;                    // e.g., "Day Rate Mon-Fri", "Night Rate", "Weekend"
   description?: string;
-  rateMultiplier: number;          // e.g., 2.0 for double time, 1.5 for time and a half
-  applicableDays?: string[];       // e.g., ["Sunday"], ["Monday", "Tuesday"]
-  startTime?: string;              // e.g., "18:00"
-  endTime?: string;                // e.g., "06:00"
+  startTime: string;               // e.g., "08:00" (24-hour format)
+  endTime: string;                 // e.g., "17:00" (24-hour format)
+  applicableDays: DayOfWeek[];    // e.g., ['monday', 'tuesday', 'wednesday']
 }
 
 export interface ExpenseCategory {
@@ -236,8 +237,11 @@ export interface RateCardTemplate {
   name: string;                    // e.g., "Standard UK Construction Rates"
   description: string;
   
-  // Custom shift types with multipliers
-  shiftTypes: CustomShiftType[];
+  // Timeframe definitions (replaces shift types)
+  timeframeDefinitions: TimeframeDefinition[];
+  
+  // Legacy field for backward compatibility
+  shiftTypes?: TimeframeDefinition[]; // Old data may still have this
   
   // Custom expense categories
   expenseCategories: ExpenseCategory[];
@@ -268,37 +272,17 @@ export interface RateEntry {
   category: ResourceCategory;    // Dynamic from template
   description?: string;          // Optional notes or description
   
-  // 2. Shift Type (references template shift type)
-  shiftType: string;             // ID or name from template
-  shiftTypeId?: string;          // Optional: reference to template shift type ID
-  rateMultiplier?: number;       // Inherited from shift type, can be overridden
+  // 2. Timeframe Reference (NEW - simplified)
+  timeframeId: string;           // References TimeframeDefinition from template
+  timeframeName?: string;        // Denormalized for display
   
-  // 3. Time & Duration (for reference/calculation)
-  startTime?: string;            // e.g., "09:00"
-  endTime?: string;              // e.g., "17:00"
-  totalHours?: number;           // Total hours worked
-  
-  // 3a. Time-based rate configuration (NEW)
-  timeBasedRates?: TimeBasedRate[];  // Array of time ranges with rates
-  
-  // 4. Pricing Fields - Combined Subcontractor & Client Rates
-  // Primary rates (new unified approach)
+  // 3. Pricing Fields (SIMPLIFIED)
   subcontractorRate: number;     // What you pay the subcontractor (hourly)
   clientRate: number;            // What you charge the client (hourly)
   marginValue?: number;          // Auto-calculated: clientRate - subcontractorRate
   marginPercentage?: number;     // Auto-calculated: (marginValue / clientRate) * 100
   
-  // Legacy/additional rate fields (kept for backward compatibility)
-  baseRate: number;              // Base hourly rate (maps to subcontractorRate for legacy)
-  hourlyRate?: number | null;    // Effective rate per hour (after multiplier)
-  rate4Hours?: number | null;    // 4-hour rate
-  rate8Hours?: number | null;    // 8-hour rate
-  rate9Hours?: number | null;    // 9-hour rate
-  rate10Hours?: number | null;   // 10-hour rate
-  rate12Hours?: number | null;   // 12-hour rate
-  flatShiftRate?: number | null; // Flat shift rate (if applicable)
-  
-  // 5. Additional Charges
+  // 4. Additional Charges
   congestionChargeApplicable: boolean;
   congestionChargeAmount?: number;    // Default £15
   additionalPerPersonCharge?: number;
@@ -306,17 +290,32 @@ export interface RateEntry {
   vehicleIncluded: boolean;
   driverIncluded: boolean;
   
-  // 6. Comments & Rules
+  // 5. Comments & Rules
   overtimeRules?: string;
   specialConditions?: string;
   invoicingNotes?: string;
+  
+  // ===== LEGACY FIELDS (for backward compatibility) =====
+  shiftType?: string;            // Old field
+  shiftTypeId?: string;          // Old field
+  rateMultiplier?: number;       // Old field
+  startTime?: string;            // Old field
+  endTime?: string;              // Old field
+  totalHours?: number;           // Old field
+  timeBasedRates?: TimeBasedRate[];  // Old field
+  baseRate?: number;             // Old field
+  hourlyRate?: number | null;    // Old field
+  rate4Hours?: number | null;    // Old field
+  rate8Hours?: number | null;    // Old field
+  rate9Hours?: number | null;    // Old field
+  rate10Hours?: number | null;   // Old field
+  rate12Hours?: number | null;   // Old field
+  flatShiftRate?: number | null; // Old field
 }
 
 // ============================================
-// TIME-BASED RATE MODEL (NEW)
+// TIME-BASED RATE MODEL (LEGACY)
 // ============================================
-
-export type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
 
 export interface TimeBasedRate {
   id: string;                    // Unique identifier for this time range
