@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
@@ -12,7 +13,6 @@ import {
   doc,
 } from 'firebase/firestore';
 import DashboardLayout from '@/components/DashboardLayout';
-import ProjectModal from '@/components/ProjectModal';
 import { Briefcase, Search, Filter, RefreshCw, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { refreshUserClaims, isPermissionError, retryWithTokenRefresh } from '@/lib/tokenRefresh';
@@ -62,6 +62,7 @@ interface Expense {
 }
 
 export default function ProjectsContent() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [refreshing, setRefreshing] = useState(false);
@@ -77,8 +78,6 @@ export default function ProjectsContent() {
   // UI State
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed' | 'on_hold'>('active');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedProject, setSelectedProject] = useState<Assignment | null>(null);
-  const [showModal, setShowModal] = useState(false);
   const [activeProjectsLimit, setActiveProjectsLimit] = useState(10);
   const [completedProjectsLimit, setCompletedProjectsLimit] = useState(10);
 
@@ -327,28 +326,8 @@ export default function ProjectsContent() {
   const hasMoreActive = filteredProjects.filter((p) => p.projectStatus === 'ACTIVE').length > activeProjectsLimit;
   const hasMoreCompleted = filteredProjects.filter((p) => p.projectStatus === 'COMPLETED' || p.projectStatus === 'ON_HOLD').length > completedProjectsLimit;
 
-  const openProjectModal = (project: Assignment) => {
-    setSelectedProject(project);
-    setShowModal(true);
-  };
-
-  const closeProjectModal = () => {
-    setShowModal(false);
-    setSelectedProject(null);
-    if (auth.currentUser) {
-      const userDoc = getDoc(doc(db, 'users', auth.currentUser.uid));
-      userDoc.then((doc) => {
-        if (doc.exists()) {
-          const userData = doc.data();
-          const activeId = userData.activeCompanyId || userData.companyId;
-          const subRole = userData.subcontractorRoles?.[activeId];
-          if (subRole) {
-            fetchTimeLogs(activeId, subRole.subcontractorId, auth.currentUser!.uid);
-            fetchExpenses(activeId, subRole.subcontractorId, auth.currentUser!.uid);
-          }
-        }
-      });
-    }
+  const openProjectPage = (projectId: string) => {
+    router.push(`/dashboard/my-work/projects/${projectId}`);
   };
 
   const getStatusBadge = (status: string) => {
@@ -534,7 +513,7 @@ export default function ProjectsContent() {
               {activeProjects.map((project) => (
                 <div
                   key={project.id}
-                  onClick={() => openProjectModal(project)}
+                  onClick={() => openProjectPage(project.projectId)}
                   className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 hover:shadow-md hover:border-blue-300 transition cursor-pointer"
                 >
                   <div className="flex items-start justify-between mb-3">
@@ -589,7 +568,7 @@ export default function ProjectsContent() {
               {completedProjects.map((project) => (
                 <div
                   key={project.id}
-                  onClick={() => openProjectModal(project)}
+                  onClick={() => openProjectPage(project.projectId)}
                   className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 hover:shadow-md hover:border-blue-300 transition cursor-pointer opacity-75"
                 >
                   <div className="flex items-start justify-between mb-3">
@@ -641,16 +620,6 @@ export default function ProjectsContent() {
           </div>
         )}
       </div>
-
-      {selectedProject && (
-        <ProjectModal
-          isOpen={showModal}
-          onClose={closeProjectModal}
-          project={selectedProject}
-          rateAssignment={rateAssignments.get(selectedProject.clientId) || null}
-          rateCards={rateCards}
-        />
-      )}
     </DashboardLayout>
   );
 }
