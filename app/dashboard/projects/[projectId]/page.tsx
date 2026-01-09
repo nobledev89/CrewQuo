@@ -46,7 +46,7 @@ interface ProjectAssignment {
 export default function ProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const projectId = params?.projectId as string;
+  const projectId = params?.projectId as string | undefined;
   
   const [project, setProject] = useState<Project | null>(null);
   const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
@@ -60,6 +60,12 @@ export default function ProjectDetailPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    // Safety check: ensure projectId is available
+    if (!projectId) {
+      setLoading(false);
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         setUserId(currentUser.uid);
@@ -96,6 +102,8 @@ export default function ProjectDetailPage() {
         } finally {
           setLoading(false);
         }
+      } else {
+        setLoading(false);
       }
     });
 
@@ -237,6 +245,8 @@ export default function ProjectDetailPage() {
       return;
     }
 
+    if (!projectId) return;
+
     try {
       await deleteDoc(doc(db, 'projectAssignments', assignmentId));
       await fetchAssignments(companyId, projectId);
@@ -293,13 +303,17 @@ export default function ProjectDetailPage() {
     );
   }
 
-  if (!project) {
+  if (!project || !projectId) {
     return (
       <DashboardLayout>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="bg-red-50 rounded-xl shadow-sm border border-red-200 p-12 text-center">
             <h3 className="text-lg font-semibold text-red-900 mb-2">Project not found</h3>
-            <p className="text-red-600 mb-4">The requested project could not be found.</p>
+            <p className="text-red-600 mb-4">
+              {!projectId 
+                ? 'Invalid project ID provided.'
+                : 'The requested project could not be found.'}
+            </p>
             <button
               onClick={() => router.push('/dashboard/projects')}
               className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"

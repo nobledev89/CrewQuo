@@ -34,7 +34,7 @@ export async function refreshAuthToken(): Promise<boolean> {
  * Call the Cloud Function to refresh user custom claims in Firebase Auth
  * Then refresh the local token to get the updated claims
  */
-export async function refreshUserClaims(): Promise<boolean> {
+export async function refreshUserClaims(forceReload: boolean = false): Promise<boolean> {
   try {
     const functions = getFunctions();
     const refreshClaims = httpsCallable(functions, 'refreshClaims');
@@ -46,6 +46,13 @@ export async function refreshUserClaims(): Promise<boolean> {
       // Now refresh the local token to get the updated claims
       await refreshAuthToken();
       console.log('✅ User claims refreshed successfully');
+      
+      // Force page reload to ensure all queries use the new token
+      if (forceReload) {
+        console.log('🔄 Reloading page to apply new permissions...');
+        window.location.reload();
+      }
+      
       return true;
     }
     
@@ -95,11 +102,11 @@ export async function retryWithTokenRefresh<T>(
       if (isPermissionError(error) && attempt < maxRetries) {
         console.log(`Permission error detected, refreshing token and retrying (attempt ${attempt + 1}/${maxRetries})...`);
         
-        // Try to refresh claims and token
-        await refreshUserClaims();
+        // Try to refresh claims and token (without reload during retry)
+        await refreshUserClaims(false);
         
         // Wait a bit before retrying to allow claims to propagate
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 1500));
         
         continue;
       }

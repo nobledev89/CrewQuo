@@ -141,21 +141,18 @@ export default function ProjectsPage() {
     
     try {
       console.log('🔄 Manually refreshing user claims...');
-      const success = await refreshUserClaims();
+      // Use forceReload=true to reload the page after token refresh
+      // This ensures all Firestore queries use the new token
+      const success = await refreshUserClaims(true);
       
-      if (success) {
-        console.log('✅ Claims refreshed, reloading data...');
-        // Reload data after successful refresh
-        if (auth.currentUser) {
-          await loadData(auth.currentUser);
-        }
-      } else {
+      if (!success) {
         setError('Failed to refresh access. Please sign out and sign back in.');
+        setRefreshing(false);
       }
+      // If successful, page will reload automatically
     } catch (err) {
       console.error('Error refreshing access:', err);
       setError('Failed to refresh access. Please sign out and sign back in.');
-    } finally {
       setRefreshing(false);
     }
   };
