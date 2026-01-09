@@ -43,7 +43,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);
-    localStorage.setItem('theme', newTheme);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('theme', newTheme);
+    }
     applyTheme(newTheme);
   };
 
@@ -52,15 +54,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setTheme(newTheme);
   };
 
-  // Prevent hydration mismatch by not rendering children until mounted
-  // This ensures server and client render the same content initially
-  if (!mounted) {
-    return <div suppressHydrationWarning>{children}</div>;
-  }
-
+  // Always provide the context to avoid "useTheme must be used within ThemeProvider" errors
+  // The suppressHydrationWarning prevents hydration mismatch warnings for theme-dependent content
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
-      {children}
+      <div suppressHydrationWarning style={{ display: 'contents' }}>
+        {children}
+      </div>
     </ThemeContext.Provider>
   );
 }
