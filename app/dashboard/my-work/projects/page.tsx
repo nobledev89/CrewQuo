@@ -1,5 +1,3 @@
-'use client';
-
 import dynamic from 'next/dynamic';
 
 // Disable SSR for this entire page to prevent hydration mismatches
