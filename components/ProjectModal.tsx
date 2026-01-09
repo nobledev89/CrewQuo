@@ -111,10 +111,15 @@ export default function ProjectModal({
         orderBy('date', 'desc')
       );
       const logsSnap = await getDocs(logsQuery);
-      const logs = logsSnap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
+      const logs = logsSnap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          ...data,
+          // Convert Firestore Timestamp to JavaScript Date to prevent React rendering errors
+          date: data.date?.toDate ? data.date.toDate() : (data.date || null),
+        };
+      });
       setTimeLogs(logs);
 
       // Fetch expenses for this project
@@ -126,10 +131,15 @@ export default function ProjectModal({
         orderBy('date', 'desc')
       );
       const expensesSnap = await getDocs(expensesQuery);
-      const exps = expensesSnap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
+      const exps = expensesSnap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          ...data,
+          // Convert Firestore Timestamp to JavaScript Date to prevent React rendering errors
+          date: data.date?.toDate ? data.date.toDate() : (data.date || null),
+        };
+      });
       setExpenses(exps);
     } catch (error) {
       console.error('Error fetching project data:', error);
@@ -407,15 +417,36 @@ export default function ProjectModal({
 
   const formatDate = (timestamp: any) => {
     if (!timestamp) return 'N/A';
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     
-    // Use consistent formatting that works the same on server and client
-    const day = String(date.getDate()).padStart(2, '0');
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const month = months[date.getMonth()];
-    const year = date.getFullYear();
-    
-    return `${day} ${month} ${year}`;
+    try {
+      // Handle Firestore Timestamp objects
+      let date: Date;
+      if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+        date = timestamp.toDate();
+      } else if (timestamp instanceof Date) {
+        date = timestamp;
+      } else if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+        date = new Date(timestamp);
+      } else {
+        return 'Invalid Date';
+      }
+      
+      // Validate the date
+      if (isNaN(date.getTime())) {
+        return 'Invalid Date';
+      }
+      
+      // Use consistent formatting that works the same on server and client
+      const day = String(date.getDate()).padStart(2, '0');
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const month = months[date.getMonth()];
+      const year = date.getFullYear();
+      
+      return `${day} ${month} ${year}`;
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return 'Invalid Date';
+    }
   };
 
   const getStatusBadge = (status: string) => {
