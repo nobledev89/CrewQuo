@@ -56,7 +56,7 @@ function ProjectsContent() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
-  const [companyId, setCompanyId] = useState<string>('');
+  const [activeCompanyId, setActiveCompanyId] = useState<string>('');
   const [userRole, setUserRole] = useState<string>('');
   const [showModal, setShowModal] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -91,12 +91,13 @@ function ProjectsContent() {
           const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
           if (userDoc.exists()) {
             const userData = userDoc.data();
-            setCompanyId(userData.companyId);
+            const activeId = userData.activeCompanyId || userData.companyId;
+            setActiveCompanyId(activeId);
             setUserRole(userData.role);
             
-            await fetchClients(userData.companyId);
+            await fetchClients(activeId);
             // Fetch projects on initial load based on selected client filter
-            await fetchProjects(userData.companyId, selectedClient.clientId);
+            await fetchProjects(activeId, selectedClient.clientId);
           }
         } catch (error) {
           console.error('Error fetching data:', error);
@@ -111,10 +112,10 @@ function ProjectsContent() {
 
   // Refetch projects when client filter changes
   useEffect(() => {
-    if (companyId) {
-      fetchProjects(companyId, selectedClient.clientId);
+    if (activeCompanyId) {
+      fetchProjects(activeCompanyId, selectedClient.clientId);
     }
-  }, [selectedClient.clientId, companyId]);
+  }, [selectedClient.clientId, activeCompanyId]);
 
   const fetchProjects = async (compId: string, clientId: string | null) => {
     try {
@@ -259,12 +260,12 @@ function ProjectsContent() {
         // Create new project
         await addDoc(collection(db, 'projects'), {
           ...projectData,
-          companyId,
+          companyId: activeCompanyId,
           createdAt: serverTimestamp(),
         });
       }
 
-      await fetchProjects(companyId, selectedClient.clientId);
+      await fetchProjects(activeCompanyId, selectedClient.clientId);
       closeModal();
     } catch (error) {
       console.error('Error saving project:', error);
@@ -281,7 +282,7 @@ function ProjectsContent() {
 
     try {
       await deleteDoc(doc(db, 'projects', projectId));
-      await fetchProjects(companyId, selectedClient.clientId);
+      await fetchProjects(activeCompanyId, selectedClient.clientId);
     } catch (error) {
       console.error('Error deleting project:', error);
       alert('Failed to delete project. Please try again.');
