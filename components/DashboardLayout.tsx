@@ -61,10 +61,34 @@ function DashboardContent({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showClientMenu, setShowClientMenu] = useState(false);
+  const [contextReady, setContextReady] = useState(false);
 
-  // Client context for filtering
-  const { clients, selectedClient, selectClient, clearClientSelection, hasClients } = useClientFilter();
-  const { isLoading: isLoadingData } = useClientData();
+  // Client context for filtering - with safety check
+  let contextData;
+  try {
+    contextData = {
+      clientFilter: useClientFilter(),
+      clientData: useClientData()
+    };
+    // Mark context as ready after first successful access
+    if (!contextReady) {
+      setContextReady(true);
+    }
+  } catch (error) {
+    console.error('Context not ready yet:', error);
+    // Return loading state if context not available
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Initializing...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const { clients, selectedClient, selectClient, clearClientSelection, hasClients } = contextData.clientFilter;
+  const { isLoading: isLoadingData } = contextData.clientData;
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
