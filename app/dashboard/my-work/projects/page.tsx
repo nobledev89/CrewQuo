@@ -13,8 +13,9 @@ import {
 } from 'firebase/firestore';
 import DashboardLayout from '@/components/DashboardLayout';
 import ProjectModal from '@/components/ProjectModal';
-import { Briefcase, Search, Filter } from 'lucide-react';
+import { Briefcase, Search, Filter, RefreshCw, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
+import { refreshUserClaims, isPermissionError, retryWithTokenRefresh } from '@/lib/tokenRefresh';
 
 interface Assignment {
   id: string;
@@ -62,6 +63,8 @@ interface Expense {
 
 export default function ProjectsPage() {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string>('');
+  const [refreshing, setRefreshing] = useState(false);
   const [userRole, setUserRole] = useState<string>('');
   const [activeCompanyId, setActiveCompanyId] = useState<string>('');
   const [subcontractorId, setSubcontractorId] = useState<string>('');
@@ -83,36 +86,79 @@ export default function ProjectsPage() {
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) return;
 
-      try {
-        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-        if (!userDoc.exists()) return;
-        const userData = userDoc.data();
-        setUserRole(userData.role);
-        const activeId = userData.activeCompanyId || userData.companyId;
-        setActiveCompanyId(activeId);
+      await loadData(currentUser);
+    });
 
-        const subRole = userData.subcontractorRoles?.[activeId];
-        if (!subRole) {
-          setLoading(false);
-          return;
-        }
-        setSubcontractorId(subRole.subcontractorId);
+    return () => unsub();
+  }, []);
 
+  const loadData = async (currentUser: any) => {
+    try {
+      setError('');
+      setLoading(true);
+
+      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+      if (!userDoc.exists()) return;
+      const userData = userDoc.data();
+      setUserRole(userData.role);
+      const activeId = userData.activeCompanyId || userData.companyId;
+      setActiveCompanyId(activeId);
+
+      const subRole = userData.subcontractorRoles?.[activeId];
+      if (!subRole) {
+        setLoading(false);
+        return;
+      }
+      setSubcontractorId(subRole.subcontractorId);
+
+      // Wrap data fetching with retry logic
+      await retryWithTokenRefresh(async () => {
         await Promise.all([
           fetchAssignments(activeId, subRole.subcontractorId),
           fetchRateAssignments(activeId, subRole.subcontractorId),
           fetchTimeLogs(activeId, subRole.subcontractorId, currentUser.uid),
           fetchExpenses(activeId, subRole.subcontractorId, currentUser.uid),
         ]);
-      } catch (err) {
-        console.error('Error loading subcontractor workspace', err);
-      } finally {
-        setLoading(false);
+      });
+    } catch (err: any) {
+      console.error('Error loading subcontractor workspace', err);
+      
+      if (isPermissionError(err)) {
+        setError(
+          'Your access permissions need to be refreshed. Please click "Refresh Access" below or sign out and sign back in.'
+        );
+      } else {
+        setError('Failed to load projects. Please try again or contact support if the issue persists.');
       }
-    });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    return () => unsub();
-  }, []);
+  const handleRefreshAccess = async () => {
+    setRefreshing(true);
+    setError('');
+    
+    try {
+      console.log('🔄 Manually refreshing user claims...');
+      const success = await refreshUserClaims();
+      
+      if (success) {
+        console.log('✅ Claims refreshed, reloading data...');
+        // Reload data after successful refresh
+        if (auth.currentUser) {
+          await loadData(auth.currentUser);
+        }
+      } else {
+        setError('Failed to refresh access. Please sign out and sign back in.');
+      }
+    } catch (err) {
+      console.error('Error refreshing access:', err);
+      setError('Failed to refresh access. Please sign out and sign back in.');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const fetchAssignments = async (companyId: string, subId: string) => {
     const assignmentsSnap = await getDocs(
@@ -340,6 +386,41 @@ export default function ProjectsPage() {
     );
   }
 
+  // Show error state with retry option
+  if (error && assignments.length === 0) {
+    return (
+      <DashboardLayout>
+        <div className="max-w-4xl mx-auto px-4 py-12">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+            <div className="flex items-start">
+              <AlertCircle className="w-6 h-6 text-red-600 mr-3 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-red-800 mb-2">Access Error</h3>
+                <p className="text-red-700 mb-4">{error}</p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleRefreshAccess}
+                    disabled={refreshing}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                    {refreshing ? 'Refreshing...' : 'Refresh Access'}
+                  </button>
+                  <Link
+                    href="/login"
+                    className="px-4 py-2 bg-white border border-red-300 text-red-700 rounded-lg hover:bg-red-50 transition"
+                  >
+                    Sign Out & Back In
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   // Check if user is a subcontractor
   const isSubcontractor = userRole === 'SUBCONTRACTOR' || subcontractorId !== '';
 
@@ -358,18 +439,48 @@ export default function ProjectsPage() {
   return (
     <DashboardLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* Error Banner */}
+        {error && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="flex items-start">
+              <AlertCircle className="w-5 h-5 text-yellow-600 mr-2 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-yellow-800 text-sm">{error}</p>
+                <button
+                  onClick={handleRefreshAccess}
+                  disabled={refreshing}
+                  className="mt-2 text-sm text-yellow-700 underline hover:text-yellow-900 disabled:opacity-50"
+                >
+                  {refreshing ? 'Refreshing...' : 'Try refreshing your access'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">My Projects</h1>
             <p className="text-gray-600 mt-1">View and manage your assigned projects</p>
           </div>
-          <Link
-            href="/dashboard/my-work/summary"
-            className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
-          >
-            View Summary
-          </Link>
+          <div className="flex gap-2">
+            <button
+              onClick={handleRefreshAccess}
+              disabled={refreshing}
+              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition disabled:opacity-50 flex items-center gap-2"
+              title="Refresh your access permissions"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              {refreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
+            <Link
+              href="/dashboard/my-work/summary"
+              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+            >
+              View Summary
+            </Link>
+          </div>
         </div>
 
         {/* Filters and Search */}
