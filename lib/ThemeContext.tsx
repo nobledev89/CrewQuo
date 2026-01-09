@@ -55,12 +55,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Always provide the context to avoid "useTheme must be used within ThemeProvider" errors
-  // The suppressHydrationWarning prevents hydration mismatch warnings for theme-dependent content
+  // Don't wrap children to prevent additional DOM nodes that could cause hydration issues
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
-      <div suppressHydrationWarning style={{ display: 'contents' }}>
-        {children}
-      </div>
+      {children}
     </ThemeContext.Provider>
   );
 }

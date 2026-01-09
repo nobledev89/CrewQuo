@@ -25,8 +25,10 @@ export function useClientContext() {
     isAllClients: true
   });
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     console.log('[ClientContext] Setting up auth listener');
     
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -92,26 +94,29 @@ export function useClientContext() {
       console.log('[ClientContext] Final clients list:', clientsList);
       setClients(clientsList);
       
-      // Try to restore workspace from localStorage
-      try {
-        const saved = localStorage.getItem('selectedWorkspace');
-        if (saved) {
-          const workspace = JSON.parse(saved);
-          // Verify the client still exists
-          if (clientsList.some(c => c.id === workspace.clientId)) {
-            console.log('[ClientContext] Restoring workspace from localStorage:', workspace);
-            setSelectedClient({
-              clientId: workspace.clientId,
-              clientName: workspace.clientName,
-              isAllClients: false
-            });
-          } else {
-            console.log('[ClientContext] Saved workspace client no longer exists, clearing');
-            localStorage.removeItem('selectedWorkspace');
+      // Only restore workspace from localStorage after component has mounted
+      // This prevents hydration mismatches
+      if (mounted) {
+        try {
+          const saved = localStorage.getItem('selectedWorkspace');
+          if (saved) {
+            const workspace = JSON.parse(saved);
+            // Verify the client still exists
+            if (clientsList.some((c: Client) => c.id === workspace.clientId)) {
+              console.log('[ClientContext] Restoring workspace from localStorage:', workspace);
+              setSelectedClient({
+                clientId: workspace.clientId,
+                clientName: workspace.clientName,
+                isAllClients: false
+              });
+            } else {
+              console.log('[ClientContext] Saved workspace client no longer exists, clearing');
+              localStorage.removeItem('selectedWorkspace');
+            }
           }
+        } catch (e) {
+          console.error('[ClientContext] Error restoring workspace:', e);
         }
-      } catch (e) {
-        console.error('[ClientContext] Error restoring workspace:', e);
       }
       
       setLoading(false);
