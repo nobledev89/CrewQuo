@@ -653,7 +653,7 @@ export default function ProjectModal({
                             {filteredLogs.map((log) => (
                               <tr key={log.id} className="border-b border-gray-200 hover:bg-gray-50">
                                 <td className="px-4 py-2 text-gray-900">{formatDate(log.date)}</td>
-                                <td className="px-4 py-2 text-gray-900">{log.roleName} - {log.shiftType}</td>
+                                <td className="px-4 py-2 text-gray-900">{log.roleName} - {log.timeframeName || log.shiftType || 'Standard'}</td>
                                 <td className="px-4 py-2 text-right text-gray-900">{log.hoursRegular}h</td>
                                 <td className="px-4 py-2 text-right text-gray-900">{log.hoursOT}h</td>
                                 <td className="px-4 py-2 text-right text-gray-900 font-semibold">£{(log.subCost || 0).toFixed(2)}</td>
