@@ -62,6 +62,7 @@ interface Expense {
 }
 
 export default function ProjectsContent() {
+  const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [refreshing, setRefreshing] = useState(false);
@@ -73,7 +74,7 @@ export default function ProjectsContent() {
   const [rateCards, setRateCards] = useState<Map<string, RateCard>>(new Map());
   const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  
+
   // UI State
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed' | 'on_hold'>('active');
   const [searchQuery, setSearchQuery] = useState('');
@@ -82,7 +83,14 @@ export default function ProjectsContent() {
   const [activeProjectsLimit, setActiveProjectsLimit] = useState(10);
   const [completedProjectsLimit, setCompletedProjectsLimit] = useState(10);
 
+  // Prevent hydration mismatch by only rendering after client mount
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) return;
 
@@ -90,7 +98,7 @@ export default function ProjectsContent() {
     });
 
     return () => unsub();
-  }, []);
+  }, [mounted]);
 
   const loadData = async (currentUser: any) => {
     try {
@@ -359,6 +367,20 @@ export default function ProjectsContent() {
     };
     return styles[status as keyof typeof styles] || 'bg-gray-100 text-gray-800 border-gray-200';
   };
+
+  // Prevent hydration mismatch - don't render until mounted
+  if (!mounted) {
+    return (
+      <DashboardLayout>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   if (loading) {
     return (
