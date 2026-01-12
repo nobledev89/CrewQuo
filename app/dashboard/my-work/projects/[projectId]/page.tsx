@@ -33,6 +33,7 @@ export default function ProjectDetailPage() {
   const [clientName, setClientName] = useState<string>('');
   const [rateAssignment, setRateAssignment] = useState<any>(null);
   const [rateCards, setRateCards] = useState<Map<string, any>>(new Map());
+  const [rateCardTemplate, setRateCardTemplate] = useState<any>(null);
 
   // Tab state
   const [activeTab, setActiveTab] = useState<'logs' | 'expenses' | 'summary'>('logs');
@@ -143,7 +144,16 @@ export default function ProjectDetailPage() {
         for (const cardId of cardIds) {
           const cardDoc = await getDoc(doc(db, 'rateCards', cardId));
           if (cardDoc.exists()) {
-            cardsMap.set(cardId, { id: cardDoc.id, ...cardDoc.data() });
+            const cardData: any = { id: cardDoc.id, ...cardDoc.data() };
+            cardsMap.set(cardId, cardData);
+            
+            // Fetch the template if the card has one
+            if (cardData.templateId) {
+              const templateDoc = await getDoc(doc(db, 'rateCardTemplates', cardData.templateId));
+              if (templateDoc.exists()) {
+                setRateCardTemplate({ id: templateDoc.id, ...templateDoc.data() });
+              }
+            }
           }
         }
         setRateCards(cardsMap);
@@ -254,13 +264,40 @@ export default function ProjectDetailPage() {
     let breakdown: any[] = [];
 
     if (useTimePicker && logForm.startTime && logForm.endTime && selectedRateEntry) {
-      const timeBasedRates = selectedRateEntry.timeBasedRates;
+      // Build timeBasedRates array from all rate entries for this role using template timeframes
+      const timeBasedRates: any[] = [];
+      
+      // Get all rate entries for the selected role
+      selectedRoleEntries.forEach((rateEntry: any) => {
+        if (rateEntry.timeframeId && rateCardTemplate?.timeframeDefinitions) {
+          // Find the matching timeframe definition from the template
+          const timeframeDef = rateCardTemplate.timeframeDefinitions.find(
+            (tf: any) => tf.id === rateEntry.timeframeId
+          );
+          
+          if (timeframeDef) {
+            timeBasedRates.push({
+              id: rateEntry.timeframeId,
+              startTime: timeframeDef.startTime,
+              endTime: timeframeDef.endTime,
+              subcontractorRate: rateEntry.subcontractorRate || 0,
+              clientRate: rateEntry.clientRate || 0,
+              description: rateEntry.timeframeName || timeframeDef.name || 'Standard'
+            });
+          }
+        }
+      });
 
-      if (timeBasedRates && timeBasedRates.length > 0) {
+      // Use existing timeBasedRates if available, otherwise use the constructed ones
+      const ratesToUse = (selectedRateEntry.timeBasedRates && selectedRateEntry.timeBasedRates.length > 0)
+        ? selectedRateEntry.timeBasedRates
+        : timeBasedRates;
+
+      if (ratesToUse.length > 0) {
         const result = calculateTimeBasedCost(
           logForm.startTime,
           logForm.endTime,
-          timeBasedRates,
+          ratesToUse,
           payRate,
           billRate
         );
@@ -292,7 +329,7 @@ export default function ProjectDetailPage() {
     log.bill = Math.round(log.bill * 100) / 100;
 
     return { calculatedLog: log, calculationBreakdown: breakdown };
-  }, [useTimePicker, logForm.startTime, logForm.endTime, logForm.hoursRegular, logForm.quantity, selectedRateEntry, payRate, billRate]);
+  }, [useTimePicker, logForm.startTime, logForm.endTime, logForm.hoursRegular, logForm.quantity, selectedRateEntry, selectedRoleEntries, payRate, billRate, payCard]);
 
   const expenseOptions =
     payCard?.expenses?.map((e: any) => ({
