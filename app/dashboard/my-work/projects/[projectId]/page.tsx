@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { db, auth } from '@/lib/firebase';
 import {
@@ -62,7 +62,6 @@ export default function ProjectDetailPage() {
     quantity: 1,
     notes: '',
   });
-  const [calculationBreakdown, setCalculationBreakdown] = useState<any[]>([]);
 
   const [expenseForm, setExpenseForm] = useState({
     date: '',
@@ -234,48 +233,51 @@ export default function ProjectDetailPage() {
     ? (matchingBillEntry.clientRate ?? matchingBillEntry.hourlyRate ?? matchingBillEntry.baseRate ?? payRate)
     : (selectedRateEntry?.clientRate ?? payRate);
 
-  // Calculate cost
-  let calculatedLog = { cost: 0, bill: 0, hours: 0 };
+  // Calculate cost using useMemo to avoid infinite re-renders
+  const { calculatedLog, calculationBreakdown } = useMemo(() => {
+    let log = { cost: 0, bill: 0, hours: 0 };
+    let breakdown: any[] = [];
 
-  if (useTimePicker && logForm.startTime && logForm.endTime && selectedRateEntry) {
-    const timeBasedRates = selectedRateEntry.timeBasedRates;
+    if (useTimePicker && logForm.startTime && logForm.endTime && selectedRateEntry) {
+      const timeBasedRates = selectedRateEntry.timeBasedRates;
 
-    if (timeBasedRates && timeBasedRates.length > 0) {
-      const result = calculateTimeBasedCost(
-        logForm.startTime,
-        logForm.endTime,
-        timeBasedRates,
-        payRate,
-        billRate
-      );
+      if (timeBasedRates && timeBasedRates.length > 0) {
+        const result = calculateTimeBasedCost(
+          logForm.startTime,
+          logForm.endTime,
+          timeBasedRates,
+          payRate,
+          billRate
+        );
 
-      calculatedLog.hours = result.totalHours;
-      calculatedLog.cost = result.subcontractorCost * Number(logForm.quantity);
-      calculatedLog.bill = result.clientBill * Number(logForm.quantity);
-      setCalculationBreakdown(result.breakdown);
-    } else {
-      const startMinutes = parseInt(logForm.startTime.split(':')[0]) * 60 + parseInt(logForm.startTime.split(':')[1]);
-      let endMinutes = parseInt(logForm.endTime.split(':')[0]) * 60 + parseInt(logForm.endTime.split(':')[1]);
+        log.hours = result.totalHours;
+        log.cost = result.subcontractorCost * Number(logForm.quantity);
+        log.bill = result.clientBill * Number(logForm.quantity);
+        breakdown = result.breakdown;
+      } else {
+        const startMinutes = parseInt(logForm.startTime.split(':')[0]) * 60 + parseInt(logForm.startTime.split(':')[1]);
+        let endMinutes = parseInt(logForm.endTime.split(':')[0]) * 60 + parseInt(logForm.endTime.split(':')[1]);
 
-      if (endMinutes <= startMinutes) {
-        endMinutes += 24 * 60;
+        if (endMinutes <= startMinutes) {
+          endMinutes += 24 * 60;
+        }
+
+        const hours = (endMinutes - startMinutes) / 60;
+        log.hours = Math.round(hours * 100) / 100;
+        log.cost = payRate * hours * Number(logForm.quantity);
+        log.bill = billRate * hours * Number(logForm.quantity);
       }
-
-      const hours = (endMinutes - startMinutes) / 60;
-      calculatedLog.hours = Math.round(hours * 100) / 100;
-      calculatedLog.cost = payRate * hours * Number(logForm.quantity);
-      calculatedLog.bill = billRate * hours * Number(logForm.quantity);
-      setCalculationBreakdown([]);
+    } else {
+      log.hours = Number(logForm.hoursRegular) + Number(logForm.hoursOT);
+      log.cost = payRate * log.hours * Number(logForm.quantity);
+      log.bill = billRate * log.hours * Number(logForm.quantity);
     }
-  } else {
-    calculatedLog.hours = Number(logForm.hoursRegular) + Number(logForm.hoursOT);
-    calculatedLog.cost = payRate * calculatedLog.hours * Number(logForm.quantity);
-    calculatedLog.bill = billRate * calculatedLog.hours * Number(logForm.quantity);
-    setCalculationBreakdown([]);
-  }
 
-  calculatedLog.cost = Math.round(calculatedLog.cost * 100) / 100;
-  calculatedLog.bill = Math.round(calculatedLog.bill * 100) / 100;
+    log.cost = Math.round(log.cost * 100) / 100;
+    log.bill = Math.round(log.bill * 100) / 100;
+
+    return { calculatedLog: log, calculationBreakdown: breakdown };
+  }, [useTimePicker, logForm.startTime, logForm.endTime, logForm.hoursRegular, logForm.hoursOT, logForm.quantity, selectedRateEntry, payRate, billRate]);
 
   const expenseOptions =
     payCard?.expenses?.map((e: any) => ({
