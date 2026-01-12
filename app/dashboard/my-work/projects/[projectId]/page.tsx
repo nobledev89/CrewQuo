@@ -203,17 +203,33 @@ export default function ProjectDetailPage() {
     ? rateCards.get(rateAssignment.billRateCardId)
     : undefined;
 
-  const rateOptions =
-    payCard?.rates?.map((r: any, idx: number) => ({
-      key: `${idx}`,
-      label: `${r.roleName} - ${r.timeframeName || r.shiftType || 'Standard'}`,
-      value: r,
-    })) || [];
+  // Group rates by role name only (not role + shift)
+  const rateOptions = useMemo(() => {
+    if (!payCard?.rates) return [];
+    
+    const uniqueRoles = new Map<string, any[]>();
+    payCard.rates.forEach((r: any) => {
+      if (!uniqueRoles.has(r.roleName)) {
+        uniqueRoles.set(r.roleName, []);
+      }
+      uniqueRoles.get(r.roleName)!.push(r);
+    });
+    
+    return Array.from(uniqueRoles.entries()).map(([roleName, rateEntries]) => ({
+      key: roleName,
+      label: roleName,
+      rateEntries, // All shift variations for this role
+    }));
+  }, [payCard]);
 
-  const selectedRateEntry =
-    payCard?.rates && logForm.rateKey !== ''
-      ? payCard.rates[parseInt(logForm.rateKey, 10)]
-      : undefined;
+  // Get all rate entries for the selected role (all shifts)
+  const selectedRoleEntries = useMemo(() => {
+    const selected = rateOptions.find(opt => opt.key === logForm.rateKey);
+    return selected?.rateEntries || [];
+  }, [rateOptions, logForm.rateKey]);
+
+  // For backward compatibility, use the first entry as the primary
+  const selectedRateEntry = selectedRoleEntries[0];
 
   const matchingBillEntry =
     billCard?.rates?.find(
@@ -757,7 +773,7 @@ export default function ProjectDetailPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Role & Shift *</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Role *</label>
                       <select
                         value={logForm.rateKey}
                         onChange={(e) => setLogForm((p) => ({ ...p, rateKey: e.target.value }))}
@@ -769,7 +785,7 @@ export default function ProjectDetailPage() {
                         }`}
                       >
                         <option value="">
-                          {rateOptions.length === 0 ? 'No types' : 'Choose...'}
+                          {rateOptions.length === 0 ? 'No roles' : 'Choose role...'}
                         </option>
                         {rateOptions.map((o: any) => (
                           <option key={o.key} value={o.key}>
@@ -777,6 +793,7 @@ export default function ProjectDetailPage() {
                           </option>
                         ))}
                       </select>
+                      <p className="text-xs text-gray-500 mt-1">Shift will be auto-detected from time range</p>
                     </div>
 
                     <div>
