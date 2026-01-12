@@ -2,9 +2,6 @@
 
 import { ClientFilterProvider } from '@/lib/ClientFilterContext';
 
-export const dynamic = 'force-dynamic';
-export const dynamicParams = true;
-
 export default function DashboardRootLayout({
   children,
 }: {
