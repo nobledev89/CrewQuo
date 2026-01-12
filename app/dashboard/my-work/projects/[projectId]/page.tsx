@@ -58,7 +58,6 @@ export default function ProjectDetailPage() {
     startTime: '08:00',
     endTime: '17:00',
     hoursRegular: 8,
-    hoursOT: 0,
     quantity: 1,
     notes: '',
   });
@@ -284,7 +283,7 @@ export default function ProjectDetailPage() {
         log.bill = billRate * hours * Number(logForm.quantity);
       }
     } else {
-      log.hours = Number(logForm.hoursRegular) + Number(logForm.hoursOT);
+      log.hours = Number(logForm.hoursRegular);
       log.cost = payRate * log.hours * Number(logForm.quantity);
       log.bill = billRate * log.hours * Number(logForm.quantity);
     }
@@ -293,7 +292,7 @@ export default function ProjectDetailPage() {
     log.bill = Math.round(log.bill * 100) / 100;
 
     return { calculatedLog: log, calculationBreakdown: breakdown };
-  }, [useTimePicker, logForm.startTime, logForm.endTime, logForm.hoursRegular, logForm.hoursOT, logForm.quantity, selectedRateEntry, payRate, billRate]);
+  }, [useTimePicker, logForm.startTime, logForm.endTime, logForm.hoursRegular, logForm.quantity, selectedRateEntry, payRate, billRate]);
 
   const expenseOptions =
     payCard?.expenses?.map((e: any) => ({
@@ -320,48 +319,102 @@ export default function ProjectDetailPage() {
       const activeCompanyId = userData?.activeCompanyId || userData?.companyId;
       const subRole = userData?.subcontractorRoles?.[activeCompanyId];
 
-      const timeLogData: any = {
-        companyId: activeCompanyId,
-        projectId: projectId,
-        clientId: project.clientId,
-        subcontractorId: subRole.subcontractorId,
-        createdByUserId: user.uid,
-        date: new Date(logForm.date),
-        roleName: selectedRateEntry.roleName,
-        hoursRegular: calculatedLog.hours,
-        hoursOT: 0,
-        quantity: Number(logForm.quantity),
-        subCost: calculatedLog.cost,
-        clientBill: calculatedLog.bill,
-        marginValue: calculatedLog.bill - calculatedLog.cost,
-        marginPct:
-          calculatedLog.bill > 0
-            ? ((calculatedLog.bill - calculatedLog.cost) / calculatedLog.bill) * 100
-            : 0,
-        unitSubCost: payRate,
-        unitClientBill: billRate,
-        currency: 'GBP',
-        payRateCardId: rateAssignment?.payRateCardId || null,
-        billRateCardId: rateAssignment?.billRateCardId || null,
-        status,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      };
+      // If we have multiple rate segments (time-based rates), create separate entries for each
+      if (calculationBreakdown.length > 1) {
+        // Create separate time log entry for each rate segment
+        for (const segment of calculationBreakdown) {
+          // Extract start and end times from the segment time range
+          const timeRangeMatch = segment.timeRange.match(/(\d{2}:\d{2})-(\d{2}:\d{2})/);
+          const segmentStartTime = timeRangeMatch ? timeRangeMatch[1] : logForm.startTime;
+          const segmentEndTime = timeRangeMatch ? timeRangeMatch[2] : logForm.endTime;
+          
+          const segmentCost = segment.subCost * Number(logForm.quantity);
+          const segmentBill = segment.clientCost * Number(logForm.quantity);
 
-      // Store start and end times for time picker tracking
-      if (useTimePicker && logForm.startTime && logForm.endTime) {
-        timeLogData.startTime = logForm.startTime;
-        timeLogData.endTime = logForm.endTime;
+          const timeLogData: any = {
+            companyId: activeCompanyId,
+            projectId: projectId,
+            clientId: project.clientId,
+            subcontractorId: subRole.subcontractorId,
+            createdByUserId: user.uid,
+            date: new Date(logForm.date),
+            roleName: selectedRateEntry.roleName,
+            hoursRegular: segment.hours,
+            hoursOT: 0,
+            quantity: Number(logForm.quantity),
+            subCost: segmentCost,
+            clientBill: segmentBill,
+            marginValue: segmentBill - segmentCost,
+            marginPct:
+              segmentBill > 0
+                ? ((segmentBill - segmentCost) / segmentBill) * 100
+                : 0,
+            unitSubCost: segment.subRate,
+            unitClientBill: segment.clientRate,
+            currency: 'GBP',
+            payRateCardId: rateAssignment?.payRateCardId || null,
+            billRateCardId: rateAssignment?.billRateCardId || null,
+            status,
+            startTime: segmentStartTime,
+            endTime: segmentEndTime,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          };
+
+          // Try to determine shift type from segment description
+          const description = segment.timeRange.split('(')[1]?.split(')')[0] || 'Standard';
+          timeLogData.shiftType = description;
+
+          await addDoc(collection(db, 'timeLogs'), timeLogData);
+        }
+
+        setSuccess(`${calculationBreakdown.length} time log entries created (split by shift)`);
+      } else {
+        // Single entry (no split needed)
+        const timeLogData: any = {
+          companyId: activeCompanyId,
+          projectId: projectId,
+          clientId: project.clientId,
+          subcontractorId: subRole.subcontractorId,
+          createdByUserId: user.uid,
+          date: new Date(logForm.date),
+          roleName: selectedRateEntry.roleName,
+          hoursRegular: calculatedLog.hours,
+          hoursOT: 0,
+          quantity: Number(logForm.quantity),
+          subCost: calculatedLog.cost,
+          clientBill: calculatedLog.bill,
+          marginValue: calculatedLog.bill - calculatedLog.cost,
+          marginPct:
+            calculatedLog.bill > 0
+              ? ((calculatedLog.bill - calculatedLog.cost) / calculatedLog.bill) * 100
+              : 0,
+          unitSubCost: payRate,
+          unitClientBill: billRate,
+          currency: 'GBP',
+          payRateCardId: rateAssignment?.payRateCardId || null,
+          billRateCardId: rateAssignment?.billRateCardId || null,
+          status,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+
+        // Store start and end times for time picker tracking
+        if (useTimePicker && logForm.startTime && logForm.endTime) {
+          timeLogData.startTime = logForm.startTime;
+          timeLogData.endTime = logForm.endTime;
+        }
+
+        if (selectedRateEntry.timeframeId && selectedRateEntry.timeframeName) {
+          timeLogData.timeframeId = selectedRateEntry.timeframeId;
+          timeLogData.timeframeName = selectedRateEntry.timeframeName;
+        } else if (selectedRateEntry.shiftType) {
+          timeLogData.shiftType = selectedRateEntry.shiftType;
+        }
+
+        await addDoc(collection(db, 'timeLogs'), timeLogData);
+        setSuccess('Time log added successfully');
       }
-
-      if (selectedRateEntry.timeframeId && selectedRateEntry.timeframeName) {
-        timeLogData.timeframeId = selectedRateEntry.timeframeId;
-        timeLogData.timeframeName = selectedRateEntry.timeframeName;
-      } else if (selectedRateEntry.shiftType) {
-        timeLogData.shiftType = selectedRateEntry.shiftType;
-      }
-
-      await addDoc(collection(db, 'timeLogs'), timeLogData);
 
       setLogForm({
         date: '',
@@ -369,7 +422,6 @@ export default function ProjectDetailPage() {
         startTime: '',
         endTime: '',
         hoursRegular: 8,
-        hoursOT: 0,
         quantity: 1,
         notes: '',
       });
@@ -377,7 +429,6 @@ export default function ProjectDetailPage() {
       if (auth.currentUser) {
         await fetchProjectData(auth.currentUser);
       }
-      setSuccess('Time log added successfully');
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
       console.error('Error saving log:', error);
@@ -915,8 +966,8 @@ export default function ProjectDetailPage() {
                             <tr>
                               <th className="px-4 py-2 text-left font-semibold text-gray-900">Date</th>
                               <th className="px-4 py-2 text-left font-semibold text-gray-900">Role / Shift</th>
-                              <th className="px-4 py-2 text-right font-semibold text-gray-900">Regular</th>
-                              <th className="px-4 py-2 text-right font-semibold text-gray-900">OT</th>
+                              <th className="px-4 py-2 text-center font-semibold text-gray-900">Time</th>
+                              <th className="px-4 py-2 text-right font-semibold text-gray-900">Hours</th>
                               <th className="px-4 py-2 text-right font-semibold text-gray-900">Cost</th>
                               <th className="px-4 py-2 text-center font-semibold text-gray-900">Actions</th>
                             </tr>
@@ -926,8 +977,8 @@ export default function ProjectDetailPage() {
                               <tr key={log.id} className="border-b border-gray-200 hover:bg-gray-50">
                                 <td className="px-4 py-2 text-gray-900">{formatDate(log.date)}</td>
                                 <td className="px-4 py-2 text-gray-900">{log.roleName} - {log.timeframeName || log.shiftType || 'Standard'}</td>
-                                <td className="px-4 py-2 text-right text-gray-900">{log.hoursRegular}h</td>
-                                <td className="px-4 py-2 text-right text-gray-900">{log.hoursOT}h</td>
+                                <td className="px-4 py-2 text-center text-gray-600 text-xs">{log.startTime && log.endTime ? `${log.startTime}-${log.endTime}` : '-'}</td>
+                                <td className="px-4 py-2 text-right text-gray-900">{(log.hoursRegular || 0).toFixed(1)}h</td>
                                 <td className="px-4 py-2 text-right text-gray-900 font-semibold">£{(log.subCost || 0).toFixed(2)}</td>
                                 <td className="px-4 py-2 text-center">
                                   <div className="flex items-center justify-center gap-2">
