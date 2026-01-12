@@ -50,13 +50,13 @@ export default function ProjectDetailPage() {
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
 
-  // Form state
-  const [useTimePicker, setUseTimePicker] = useState(false);
+  // Form state - Always use time picker for subcontractors
+  const [useTimePicker, setUseTimePicker] = useState(true);
   const [logForm, setLogForm] = useState({
     date: '',
     rateKey: '',
-    startTime: '',
-    endTime: '',
+    startTime: '08:00',
+    endTime: '17:00',
     hoursRegular: 8,
     hoursOT: 0,
     quantity: 1,
@@ -312,8 +312,8 @@ export default function ProjectDetailPage() {
         createdByUserId: user.uid,
         date: new Date(logForm.date),
         roleName: selectedRateEntry.roleName,
-        hoursRegular: Number(logForm.hoursRegular),
-        hoursOT: Number(logForm.hoursOT),
+        hoursRegular: calculatedLog.hours,
+        hoursOT: 0,
         quantity: Number(logForm.quantity),
         subCost: calculatedLog.cost,
         clientBill: calculatedLog.bill,
@@ -331,6 +331,12 @@ export default function ProjectDetailPage() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
+
+      // Store start and end times for time picker tracking
+      if (useTimePicker && logForm.startTime && logForm.endTime) {
+        timeLogData.startTime = logForm.startTime;
+        timeLogData.endTime = logForm.endTime;
+      }
 
       if (selectedRateEntry.timeframeId && selectedRateEntry.timeframeName) {
         timeLogData.timeframeId = selectedRateEntry.timeframeId;
@@ -774,6 +780,26 @@ export default function ProjectDetailPage() {
                     </div>
 
                     <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Start Time *</label>
+                      <input
+                        type="time"
+                        value={logForm.startTime}
+                        onChange={(e) => setLogForm((p) => ({ ...p, startTime: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">End Time *</label>
+                      <input
+                        type="time"
+                        value={logForm.endTime}
+                        onChange={(e) => setLogForm((p) => ({ ...p, endTime: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
+                    </div>
+
+                    <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Men</label>
                       <input
                         type="number"
@@ -786,25 +812,10 @@ export default function ProjectDetailPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Regular Hours</label>
-                      <input
-                        type="number"
-                        step="0.5"
-                        value={logForm.hoursRegular}
-                        onChange={(e) => setLogForm((p) => ({ ...p, hoursRegular: Number(e.target.value) }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">OT Hours</label>
-                      <input
-                        type="number"
-                        step="0.5"
-                        value={logForm.hoursOT}
-                        onChange={(e) => setLogForm((p) => ({ ...p, hoursOT: Number(e.target.value) }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
-                      />
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Hours (Auto)</label>
+                      <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-sm font-semibold text-gray-700">
+                        {calculatedLog.hours.toFixed(1)}h
+                      </div>
                     </div>
 
                     <div>
@@ -831,6 +842,30 @@ export default function ProjectDetailPage() {
                       <p className="text-sm text-yellow-700">
                         No rate card configured. Please contact your administrator.
                       </p>
+                    </div>
+                  )}
+
+                  {/* Calculation Breakdown */}
+                  {calculationBreakdown.length > 0 && (
+                    <div className="mt-3 bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+                      <h4 className="text-sm font-semibold text-indigo-900 mb-2">📊 Time-Based Calculation Breakdown</h4>
+                      <div className="space-y-1">
+                        {calculationBreakdown.map((segment: any, idx: number) => (
+                          <div key={idx} className="text-xs text-indigo-800 flex justify-between">
+                            <span>{segment.timeRange}: {segment.hours.toFixed(1)}h @ £{segment.subRate.toFixed(2)}/hr</span>
+                            <span className="font-semibold">£{segment.subCost.toFixed(2)}</span>
+                          </div>
+                        ))}
+                        <div className="pt-1 border-t border-indigo-300 flex justify-between text-sm font-bold text-indigo-900">
+                          <span>Total: {calculatedLog.hours.toFixed(1)}h</span>
+                          <span>£{(calculatedLog.cost / Number(logForm.quantity)).toFixed(2)}</span>
+                        </div>
+                        {Number(logForm.quantity) > 1 && (
+                          <div className="text-xs text-indigo-700">
+                            × {logForm.quantity} men = £{calculatedLog.cost.toFixed(2)}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
