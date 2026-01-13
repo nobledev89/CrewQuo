@@ -181,20 +181,35 @@ export default function ProjectDetailPage() {
         console.log('[fetchProjectData] Active company ID:', activeCompanyId);
         console.log('[fetchProjectData] Subcontractor role for active company:', subRole);
 
-        // Store debug info
+        // Store comprehensive debug info
         setDebugInfo({
           userId: currentUser.uid,
           userEmail: currentUser.email,
+          projectId: projectId,
           activeCompanyId,
           hasSubRole: !!subRole,
           subcontractorId: subRole?.subcontractorId,
+          userData: {
+            activeCompanyId: userData?.activeCompanyId,
+            companyId: userData?.companyId,
+            ownCompanyId: userData?.ownCompanyId,
+            role: userData?.role,
+            subcontractorRolesCount: userData?.subcontractorRoles ? Object.keys(userData.subcontractorRoles).length : 0,
+            subcontractorRolesKeys: userData?.subcontractorRoles ? Object.keys(userData.subcontractorRoles) : [],
+          },
           tokenClaims: {
             activeCompanyId: tokenClaims.activeCompanyId,
+            companyId: tokenClaims.companyId,
+            ownCompanyId: tokenClaims.ownCompanyId,
+            role: tokenClaims.role,
             hasSubcontractorRoles: !!tokenClaims.subcontractorRoles,
             subcontractorRolesKeys: tokenClaims.subcontractorRoles 
               ? Object.keys(tokenClaims.subcontractorRoles) 
               : [],
+            subcontractorRoleDetails: tokenClaims.subcontractorRoles,
           },
+          tokenIssueTime: new Date(tokenResult.issuedAtTime).toISOString(),
+          tokenExpirationTime: new Date(tokenResult.expirationTime).toISOString(),
         });
 
         if (!subRole) {
@@ -302,13 +317,34 @@ export default function ProjectDetailPage() {
       }, 2); // Retry up to 2 times if permission errors occur
 
     } catch (error: any) {
-      console.error('Error fetching project data:', error);
+      console.error('[fetchProjectData] Error occurred:', error);
+      console.error('[fetchProjectData] Error type:', error?.constructor?.name);
+      console.error('[fetchProjectData] Error code:', error?.code);
+      console.error('[fetchProjectData] Error message:', error?.message);
+      console.error('[fetchProjectData] Error stack:', error?.stack);
+      
+      // Capture detailed error information
+      const errorDetails = {
+        errorType: error?.constructor?.name || 'Unknown',
+        errorCode: error?.code || 'N/A',
+        errorMessage: error?.message || error?.toString() || 'Unknown error',
+        isFirebaseError: error?.name === 'FirebaseError',
+        isPermissionError: isPermissionError(error),
+        fullErrorObject: JSON.stringify(error, Object.getOwnPropertyNames(error), 2),
+      };
+
+      // Update debug info with error details if we have partial info
+      setDebugInfo((prev: any) => ({
+        ...prev,
+        error: errorDetails,
+        errorOccurredAt: new Date().toISOString(),
+      }));
       
       // Check if it's a permission error and provide helpful message
       if (isPermissionError(error)) {
         setError('Permission denied. Your session may be outdated. Please try signing out and signing back in, or contact your administrator.');
       } else {
-        setError('Failed to load project data. Please try again.');
+        setError(`Failed to load project data: ${error?.message || 'Unknown error'}. Please try again.`);
       }
     } finally {
       setLoading(false);
@@ -848,22 +884,101 @@ export default function ProjectDetailPage() {
                 <p className="text-red-700 mb-4">{error}</p>
                 
                 {debugInfo && (
-                  <details className="mb-4 bg-white rounded border border-red-300 p-3">
+                  <details className="mb-4 bg-white rounded border border-red-300 p-3" open>
                     <summary className="cursor-pointer text-sm font-medium text-red-800 hover:text-red-900">
                       🔍 Show Debug Information
                     </summary>
-                    <div className="mt-3 text-xs font-mono space-y-1 text-gray-700">
-                      <div><strong>User:</strong> {debugInfo.userEmail} ({debugInfo.userId})</div>
-                      <div><strong>Active Company ID:</strong> {debugInfo.activeCompanyId || 'Not set'}</div>
-                      <div><strong>Has Subcontractor Role:</strong> {debugInfo.hasSubRole ? '✅ Yes' : '❌ No'}</div>
-                      {debugInfo.subcontractorId && <div><strong>Subcontractor ID:</strong> {debugInfo.subcontractorId}</div>}
-                      <div className="pt-2 border-t border-red-200 mt-2">
-                        <strong>Token Claims:</strong>
-                        <div className="ml-2">
-                          <div>• activeCompanyId: {debugInfo.tokenClaims?.activeCompanyId || 'Missing'}</div>
+                    <div className="mt-3 text-xs font-mono space-y-1 text-gray-700 max-h-96 overflow-y-auto">
+                      <div className="bg-gray-50 p-2 rounded">
+                        <strong className="text-red-700">👤 USER INFORMATION:</strong>
+                        <div className="ml-3 mt-1">
+                          <div>• Email: {debugInfo.userEmail}</div>
+                          <div>• User ID: {debugInfo.userId}</div>
+                          <div>• Project ID: {debugInfo.projectId}</div>
+                        </div>
+                      </div>
+
+                      <div className="bg-blue-50 p-2 rounded">
+                        <strong className="text-blue-700">📋 USER DOCUMENT DATA:</strong>
+                        <div className="ml-3 mt-1">
+                          <div>• activeCompanyId: {debugInfo.userData?.activeCompanyId || '❌ Not set'}</div>
+                          <div>• companyId: {debugInfo.userData?.companyId || '❌ Not set'}</div>
+                          <div>• ownCompanyId: {debugInfo.userData?.ownCompanyId || '❌ Not set'}</div>
+                          <div>• role: {debugInfo.userData?.role || '❌ Not set'}</div>
+                          <div>• subcontractorRoles count: {debugInfo.userData?.subcontractorRolesCount || 0}</div>
+                          {debugInfo.userData?.subcontractorRolesKeys?.length > 0 && (
+                            <div>• subcontractor companies: [{debugInfo.userData.subcontractorRolesKeys.join(', ')}]</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="bg-purple-50 p-2 rounded">
+                        <strong className="text-purple-700">🔐 TOKEN CLAIMS:</strong>
+                        <div className="ml-3 mt-1">
+                          <div>• activeCompanyId: {debugInfo.tokenClaims?.activeCompanyId || '❌ Missing'}</div>
+                          <div>• companyId: {debugInfo.tokenClaims?.companyId || '❌ Missing'}</div>
+                          <div>• ownCompanyId: {debugInfo.tokenClaims?.ownCompanyId || '❌ Missing'}</div>
+                          <div>• role: {debugInfo.tokenClaims?.role || '❌ Missing'}</div>
                           <div>• hasSubcontractorRoles: {debugInfo.tokenClaims?.hasSubcontractorRoles ? '✅ Yes' : '❌ No'}</div>
                           {debugInfo.tokenClaims?.subcontractorRolesKeys?.length > 0 && (
                             <div>• subcontractor companies: [{debugInfo.tokenClaims.subcontractorRolesKeys.join(', ')}]</div>
+                          )}
+                          {debugInfo.tokenClaims?.subcontractorRoleDetails && (
+                            <div className="mt-1">
+                              <div>• subcontractorRoles details:</div>
+                              <pre className="ml-3 text-xs bg-white p-1 rounded">{JSON.stringify(debugInfo.tokenClaims.subcontractorRoleDetails, null, 2)}</pre>
+                            </div>
+                          )}
+                          <div className="mt-1 text-gray-500">
+                            <div>• Token issued: {debugInfo.tokenIssueTime}</div>
+                            <div>• Token expires: {debugInfo.tokenExpirationTime}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-orange-50 p-2 rounded">
+                        <strong className="text-orange-700">🔑 ACCESS CHECK:</strong>
+                        <div className="ml-3 mt-1">
+                          <div>• Active Company: {debugInfo.activeCompanyId || '❌ Not set'}</div>
+                          <div>• Has Subcontractor Role: {debugInfo.hasSubRole ? '✅ Yes' : '❌ No'}</div>
+                          <div>• Subcontractor ID: {debugInfo.subcontractorId || '❌ Not set'}</div>
+                        </div>
+                      </div>
+
+                      {debugInfo.error && (
+                        <div className="bg-red-50 p-2 rounded border-2 border-red-400">
+                          <strong className="text-red-700">❌ ERROR DETAILS:</strong>
+                          <div className="ml-3 mt-1">
+                            <div>• Error Type: <span className="font-bold text-red-600">{debugInfo.error.errorType}</span></div>
+                            <div>• Error Code: <span className="font-bold text-red-600">{debugInfo.error.errorCode}</span></div>
+                            <div>• Error Message: <span className="font-bold text-red-600">{debugInfo.error.errorMessage}</span></div>
+                            <div>• Is Firebase Error: {debugInfo.error.isFirebaseError ? '✅ Yes' : '❌ No'}</div>
+                            <div>• Is Permission Error: {debugInfo.error.isPermissionError ? '✅ Yes' : '❌ No'}</div>
+                            <div>• Error Occurred At: {debugInfo.errorOccurredAt}</div>
+                            <details className="mt-2">
+                              <summary className="cursor-pointer text-red-600 hover:text-red-700">Show Full Error Object</summary>
+                              <pre className="mt-1 text-xs bg-white p-2 rounded border border-red-300 overflow-x-auto">{debugInfo.error.fullErrorObject}</pre>
+                            </details>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="bg-yellow-50 p-2 rounded border border-yellow-300">
+                        <strong className="text-yellow-700">⚠️ MISMATCH DETECTION:</strong>
+                        <div className="ml-3 mt-1">
+                          {debugInfo.userData?.activeCompanyId !== debugInfo.tokenClaims?.activeCompanyId && (
+                            <div className="text-red-600">• ⚠️ activeCompanyId mismatch: Document='{debugInfo.userData?.activeCompanyId}' vs Token='{debugInfo.tokenClaims?.activeCompanyId}'</div>
+                          )}
+                          {debugInfo.userData?.companyId !== debugInfo.tokenClaims?.companyId && (
+                            <div className="text-red-600">• ⚠️ companyId mismatch: Document='{debugInfo.userData?.companyId}' vs Token='{debugInfo.tokenClaims?.companyId}'</div>
+                          )}
+                          {debugInfo.userData?.role !== debugInfo.tokenClaims?.role && (
+                            <div className="text-red-600">• ⚠️ role mismatch: Document='{debugInfo.userData?.role}' vs Token='{debugInfo.tokenClaims?.role}'</div>
+                          )}
+                          {(debugInfo.userData?.activeCompanyId === debugInfo.tokenClaims?.activeCompanyId && 
+                            debugInfo.userData?.companyId === debugInfo.tokenClaims?.companyId && 
+                            debugInfo.userData?.role === debugInfo.tokenClaims?.role) && (
+                            <div className="text-green-600">• ✅ No mismatches detected between user document and token claims</div>
                           )}
                         </div>
                       </div>
