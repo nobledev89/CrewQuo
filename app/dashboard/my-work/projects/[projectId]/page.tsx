@@ -22,6 +22,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import DashboardLayout from '@/components/DashboardLayout';
 import { ArrowLeft, Clock, DollarSign, BarChart3, Send, Plus, Edit2, Trash2, AlertCircle, CheckCircle } from 'lucide-react';
 import { calculateTimeBasedCost } from '@/lib/timeBasedRateCalculator';
+import { retryWithTokenRefresh, isPermissionError, handlePermissionError } from '@/lib/tokenRefresh';
 
 export default function ProjectDetailPage() {
   const params = useParams();
@@ -90,20 +91,24 @@ export default function ProjectDetailPage() {
 
   const fetchProjectData = async (currentUser: any) => {
     setLoading(true);
+    setError('');
+    
     try {
-      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-      const userData = userDoc.data();
-      const activeCompanyId = userData?.activeCompanyId || userData?.companyId;
-      const subRole = userData?.subcontractorRoles?.[activeCompanyId];
+      // Wrap the entire data fetch in a retry mechanism for permission errors
+      await retryWithTokenRefresh(async () => {
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        const userData = userDoc.data();
+        const activeCompanyId = userData?.activeCompanyId || userData?.companyId;
+        const subRole = userData?.subcontractorRoles?.[activeCompanyId];
 
-      if (!subRole) {
-        setError('You do not have access to this project');
-        setLoading(false);
-        return;
-      }
+        if (!subRole) {
+          setError('You do not have access to this project');
+          setLoading(false);
+          return;
+        }
 
-      // Fetch project details
-      const projectDoc = await getDoc(doc(db, 'projects', projectId!));
+        // Fetch project details
+        const projectDoc = await getDoc(doc(db, 'projects', projectId!));
       if (!projectDoc.exists()) {
         setError('Project not found');
         setLoading(false);
@@ -195,11 +200,18 @@ export default function ProjectDetailPage() {
           date: data.date?.toDate ? data.date.toDate() : (data.date || null),
         };
       });
-      setExpenses(exps);
+        setExpenses(exps);
+      }, 2); // Retry up to 2 times if permission errors occur
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching project data:', error);
-      setError('Failed to load project data');
+      
+      // Check if it's a permission error and provide helpful message
+      if (isPermissionError(error)) {
+        setError('Permission denied. Your session may be outdated. Please try signing out and signing back in, or contact your administrator.');
+      } else {
+        setError('Failed to load project data. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
