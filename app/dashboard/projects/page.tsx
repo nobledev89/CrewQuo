@@ -276,12 +276,55 @@ function ProjectsContent() {
   };
 
   const handleDelete = async (projectId: string) => {
-    if (!confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
+    if (!confirm('Are you sure you want to delete this project? This will also delete all related assignments, time logs, expenses, and submissions. This action cannot be undone.')) {
       return;
     }
 
     try {
+      // Delete all related data
+      // 1. Delete project assignments
+      const assignmentsQuery = query(
+        collection(db, 'projectAssignments'),
+        where('projectId', '==', projectId),
+        where('companyId', '==', activeCompanyId)
+      );
+      const assignmentsSnap = await getDocs(assignmentsQuery);
+      const assignmentDeletes = assignmentsSnap.docs.map(doc => deleteDoc(doc.ref));
+      await Promise.all(assignmentDeletes);
+
+      // 2. Delete time logs
+      const timeLogsQuery = query(
+        collection(db, 'timeLogs'),
+        where('projectId', '==', projectId),
+        where('companyId', '==', activeCompanyId)
+      );
+      const timeLogsSnap = await getDocs(timeLogsQuery);
+      const timeLogDeletes = timeLogsSnap.docs.map(doc => deleteDoc(doc.ref));
+      await Promise.all(timeLogDeletes);
+
+      // 3. Delete expenses
+      const expensesQuery = query(
+        collection(db, 'expenses'),
+        where('projectId', '==', projectId),
+        where('companyId', '==', activeCompanyId)
+      );
+      const expensesSnap = await getDocs(expensesQuery);
+      const expenseDeletes = expensesSnap.docs.map(doc => deleteDoc(doc.ref));
+      await Promise.all(expenseDeletes);
+
+      // 4. Delete project submissions
+      const submissionsQuery = query(
+        collection(db, 'projectSubmissions'),
+        where('projectId', '==', projectId),
+        where('companyId', '==', activeCompanyId)
+      );
+      const submissionsSnap = await getDocs(submissionsQuery);
+      const submissionDeletes = submissionsSnap.docs.map(doc => deleteDoc(doc.ref));
+      await Promise.all(submissionDeletes);
+
+      // 5. Finally, delete the project itself
       await deleteDoc(doc(db, 'projects', projectId));
+      
       await fetchProjects(activeCompanyId, selectedClient.clientId);
     } catch (error) {
       console.error('Error deleting project:', error);

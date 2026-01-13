@@ -169,7 +169,12 @@ service cloud.firestore {
     
     // Projects
     match /projects/{projectId} {
-      allow read: if authed() && hasAccessToCompany(resource.data.companyId);
+      // Allow read if document exists AND user has access to the company
+      // If document doesn't exist, allow read to return "not found" instead of permission error
+      allow read: if authed() && (
+        !exists(/databases/$(database)/documents/projects/$(projectId)) ||
+        hasAccessToCompany(resource.data.companyId)
+      );
       // Can only create in own company
       allow create: if authed() 
         && sameActiveCompany(request.resource.data) 
@@ -232,9 +237,9 @@ service cloud.firestore {
     match /subcontractorRateAssignments/{assignmentId} {
       // Allow read if user has access to the company (own company, active company, or through subcontractor role)
       allow read: if authed() && hasAccessToCompany(resource.data.companyId);
-      allow create: if authed() && sameCompany(request.resource.data) && isAdminOrManager();
-      allow update: if authed() && sameCompany(resource.data) && sameCompany(request.resource.data) && isAdminOrManager();
-      allow delete: if authed() && sameCompany(resource.data) && isAdminOrManager();
+      allow create: if authed() && sameActiveCompany(request.resource.data) && isOwnCompany() && isAdminOrManager();
+      allow update: if authed() && sameActiveCompany(resource.data) && sameActiveCompany(request.resource.data) && isOwnCompany() && isAdminOrManager();
+      allow delete: if authed() && sameActiveCompany(resource.data) && isOwnCompany() && isAdminOrManager();
     }
     
     // Time Logs
