@@ -107,7 +107,7 @@ async function checkProjectAccess(userEmail: string, projectId: string) {
       console.log('\n--- Rate Assignments ---');
       const rateQuery = await db.collection('subcontractorRateAssignments')
         .where('subcontractorId', '==', subId)
-        .where('clientId', '==', projectData.clientId)
+        .where('clientId', '==', projectData?.clientId || '')
         .get();
       
       if (rateQuery.empty) {
