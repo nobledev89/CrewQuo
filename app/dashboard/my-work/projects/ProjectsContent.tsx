@@ -145,7 +145,17 @@ export default function ProjectsContent() {
       if (!success) {
         setError('Failed to refresh access. Please sign out and sign back in.');
         setRefreshing(false);
+        return;
       }
+      
+      // After successful refresh, reload the data
+      console.log('✅ Claims refreshed, reloading data...');
+      if (auth.currentUser) {
+        await loadData(auth.currentUser);
+      }
+      
+      setRefreshing(false);
+      console.log('✅ Data reloaded successfully');
     } catch (err) {
       console.error('Error refreshing access:', err);
       setError('Failed to refresh access. Please sign out and sign back in.');
