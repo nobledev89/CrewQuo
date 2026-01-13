@@ -3,6 +3,7 @@ import * as functions from 'firebase-functions';
 import {FieldValue, Timestamp} from 'firebase-admin/firestore';
 import {getUserClaims, refreshUserClaims, buildUserClaims, setCustomUserClaims} from './auth';
 import {PriceCalculator, ShiftType} from './rates';
+export {fixCompanyMismatch} from './fixCompanyMismatch';
 import {
   CreateTimeLogSchema,
   ProjectSummarySchema,
@@ -1278,5 +1279,268 @@ export const rejectProjectSubmission = functions.https.onCall(async (data, conte
     }
 
     throw new functions.https.HttpsError('internal', error.message || 'Failed to reject');
+  }
+});
+
+/**
+ * Sync Rate Cards with Template
+ * Helper function to update all rate cards that reference a template
+ * Updates denormalized fields (templateName, timeframeName, categoryName)
+ */
+async function syncRateCardsWithTemplate(templateId: string, templateData: any): Promise<{ updated: number; errors: string[] }> {
+  const errors: string[] = [];
+  let updated = 0;
+
+  try {
+    // Find all rate cards that reference this template
+    const rateCardsSnap = await db
+      .collection('rateCards')
+      .where('templateId', '==', templateId)
+      .get();
+
+    console.log(`Found ${rateCardsSnap.size} rate cards using template ${templateId}`);
+
+    if (rateCardsSnap.empty) {
+      return { updated: 0, errors: [] };
+    }
+
+    // Create a map of timeframe IDs to names for quick lookup
+    const timeframeMap = new Map<string, string>();
+    if (templateData.timeframeDefinitions) {
+      templateData.timeframeDefinitions.forEach((tf: any) => {
+        timeframeMap.set(tf.id, tf.name);
+      });
+    }
+
+    // Create a map of expense category IDs to names
+    const expenseCategoryMap = new Map<string, string>();
+    if (templateData.expenseCategories) {
+      templateData.expenseCategories.forEach((ec: any) => {
+        expenseCategoryMap.set(ec.id, ec.name);
+      });
+    }
+
+    // Use batched writes for efficiency (max 500 operations per batch)
+    const batchSize = 500;
+    let batch = db.batch();
+    let operationCount = 0;
+
+    for (const rateCardDoc of rateCardsSnap.docs) {
+      const rateCard = rateCardDoc.data();
+      const updates: any = {
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+
+      // Update template name if it exists
+      if (templateData.name) {
+        updates.templateName = templateData.name;
+      }
+
+      // Update rate entries with new timeframe names
+      if (rateCard.rates && Array.isArray(rateCard.rates)) {
+        updates.rates = rateCard.rates.map((rate: any) => {
+          const updatedRate = { ...rate };
+          
+          // Update timeframeName if timeframeId exists
+          if (rate.timeframeId && timeframeMap.has(rate.timeframeId)) {
+            updatedRate.timeframeName = timeframeMap.get(rate.timeframeId);
+          }
+          
+          return updatedRate;
+        });
+      }
+
+      // Update expense entries with new category names
+      if (rateCard.expenses && Array.isArray(rateCard.expenses)) {
+        updates.expenses = rateCard.expenses.map((expense: any) => {
+          const updatedExpense = { ...expense };
+          
+          // Update categoryName if categoryId exists
+          if (expense.categoryId && expenseCategoryMap.has(expense.categoryId)) {
+            updatedExpense.categoryName = expenseCategoryMap.get(expense.categoryId);
+          }
+          
+          return updatedExpense;
+        });
+      }
+
+      // Add update to batch
+      batch.update(rateCardDoc.ref, updates);
+      operationCount++;
+      updated++;
+
+      // Commit batch if we've reached the limit
+      if (operationCount >= batchSize) {
+        await batch.commit();
+        batch = db.batch();
+        operationCount = 0;
+      }
+    }
+
+    // Commit any remaining operations
+    if (operationCount > 0) {
+      await batch.commit();
+    }
+
+    console.log(`Successfully synced ${updated} rate cards with template ${templateId}`);
+    return { updated, errors };
+
+  } catch (error: any) {
+    console.error('Error syncing rate cards:', error);
+    errors.push(error.message || 'Unknown error');
+    return { updated, errors };
+  }
+}
+
+/**
+ * Firestore Trigger: Automatically sync rate cards when template is updated
+ * This ensures denormalized data stays consistent
+ */
+export const onTemplateUpdate = functions.firestore
+  .document('rateCardTemplates/{templateId}')
+  .onUpdate(async (change, context) => {
+    const templateId = context.params.templateId;
+    const beforeData = change.before.data();
+    const afterData = change.after.data();
+
+    console.log(`Template updated: ${templateId}`);
+
+    // Check if relevant fields changed
+    const nameChanged = beforeData.name !== afterData.name;
+    const timeframesChanged = JSON.stringify(beforeData.timeframeDefinitions) !== JSON.stringify(afterData.timeframeDefinitions);
+    const expensesChanged = JSON.stringify(beforeData.expenseCategories) !== JSON.stringify(afterData.expenseCategories);
+
+    if (!nameChanged && !timeframesChanged && !expensesChanged) {
+      console.log('No relevant changes detected, skipping sync');
+      return;
+    }
+
+    console.log('Relevant changes detected:', { nameChanged, timeframesChanged, expensesChanged });
+
+    // Sync all rate cards using this template
+    const result = await syncRateCardsWithTemplate(templateId, afterData);
+
+    console.log(`Template sync completed: ${result.updated} rate cards updated`);
+    if (result.errors.length > 0) {
+      console.error('Sync errors:', result.errors);
+    }
+  });
+
+/**
+ * Manual Sync Rate Cards with Template
+ * Callable function to manually trigger synchronization
+ * Useful for fixing inconsistencies or after bulk template changes
+ */
+export const syncRateCardsWithTemplateManual = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const { templateId } = data;
+
+  if (!templateId) {
+    throw new functions.https.HttpsError('invalid-argument', 'templateId is required');
+  }
+
+  try {
+    // Get template document
+    const templateDoc = await db.collection('rateCardTemplates').doc(templateId).get();
+
+    if (!templateDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Template not found');
+    }
+
+    const templateData = templateDoc.data()!;
+
+    // Verify user has access to this template's company
+    const userDoc = await db.collection('users').doc(context.auth.uid).get();
+    const userData = userDoc.data();
+
+    if (!userData || userData.companyId !== templateData.companyId) {
+      throw new functions.https.HttpsError('permission-denied', 'Not authorized to sync this template');
+    }
+
+    // Only admins and managers can manually sync
+    if (!['ADMIN', 'MANAGER'].includes(userData.role)) {
+      throw new functions.https.HttpsError('permission-denied', 'Only admins/managers can sync templates');
+    }
+
+    console.log(`Manual sync requested for template ${templateId} by user ${context.auth.uid}`);
+
+    // Perform the sync
+    const result = await syncRateCardsWithTemplate(templateId, templateData);
+
+    return {
+      success: true,
+      templateId,
+      rateCardsUpdated: result.updated,
+      errors: result.errors,
+    };
+
+  } catch (error: any) {
+    console.error('Error in manual sync:', error);
+
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+
+    throw new functions.https.HttpsError('internal', error.message || 'Failed to sync rate cards');
+  }
+});
+
+/**
+ * Get Rate Cards Count for Template
+ * Callable function to get the number of rate cards using a specific template
+ * Used to warn users before making template changes
+ */
+export const getRateCardsCountForTemplate = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const { templateId } = data;
+
+  if (!templateId) {
+    throw new functions.https.HttpsError('invalid-argument', 'templateId is required');
+  }
+
+  try {
+    // Get template document
+    const templateDoc = await db.collection('rateCardTemplates').doc(templateId).get();
+
+    if (!templateDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Template not found');
+    }
+
+    const templateData = templateDoc.data()!;
+
+    // Verify user has access to this template's company
+    const userDoc = await db.collection('users').doc(context.auth.uid).get();
+    const userData = userDoc.data();
+
+    if (!userData || userData.companyId !== templateData.companyId) {
+      throw new functions.https.HttpsError('permission-denied', 'Not authorized');
+    }
+
+    // Count rate cards using this template
+    const rateCardsSnap = await db
+      .collection('rateCards')
+      .where('templateId', '==', templateId)
+      .select() // Only get document IDs for efficiency
+      .get();
+
+    return {
+      templateId,
+      count: rateCardsSnap.size,
+    };
+
+  } catch (error: any) {
+    console.error('Error getting rate cards count:', error);
+
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+
+    throw new functions.https.HttpsError('internal', error.message || 'Failed to get rate cards count');
   }
 });

@@ -15,7 +15,8 @@ import {
   deleteDoc,
   serverTimestamp 
 } from 'firebase/firestore';
-import { Settings, Plus, Edit2, Trash2, Star, Copy } from 'lucide-react';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { Settings, Plus, Edit2, Trash2, Star, Copy, RefreshCw, AlertTriangle } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { RateCardTemplate } from '@/lib/types';
 import RateCardTemplateForm, { RateCardTemplateFormData } from '@/components/RateCardTemplateForm';
@@ -29,6 +30,9 @@ export default function RateTemplatesPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<RateCardTemplate | null>(null);
   const [saving, setSaving] = useState(false);
+  const [syncingTemplateId, setSyncingTemplateId] = useState<string | null>(null);
+  const [rateCardsCounts, setRateCardsCounts] = useState<Map<string, number>>(new Map());
+  const [loadingCounts, setLoadingCounts] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -68,8 +72,95 @@ export default function RateTemplatesPage() {
       } as RateCardTemplate));
       
       setTemplates(templatesData.sort((a, b) => (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0)));
+      
+      // Fetch rate cards count for each template
+      await fetchRateCardsCount(templatesData);
     } catch (error) {
       console.error('Error fetching templates:', error);
+    }
+  };
+
+  const fetchRateCardsCount = async (templatesList: RateCardTemplate[]) => {
+    if (!canEdit) return; // Only fetch for admins/managers
+    
+    setLoadingCounts(true);
+    try {
+      const functions = getFunctions();
+      const getRateCardsCountFunc = httpsCallable(functions, 'getRateCardsCountForTemplate');
+      
+      const newCounts = new Map<string, number>();
+      
+      // Fetch counts for all templates in parallel
+      const countPromises = templatesList.map(async (template) => {
+        try {
+          const result = await getRateCardsCountFunc({ templateId: template.id }) as { data: { count: number } };
+          newCounts.set(template.id, result.data.count);
+        } catch (error) {
+          console.error(`Error fetching count for template ${template.id}:`, error);
+          newCounts.set(template.id, 0);
+        }
+      });
+      
+      await Promise.all(countPromises);
+      setRateCardsCounts(newCounts);
+    } catch (error) {
+      console.error('Error fetching rate cards counts:', error);
+    } finally {
+      setLoadingCounts(false);
+    }
+  };
+
+  const handleSyncRateCards = async (templateId: string) => {
+    const count = rateCardsCounts.get(templateId) || 0;
+    
+    if (count === 0) {
+      alert('No rate cards are using this template.');
+      return;
+    }
+    
+    const confirmed = confirm(
+      `This will update ${count} rate card${count > 1 ? 's' : ''} to match the current template. ` +
+      `This ensures all timeframe names, expense categories, and other template data are synchronized.\n\n` +
+      `Do you want to continue?`
+    );
+    
+    if (!confirmed) return;
+    
+    setSyncingTemplateId(templateId);
+    try {
+      const functions = getFunctions();
+      const syncFunc = httpsCallable(functions, 'syncRateCardsWithTemplateManual');
+      
+      const result = await syncFunc({ templateId }) as { 
+        data: { 
+          success: boolean; 
+          rateCardsUpdated: number; 
+          errors: string[] 
+        } 
+      };
+      
+      if (result.data.success) {
+        if (result.data.errors.length > 0) {
+          alert(
+            `Sync completed with some errors:\n` +
+            `- ${result.data.rateCardsUpdated} rate cards updated\n` +
+            `- ${result.data.errors.length} errors occurred\n\n` +
+            `Errors: ${result.data.errors.join(', ')}`
+          );
+        } else {
+          alert(
+            `✅ Successfully synchronized ${result.data.rateCardsUpdated} rate card${result.data.rateCardsUpdated > 1 ? 's' : ''}!\n\n` +
+            `All timeframe names and expense categories have been updated to match the template.`
+          );
+        }
+      } else {
+        alert('Failed to sync rate cards. Please try again.');
+      }
+    } catch (error: any) {
+      console.error('Error syncing rate cards:', error);
+      alert(`Failed to sync rate cards: ${error.message || 'Unknown error'}`);
+    } finally {
+      setSyncingTemplateId(null);
     }
   };
 
@@ -359,6 +450,59 @@ export default function RateTemplatesPage() {
                     )}
                   </div>
                 </div>
+
+                {/* Rate Cards Count and Sync Section */}
+                {canEdit && (
+                  <div className="pt-3 mt-3 border-t border-gray-100">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="flex items-center space-x-2">
+                          {loadingCounts ? (
+                            <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+                          ) : (
+                            <>
+                              {(rateCardsCounts.get(template.id) || 0) > 0 && (
+                                <AlertTriangle className="w-4 h-4 text-orange-500" />
+                              )}
+                            </>
+                          )}
+                          <span className="text-sm font-medium text-gray-700">
+                            {loadingCounts ? 'Loading...' : (
+                              `${rateCardsCounts.get(template.id) || 0} Rate Card${(rateCardsCounts.get(template.id) || 0) !== 1 ? 's' : ''} Using This Template`
+                            )}
+                          </span>
+                        </div>
+                        {(rateCardsCounts.get(template.id) || 0) > 0 && (
+                          <button
+                            onClick={() => handleSyncRateCards(template.id)}
+                            disabled={syncingTemplateId === template.id}
+                            className="flex items-center space-x-1 px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Sync rate cards with this template"
+                          >
+                            {syncingTemplateId === template.id ? (
+                              <>
+                                <div className="w-3 h-3 border-2 border-blue-700 border-t-transparent rounded-full animate-spin"></div>
+                                <span>Syncing...</span>
+                              </>
+                            ) : (
+                              <>
+                                <RefreshCw className="w-3 h-3" />
+                                <span>Sync Now</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {(rateCardsCounts.get(template.id) || 0) > 0 && (
+                      <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                        <p className="text-xs text-amber-800">
+                          <strong>💡 Tip:</strong> When you update timeframe names or expense categories, use "Sync Now" to update all rate cards automatically.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="pt-3 mt-3 border-t border-gray-100 flex items-center justify-between">
                   <p className="text-xs text-gray-500">
