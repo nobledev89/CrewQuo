@@ -169,12 +169,8 @@ service cloud.firestore {
     
     // Projects
     match /projects/{projectId} {
-      // Allow read if document exists AND user has access to the company
-      // If document doesn't exist, allow read to return "not found" instead of permission error
-      allow read: if authed() && (
-        !exists(/databases/$(database)/documents/projects/$(projectId)) ||
-        hasAccessToCompany(resource.data.companyId)
-      );
+      // Allow read if user has access to the company
+      allow read: if authed() && hasAccessToCompany(resource.data.companyId);
       // Can only create in own company
       allow create: if authed() 
         && sameActiveCompany(request.resource.data) 
