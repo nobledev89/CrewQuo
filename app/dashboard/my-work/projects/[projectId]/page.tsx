@@ -51,6 +51,8 @@ export default function ProjectDetailPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [refreshingPermissions, setRefreshingPermissions] = useState(false);
 
   // Form state - Always use time picker for subcontractors
   const [useTimePicker, setUseTimePicker] = useState(true);
@@ -103,14 +105,56 @@ export default function ProjectDetailPage() {
     return () => unsubscribe();
   }, [projectId]);
 
+  const manualRefreshPermissions = async () => {
+    setRefreshingPermissions(true);
+    setError('');
+    setSuccess('');
+    
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        setError('No user logged in');
+        return;
+      }
+
+      console.log('[manualRefresh] Forcing token refresh...');
+      
+      // Force a fresh token
+      await user.getIdToken(true);
+      
+      // Wait a bit for claims to propagate
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Get the refreshed token
+      const tokenResult = await user.getIdTokenResult(true);
+      console.log('[manualRefresh] Refreshed claims:', tokenResult.claims);
+      
+      // Try fetching data again
+      await fetchProjectData(user);
+      
+      setSuccess('Permissions refreshed successfully!');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error: any) {
+      console.error('[manualRefresh] Error:', error);
+      setError('Failed to refresh permissions. Please try signing out and back in.');
+    } finally {
+      setRefreshingPermissions(false);
+    }
+  };
+
   const fetchProjectData = async (currentUser: any) => {
     setLoading(true);
     setError('');
+    setDebugInfo(null);
     
     try {
       // Wrap the entire data fetch in a retry mechanism for permission errors
       await retryWithTokenRefresh(async () => {
         console.log('[fetchProjectData] Starting fetch for user:', currentUser.uid);
+        
+        // Get fresh token info for debugging
+        const tokenResult = await currentUser.getIdTokenResult();
+        const tokenClaims = tokenResult.claims;
         
         const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
         const userData = userDoc.data();
@@ -123,15 +167,39 @@ export default function ProjectDetailPage() {
           subcontractorRoles: userData?.subcontractorRoles,
         });
         
+        console.log('[fetchProjectData] Token claims:', {
+          activeCompanyId: tokenClaims.activeCompanyId,
+          companyId: tokenClaims.companyId,
+          ownCompanyId: tokenClaims.ownCompanyId,
+          role: tokenClaims.role,
+          subcontractorRoles: tokenClaims.subcontractorRoles,
+        });
+        
         const activeCompanyId = userData?.activeCompanyId || userData?.companyId;
         const subRole = userData?.subcontractorRoles?.[activeCompanyId];
 
         console.log('[fetchProjectData] Active company ID:', activeCompanyId);
         console.log('[fetchProjectData] Subcontractor role for active company:', subRole);
 
+        // Store debug info
+        setDebugInfo({
+          userId: currentUser.uid,
+          userEmail: currentUser.email,
+          activeCompanyId,
+          hasSubRole: !!subRole,
+          subcontractorId: subRole?.subcontractorId,
+          tokenClaims: {
+            activeCompanyId: tokenClaims.activeCompanyId,
+            hasSubcontractorRoles: !!tokenClaims.subcontractorRoles,
+            subcontractorRolesKeys: tokenClaims.subcontractorRoles 
+              ? Object.keys(tokenClaims.subcontractorRoles) 
+              : [],
+          },
+        });
+
         if (!subRole) {
           console.error('[fetchProjectData] No subcontractor role found for activeCompanyId:', activeCompanyId);
-          setError('You do not have access to this project. Missing subcontractor role for company: ' + activeCompanyId);
+          setError(`You do not have access to this project. Missing subcontractor role for company: ${activeCompanyId}`);
           setLoading(false);
           return;
         }
@@ -771,16 +839,86 @@ export default function ProjectDetailPage() {
   if (error) {
     return (
       <DashboardLayout>
-        <div className="max-w-4xl mx-auto px-4 py-12">
+        <div className="max-w-4xl mx-auto px-4 py-12 space-y-4">
           <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-            <h3 className="font-semibold text-red-800 mb-2">Error</h3>
-            <p className="text-red-700 mb-4">{error}</p>
-            <button
-              onClick={() => router.push('/dashboard/my-work/projects')}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
-            >
-              Back to Projects
-            </button>
+            <div className="flex items-start gap-3 mb-4">
+              <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-red-800 mb-2">Permission Denied</h3>
+                <p className="text-red-700 mb-4">{error}</p>
+                
+                {debugInfo && (
+                  <details className="mb-4 bg-white rounded border border-red-300 p-3">
+                    <summary className="cursor-pointer text-sm font-medium text-red-800 hover:text-red-900">
+                      🔍 Show Debug Information
+                    </summary>
+                    <div className="mt-3 text-xs font-mono space-y-1 text-gray-700">
+                      <div><strong>User:</strong> {debugInfo.userEmail} ({debugInfo.userId})</div>
+                      <div><strong>Active Company ID:</strong> {debugInfo.activeCompanyId || 'Not set'}</div>
+                      <div><strong>Has Subcontractor Role:</strong> {debugInfo.hasSubRole ? '✅ Yes' : '❌ No'}</div>
+                      {debugInfo.subcontractorId && <div><strong>Subcontractor ID:</strong> {debugInfo.subcontractorId}</div>}
+                      <div className="pt-2 border-t border-red-200 mt-2">
+                        <strong>Token Claims:</strong>
+                        <div className="ml-2">
+                          <div>• activeCompanyId: {debugInfo.tokenClaims?.activeCompanyId || 'Missing'}</div>
+                          <div>• hasSubcontractorRoles: {debugInfo.tokenClaims?.hasSubcontractorRoles ? '✅ Yes' : '❌ No'}</div>
+                          {debugInfo.tokenClaims?.subcontractorRolesKeys?.length > 0 && (
+                            <div>• subcontractor companies: [{debugInfo.tokenClaims.subcontractorRolesKeys.join(', ')}]</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </details>
+                )}
+
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={manualRefreshPermissions}
+                    disabled={refreshingPermissions}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {refreshingPermissions ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        Refreshing...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4" />
+                        Refresh Permissions
+                      </>
+                    )}
+                  </button>
+                  
+                  <button
+                    onClick={() => router.push('/dashboard/my-work/projects')}
+                    className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
+                  >
+                    <ArrowLeft className="w-4 h-4 inline mr-1" />
+                    Back to Projects
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      auth.signOut();
+                      router.push('/login');
+                    }}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+                  >
+                    Sign Out & Try Again
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <div className="mt-4 bg-yellow-50 border border-yellow-300 rounded p-3">
+              <h4 className="text-sm font-semibold text-yellow-800 mb-1">💡 What to try:</h4>
+              <ol className="text-sm text-yellow-700 space-y-1 ml-4 list-decimal">
+                <li>Click "Refresh Permissions" to update your access rights</li>
+                <li>If that doesn't work, try signing out and signing back in</li>
+                <li>Contact your administrator if the issue persists</li>
+              </ol>
+            </div>
           </div>
         </div>
       </DashboardLayout>

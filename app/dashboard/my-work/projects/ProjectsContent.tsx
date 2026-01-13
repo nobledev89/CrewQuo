@@ -175,25 +175,38 @@ export default function ProjectsContent() {
     const projects: Assignment[] = [];
     for (const a of assignmentsSnap.docs) {
       const data = a.data();
-      const projDoc = await getDoc(doc(db, 'projects', data.projectId));
-      if (!projDoc.exists()) continue;
-      const project = projDoc.data();
-      let clientName = 'Unknown client';
-      if (project.clientId) {
-        const clientDoc = await getDoc(doc(db, 'clients', project.clientId));
-        if (clientDoc.exists()) clientName = clientDoc.data().name;
+      try {
+        const projDoc = await getDoc(doc(db, 'projects', data.projectId));
+        if (!projDoc.exists()) {
+          console.warn(`⚠️ Project ${data.projectId} not found, skipping assignment ${a.id}`);
+          continue;
+        }
+        const project = projDoc.data();
+        let clientName = 'Unknown client';
+        if (project.clientId) {
+          try {
+            const clientDoc = await getDoc(doc(db, 'clients', project.clientId));
+            if (clientDoc.exists()) clientName = clientDoc.data().name;
+          } catch (clientError) {
+            console.warn(`⚠️ Could not fetch client ${project.clientId}:`, clientError);
+          }
+        }
+        projects.push({
+          id: a.id,
+          projectId: data.projectId,
+          projectName: project.name,
+          clientId: project.clientId,
+          clientName,
+          projectStatus: project.status || 'ACTIVE',
+          pendingCount: 0,
+          hoursLogged: 0,
+          totalCost: 0,
+        });
+      } catch (projectError) {
+        console.error(`❌ Error fetching project ${data.projectId}:`, projectError);
+        // Skip this assignment and continue with others
+        continue;
       }
-      projects.push({
-        id: a.id,
-        projectId: data.projectId,
-        projectName: project.name,
-        clientId: project.clientId,
-        clientName,
-        projectStatus: project.status || 'ACTIVE',
-        pendingCount: 0,
-        hoursLogged: 0,
-        totalCost: 0,
-      });
     }
     setAssignments(projects);
   };
