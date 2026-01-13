@@ -48,6 +48,7 @@ function minutesToTimeString(minutes: number): string {
  * @param timeBasedRates Array of time-based rate configurations
  * @param fallbackSubRate Fallback subcontractor rate if no time-based rate matches
  * @param fallbackClientRate Fallback client rate if no time-based rate matches
+ * @param date Optional date to check day-of-week applicability (Date object or ISO string)
  * @returns Calculation details including total hours and costs
  */
 export function calculateTimeBasedCost(
@@ -55,7 +56,8 @@ export function calculateTimeBasedCost(
   endTime: string,
   timeBasedRates: TimeBasedRate[],
   fallbackSubRate: number,
-  fallbackClientRate: number
+  fallbackClientRate: number,
+  date?: Date | string
 ): TimeRangeCalculation {
   const startMinutes = timeToMinutes(startTime);
   let endMinutes = timeToMinutes(endTime);
@@ -67,6 +69,15 @@ export function calculateTimeBasedCost(
 
   const totalMinutesWorked = endMinutes - startMinutes;
   const breakdown: TimeRangeCalculation['breakdown'] = [];
+
+  // Get day of week from date if provided
+  let dayOfWeek: string | null = null;
+  if (date) {
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    const dayIndex = dateObj.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    dayOfWeek = dayNames[dayIndex];
+  }
 
   // Sort time-based rates by start time
   const sortedRates = [...timeBasedRates].sort((a, b) => 
@@ -94,8 +105,19 @@ export function calculateTimeBasedCost(
       
       // Check if current time falls within this rate's range
       if (normalizedCurrent >= rateStartMinutes && normalizedCurrent < rateEndMinutes) {
-        applicableRate = rate;
-        break;
+        // Also check day of week if applicable
+        if (dayOfWeek && rate.applicableDays && rate.applicableDays.length > 0) {
+          // Only apply this rate if the day matches
+          if (rate.applicableDays.includes(dayOfWeek as any)) {
+            applicableRate = rate;
+            break;
+          }
+          // If day doesn't match, continue to next rate
+        } else {
+          // No day restriction or no date provided, apply the rate
+          applicableRate = rate;
+          break;
+        }
       }
     }
 

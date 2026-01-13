@@ -426,6 +426,7 @@ export default function ProjectDetailPage() {
               id: rateEntry.timeframeId,
               startTime: timeframeDef.startTime,
               endTime: timeframeDef.endTime,
+              applicableDays: timeframeDef.applicableDays || [], // Include day restrictions
               subcontractorRate: rateEntry.subcontractorRate || 0,
               clientRate: rateEntry.clientRate || 0,
               description: rateEntry.timeframeName || timeframeDef.name || 'Standard'
@@ -445,7 +446,8 @@ export default function ProjectDetailPage() {
           logForm.endTime,
           ratesToUse,
           payRate,
-          billRate
+          billRate,
+          logForm.date // Pass the selected date to check day of week
         );
 
         log.hours = result.totalHours;
@@ -475,7 +477,7 @@ export default function ProjectDetailPage() {
     log.bill = Math.round(log.bill * 100) / 100;
 
     return { calculatedLog: log, calculationBreakdown: breakdown };
-  }, [useTimePicker, logForm.startTime, logForm.endTime, logForm.hoursRegular, logForm.quantity, selectedRateEntry, selectedRoleEntries, payRate, billRate, payCard]);
+  }, [useTimePicker, logForm.startTime, logForm.endTime, logForm.date, logForm.hoursRegular, logForm.quantity, selectedRateEntry, selectedRoleEntries, payRate, billRate, payCard, rateCardTemplate]);
 
   const expenseOptions =
     payCard?.expenses?.map((e: any) => ({
