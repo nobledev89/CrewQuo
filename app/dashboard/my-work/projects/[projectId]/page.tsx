@@ -80,6 +80,20 @@ export default function ProjectDetailPage() {
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
+        // Force token refresh to ensure we have the latest custom claims
+        console.log('[ProjectDetail] Forcing token refresh...');
+        try {
+          const tokenResult = await currentUser.getIdTokenResult(true); // true = force refresh
+          console.log('[ProjectDetail] Token refreshed. Custom claims:', tokenResult.claims);
+          console.log('[ProjectDetail] - companyId:', tokenResult.claims.companyId);
+          console.log('[ProjectDetail] - ownCompanyId:', tokenResult.claims.ownCompanyId);
+          console.log('[ProjectDetail] - activeCompanyId:', tokenResult.claims.activeCompanyId);
+          console.log('[ProjectDetail] - role:', tokenResult.claims.role);
+          console.log('[ProjectDetail] - subcontractorRoles:', tokenResult.claims.subcontractorRoles);
+        } catch (error) {
+          console.error('[ProjectDetail] Error refreshing token:', error);
+        }
+        
         await fetchProjectData(currentUser);
       } else {
         router.push('/login');
@@ -96,18 +110,34 @@ export default function ProjectDetailPage() {
     try {
       // Wrap the entire data fetch in a retry mechanism for permission errors
       await retryWithTokenRefresh(async () => {
+        console.log('[fetchProjectData] Starting fetch for user:', currentUser.uid);
+        
         const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
         const userData = userDoc.data();
+        
+        console.log('[fetchProjectData] User data:', {
+          activeCompanyId: userData?.activeCompanyId,
+          companyId: userData?.companyId,
+          ownCompanyId: userData?.ownCompanyId,
+          role: userData?.role,
+          subcontractorRoles: userData?.subcontractorRoles,
+        });
+        
         const activeCompanyId = userData?.activeCompanyId || userData?.companyId;
         const subRole = userData?.subcontractorRoles?.[activeCompanyId];
 
+        console.log('[fetchProjectData] Active company ID:', activeCompanyId);
+        console.log('[fetchProjectData] Subcontractor role for active company:', subRole);
+
         if (!subRole) {
-          setError('You do not have access to this project');
+          console.error('[fetchProjectData] No subcontractor role found for activeCompanyId:', activeCompanyId);
+          setError('You do not have access to this project. Missing subcontractor role for company: ' + activeCompanyId);
           setLoading(false);
           return;
         }
 
         // Fetch project details
+        console.log('[fetchProjectData] Fetching project:', projectId);
         const projectDoc = await getDoc(doc(db, 'projects', projectId!));
       if (!projectDoc.exists()) {
         setError('Project not found');
