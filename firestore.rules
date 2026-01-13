@@ -214,7 +214,8 @@ service cloud.firestore {
     
     // Rate Card Templates
     match /rateCardTemplates/{templateId} {
-      allow read: if authed() && sameCompany(resource.data);
+      // Allow read if user has access to the company (own company or through subcontractor role)
+      allow read: if authed() && hasAccessToCompany(resource.data.companyId);
       allow create: if authed() && sameCompany(request.resource.data) && isAdminOrManager();
       allow update: if authed() && sameCompany(resource.data) && sameCompany(request.resource.data) && isAdminOrManager();
       allow delete: if authed() && sameCompany(resource.data) && isAdmin();
