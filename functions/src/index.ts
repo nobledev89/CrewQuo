@@ -8,11 +8,11 @@ import {
   ProjectSummarySchema,
 } from './validators';
 import {
-  sendSubcontractorInviteEmail,
-  sendRegistrationConfirmationEmail,
-  sendInviteAcceptedNotificationEmail,
-  resendApiKey,
-  appUrl,
+  // sendSubcontractorInviteEmail, // TEMPORARILY DISABLED
+  // sendRegistrationConfirmationEmail, // TEMPORARILY DISABLED
+  // sendInviteAcceptedNotificationEmail, // TEMPORARILY DISABLED
+  // resendApiKey, // TEMPORARILY DISABLED
+  // appUrl, // TEMPORARILY DISABLED
 } from './email';
 
 // Initialize Firebase Admin
@@ -43,8 +43,10 @@ export const onUserCreated = functions.firestore
 /**
  * Complete user signup - creates company and user documents with proper setup
  * This bypasses security rules by using Admin SDK
+ * 
+ * TEMPORARILY DISABLED - Requires secrets configuration
  */
-export const completeSignup = functions
+/* export const completeSignup = functions
   .runWith({ secrets: [resendApiKey, appUrl] })
   .https.onRequest(async (req, res) => {
   // Set CORS headers
@@ -148,7 +150,7 @@ export const completeSignup = functions
     console.error('Error completing signup:', error);
     res.status(500).json({ error: 'Failed to complete signup' });
   }
-});
+}); */
 
 /**
  * Create Time Log with rate resolution and optional inline expenses
@@ -775,8 +777,10 @@ export const validateInviteToken = functions.https.onCall(async (data, context) 
 /**
  * Send Subcontractor Invite Email
  * Callable function to send invite email to a subcontractor
+ * 
+ * TEMPORARILY DISABLED - Requires secrets configuration
  */
-export const sendSubcontractorInvite = functions
+/* export const sendSubcontractorInvite = functions
   .runWith({ secrets: [resendApiKey, appUrl] })
   .https.onCall(async (data, context) => {
   if (!context.auth) {
@@ -849,12 +853,14 @@ export const sendSubcontractorInvite = functions
     
     throw new functions.https.HttpsError('internal', error.message || 'Failed to send invite email');
   }
-});
+}); */
 
 /**
  * Firestore Trigger: Send email when subcontractor invite is created
+ * 
+ * TEMPORARILY DISABLED - Requires secrets configuration
  */
-export const onSubcontractorInviteCreated = functions
+/* export const onSubcontractorInviteCreated = functions
   .runWith({ secrets: [resendApiKey, appUrl] })
   .firestore
   .document('subcontractors/{subcontractorId}')
@@ -897,8 +903,10 @@ export const onSubcontractorInviteCreated = functions
 
 /**
  * Firestore Trigger: Send notification when subcontractor accepts invite
+ * 
+ * TEMPORARILY DISABLED - Requires secrets configuration
  */
-export const onSubcontractorInviteAccepted = functions
+/* export const onSubcontractorInviteAccepted = functions
   .runWith({ secrets: [resendApiKey, appUrl] })
   .firestore
   .document('subcontractors/{subcontractorId}')
@@ -947,7 +955,7 @@ export const onSubcontractorInviteAccepted = functions
         console.error('Error in onSubcontractorInviteAccepted:', error);
       }
     }
-  });
+  }); */
 
 /**
  * Create Project Submission
