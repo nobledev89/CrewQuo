@@ -1,88 +1,34 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { auth, db } from '@/lib/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
 import { 
   Users, 
   Briefcase, 
-  DollarSign, 
-  TrendingUp
+  DollarSign
 } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
-import { useClientData } from '@/lib/ClientDataContext';
-
-interface UserData {
-  email: string;
-  name: string;
-  role: string;
-  companyId: string;
-}
-
-interface CompanyData {
-  name: string;
-  subscriptionPlan: string;
-  subscriptionStatus: string;
-  trialEndsAt?: any;
-  currency?: string;
-}
-
-interface Stats {
-  projects: number;
-  clients: number;
-  subcontractors: number;
-  rateCards: number;
-}
+import { useAuth } from '@/lib/AuthContext';
+import { useStats } from '@/lib/hooks/useCompanyData';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [companyData, setCompanyData] = useState<CompanyData | null>(null);
-  const [stats, setStats] = useState<Stats>({ projects: 0, clients: 0, subcontractors: 0, rateCards: 0 });
-  const [loading, setLoading] = useState(true);
-  const { cachedData, prefetchClientData } = useClientData();
-  const fetchedRef = useRef(false);
+  const { userData, companyData, loading: authLoading } = useAuth();
+  
+  // Use React Query hook for stats - automatically cached and fresh
+  const { data: stats, isLoading: statsLoading } = useStats(userData?.companyId);
+  
+  // Default stats if not loaded yet
+  const displayStats = stats || { projects: 0, clients: 0, subcontractors: 0, rateCards: 0 };
 
+  // Redirect subcontractors to their workspace
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        // Fetch user data
-        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-        if (userDoc.exists()) {
-          const data = userDoc.data() as UserData;
-
-          if (data.role === 'SUBCONTRACTOR') {
-            router.push('/dashboard/my-work');
-            return;
-          }
-          
-          // Fetch company data
-          const companyDoc = await getDoc(doc(db, 'companies', data.companyId));
-          if (companyDoc.exists()) {
-            setCompanyData(companyDoc.data() as CompanyData);
-          }
-
-          // Fetch initial dashboard data (only once per auth session)
-          if (!fetchedRef.current) {
-            fetchedRef.current = true;
-            await prefetchClientData(data.companyId, null);
-          }
-        }
-        
-        setLoading(false);
-      }
-    });
-
-    return () => unsubscribe();
-  }, [router, prefetchClientData]);
-
-  // Use cached stats if available
-  useEffect(() => {
-    if (cachedData) {
-      setStats(cachedData.stats);
+    if (!authLoading && userData && userData.role === 'SUBCONTRACTOR') {
+      router.push('/dashboard/my-work');
     }
-  }, [cachedData]);
+  }, [authLoading, userData, router]);
+
+  const loading = authLoading;
 
   if (loading) {
     return (
@@ -120,7 +66,7 @@ export default function DashboardPage() {
               </div>
               <span className="text-xs font-semibold text-gray-500 uppercase">Projects</span>
             </div>
-            <p className="text-3xl font-bold text-gray-900">{stats.projects}</p>
+            <p className="text-3xl font-bold text-gray-900">{displayStats.projects}</p>
             <p className="text-sm text-gray-600 mt-1">Active projects</p>
           </a>
 
@@ -131,7 +77,7 @@ export default function DashboardPage() {
               </div>
               <span className="text-xs font-semibold text-gray-500 uppercase">Clients</span>
             </div>
-            <p className="text-3xl font-bold text-gray-900">{stats.clients}</p>
+            <p className="text-3xl font-bold text-gray-900">{displayStats.clients}</p>
             <p className="text-sm text-gray-600 mt-1">Total clients</p>
           </div>
 
@@ -145,7 +91,7 @@ export default function DashboardPage() {
               </div>
               <span className="text-xs font-semibold text-gray-500 uppercase">Subcontractors</span>
             </div>
-            <p className="text-3xl font-bold text-gray-900">{stats.subcontractors}</p>
+            <p className="text-3xl font-bold text-gray-900">{displayStats.subcontractors}</p>
             <p className="text-sm text-gray-600 mt-1">Active subcontractors</p>
           </a>
 
@@ -159,7 +105,7 @@ export default function DashboardPage() {
               </div>
               <span className="text-xs font-semibold text-gray-500 uppercase">Rate Cards</span>
             </div>
-            <p className="text-3xl font-bold text-gray-900">{stats.rateCards}</p>
+            <p className="text-3xl font-bold text-gray-900">{displayStats.rateCards}</p>
             <p className="text-sm text-gray-600 mt-1">Configured rates</p>
           </a>
         </div>

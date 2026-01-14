@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { auth, db } from './firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { db } from './firebase';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { Client } from './types';
+import { useAuth } from './AuthContext';
 
 // Import will be provided by ClientFilterContext
 let prefetchClientDataFn: ((companyId: string, clientId: string | null) => Promise<void>) | null = null;
@@ -18,6 +18,7 @@ export interface ClientContext {
 }
 
 export function useClientContext() {
+  const { user, userData, loading: authLoading } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<ClientContext>({
     clientId: null,
@@ -26,22 +27,19 @@ export function useClientContext() {
   });
   const [loading, setLoading] = useState(true);
 
+  // Load clients when user data is available
   useEffect(() => {
-    console.log('[ClientContext] Setting up auth listener');
+    if (authLoading) return;
     
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        console.log('[ClientContext] User authenticated:', user.uid);
-        await loadClients(user.uid);
-      } else {
-        console.log('[ClientContext] No user authenticated');
-        setClients([]);
-        setLoading(false);
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
+    if (user && userData) {
+      console.log('[ClientContext] User authenticated, loading clients');
+      loadClients(userData.companyId);
+    } else {
+      console.log('[ClientContext] No user authenticated');
+      setClients([]);
+      setLoading(false);
+    }
+  }, [user, userData, authLoading]);
 
   // Separate effect to restore workspace from localStorage after clients are loaded
   // This prevents hydration mismatches by ensuring initial render is consistent
@@ -71,27 +69,14 @@ export function useClientContext() {
     }
   }, [loading, clients]);
 
-  const loadClients = async (userId: string) => {
+  const loadClients = async (companyId: string) => {
     try {
       setLoading(true);
-      
-      // Get user document to get the actual companyId
-      const userDoc = await getDoc(doc(db, 'users', userId));
-      
-      if (!userDoc.exists()) {
-        console.log('[ClientContext] User document not found');
-        setLoading(false);
-        return;
-      }
 
-      const userData = userDoc.data();
-      const companyId = userData.companyId || userData.ownCompanyId;
-
-      console.log('[ClientContext] User ID:', userId);
-      console.log('[ClientContext] User data companyId:', companyId);
+      console.log('[ClientContext] Loading clients for companyId:', companyId);
 
       if (!companyId) {
-        console.log('[ClientContext] No companyId found in user document');
+        console.log('[ClientContext] No companyId provided');
         setLoading(false);
         return;
       }
@@ -142,14 +127,10 @@ export function useClientContext() {
     }
 
     // Trigger data prefetch if function is available
-    if (prefetchClientDataFn) {
-      const userDoc = await getDoc(doc(db, 'users', auth.currentUser?.uid || ''));
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        const companyId = userData.companyId || userData.ownCompanyId;
-        if (companyId) {
-          await prefetchClientDataFn(companyId, clientId);
-        }
+    if (prefetchClientDataFn && userData) {
+      const companyId = userData.companyId;
+      if (companyId) {
+        await prefetchClientDataFn(companyId, clientId);
       }
     }
   };

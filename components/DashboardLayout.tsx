@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { auth, db } from '@/lib/firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { auth } from '@/lib/firebase';
+import { signOut } from 'firebase/auth';
+import { useAuth } from '@/lib/AuthContext';
 import { useClientFilter } from '../lib/ClientFilterContext';
 import { useClientData } from '../lib/ClientDataContext';
 import TrialBanner from './TrialBanner';
@@ -55,46 +55,22 @@ interface CompanyData {
 function DashboardContent({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
-  const [userData, setUserData] = useState<UserData | null>(null);
-  const [companyData, setCompanyData] = useState<CompanyData | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [showClientMenu, setShowClientMenu] = useState(false);
 
+  // Use unified auth context
+  const { user, userData, companyData, loading, isActingAsSubcontractor } = useAuth();
+
   // Client context for filtering
-  const { clients, selectedClient, selectClient, clearClientSelection, hasClients } = useClientFilter();
+  const { clients, selectedClient, selectClient, clearClientSelection } = useClientFilter();
   const { isLoading: isLoadingData } = useClientData();
 
+  // Redirect to login if not authenticated
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-        
-        // Fetch user data
-        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-        if (userDoc.exists()) {
-          const data = userDoc.data() as UserData;
-          setUserData(data);
-          
-          // Fetch company data
-          const companyId = data.companyId;
-          if (companyId) {
-            const companyDoc = await getDoc(doc(db, 'companies', companyId));
-            if (companyDoc.exists()) {
-              setCompanyData(companyDoc.data() as CompanyData);
-            }
-          }
-        }
-        
-        setLoading(false);
-      } else {
-        router.push('/login');
-      }
-    });
-
-    return () => unsubscribe();
-  }, [router]);
+    if (!loading && !user) {
+      router.push('/login');
+    }
+  }, [loading, user, router]);
 
   const handleSignOut = async () => {
     try {
@@ -106,26 +82,6 @@ function DashboardContent({ children }: DashboardLayoutProps) {
     } catch (error) {
       console.error('Sign out error:', error);
     }
-  };
-
-  // Check if user is acting as a subcontractor in the current company context
-  const isActingAsSubcontractor = () => {
-    if (!userData) return false;
-    
-    // Primary role is SUBCONTRACTOR
-    if (userData.role === 'SUBCONTRACTOR') return true;
-    
-    // User is viewing a company where they're a subcontractor
-    // (activeCompanyId different from their own company)
-    const activeCompanyId = userData.activeCompanyId || userData.companyId;
-    const ownCompanyId = userData.ownCompanyId || userData.companyId;
-    
-    // If viewing a different company and they have a subcontractor role there
-    if (activeCompanyId !== ownCompanyId) {
-      return userData.subcontractorRoles && activeCompanyId in userData.subcontractorRoles;
-    }
-    
-    return false;
   };
 
   // Navigation items - contextual based on workspace
