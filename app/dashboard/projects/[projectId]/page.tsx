@@ -276,6 +276,20 @@ export default function ProjectDetailPage() {
 
   const fetchLiveTrackingData = async (compId: string, projId: string) => {
     try {
+      // Fetch subcontractors first to build the map
+      const subcontractorsQuery = query(
+        collection(db, 'subcontractors'),
+        where('companyId', '==', compId),
+        where('active', '==', true)
+      );
+      const subcontractorsSnap = await getDocs(subcontractorsQuery);
+      
+      // Build subcontractors map for aggregation
+      const subsMap = new Map<string, string>();
+      subcontractorsSnap.docs.forEach(doc => {
+        subsMap.set(doc.id, doc.data().name);
+      });
+      
       // Fetch ALL time logs regardless of status (no orderBy to avoid index requirement)
       const logsQuery = query(
         collection(db, 'timeLogs'),
@@ -341,13 +355,7 @@ export default function ProjectDetailPage() {
       setTimeLogs(logsData);
       setExpenses(expensesData);
       
-      // Build subcontractors map for aggregation
-      const subsMap = new Map<string, string>();
-      subcontractors.forEach(sub => {
-        subsMap.set(sub.id, sub.name);
-      });
-      
-      // Aggregate the data
+      // Aggregate the data with the subcontractors map
       const tracking = aggregateProjectCosts(logsData, expensesData, subsMap);
       setProjectTracking(tracking);
     } catch (error) {
