@@ -15,7 +15,7 @@ import {
   deleteDoc,
   serverTimestamp 
 } from 'firebase/firestore';
-import { FileText, Plus, Edit2, Trash2, X, DollarSign } from 'lucide-react';
+import { FileText, Plus, Edit2, Trash2, X, DollarSign, Copy } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { RateCard, RateEntry, ResourceCategory, ShiftType } from '@/lib/types';
 import RateCardForm, { RateCardFormData } from '@/components/RateCardForm';
@@ -142,11 +142,11 @@ export default function RateCardsPage() {
         updatedAt: serverTimestamp(),
       });
 
-      if (editingRateCard) {
-        // Update existing rate card
+      if (editingRateCard && editingRateCard.id) {
+        // Update existing rate card (must have a valid id)
         await updateDoc(doc(db, 'rateCards', editingRateCard.id), cleanedData);
       } else {
-        // Create new rate card
+        // Create new rate card (including duplicates with empty id)
         await addDoc(collection(db, 'rateCards'), {
           ...cleanedData,
           companyId,
@@ -164,6 +164,21 @@ export default function RateCardsPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleDuplicate = (rateCard: RateCard) => {
+    // Create a copy of the rate card without the id and timestamps
+    const duplicatedCard: RateCard = {
+      ...rateCard,
+      id: '', // Will be assigned by Firestore
+      name: `${rateCard.name} (Copy)`,
+      createdAt: undefined as any, // Will be set on save
+      updatedAt: undefined as any, // Will be set on save
+    };
+    
+    // Set the duplicated card as the editing card and open modal
+    setEditingRateCard(duplicatedCard);
+    setShowModal(true);
   };
 
   const handleCloseModal = () => {
@@ -248,6 +263,13 @@ export default function RateCardsPage() {
                   </div>
                   {canEdit && (
                     <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => handleDuplicate(rateCard)}
+                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"
+                        title="Duplicate"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
                       <button
                         onClick={() => {
                           setEditingRateCard(rateCard);
