@@ -223,9 +223,15 @@ service cloud.firestore {
     
     // Rate Cards
     match /rateCards/{rateCardId} {
-      // Allow read if user has access to the company (own company, active company, or through subcontractor role)
-      allow read: if authed() && hasAccessToCompany(resource.data.companyId);
-      allow create: if authed() && sameCompany(request.resource.data) && isAdminOrManager();
+      // Allow read based on card type and user role
+      allow read: if authed() && hasAccessToCompany(resource.data.companyId) && (
+        // Own company: can see all cards
+        isOwnCompany() ||
+        // Subcontractors: can only see PAY cards (not BILL cards which contain client billing rates)
+        (!isOwnCompany() && (!exists(['cardType']) || resource.data.cardType == 'PAY'))
+      );
+      allow create: if authed() && sameCompany(request.resource.data) && isAdminOrManager() 
+        && request.resource.data.keys().hasAll(['companyId', 'name', 'rates', 'active']);
       allow update: if authed() && sameCompany(resource.data) && sameCompany(request.resource.data) && isAdminOrManager();
       allow delete: if authed() && sameCompany(resource.data) && isAdmin();
     }

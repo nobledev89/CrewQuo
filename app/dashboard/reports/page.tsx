@@ -7,6 +7,7 @@ import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firesto
 import { BarChart3, TrendingUp, DollarSign, Percent, Download, Calendar, Users, Briefcase, Clock, TrendingDown } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useClientFilter } from '@/lib/ClientFilterContext';
+import { calculateMarginPercentage } from '@/lib/currencyUtils';
 
 interface ReportData {
   totalProjects: number;
@@ -208,7 +209,7 @@ export default function ReportsPage() {
               totalCost,
               totalBilling,
               totalMargin,
-              marginPercentage: totalBilling > 0 ? (totalMargin / totalBilling) * 100 : 0,
+              marginPercentage: calculateMarginPercentage(totalBilling, totalCost),
               currency,
             });
             
@@ -268,14 +269,13 @@ export default function ReportsPage() {
             
             const subcontractorStatsArray = Array.from(subcontractorStatsMap.entries())
               .map(([subId, stats]) => {
-                const margin = stats.billing - stats.cost;
                 return {
                   subcontractorId: subId,
                   subcontractorName: subsMap.get(subId) || 'Unknown',
                   hours: stats.hours,
                   cost: stats.cost,
                   projectsCount: stats.projects.size,
-                  marginPercentage: stats.billing > 0 ? (margin / stats.billing) * 100 : 0,
+                  marginPercentage: calculateMarginPercentage(stats.billing, stats.cost),
                 };
               })
               .sort((a, b) => b.hours - a.hours);
@@ -545,7 +545,7 @@ export default function ReportsPage() {
                           const dateStr = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
                           const totalHours = (log.hoursRegular || 0) + (log.hoursOT || 0);
                           const margin = (log.clientBill || 0) - (log.subCost || 0);
-                          const marginPct = (log.clientBill || 0) > 0 ? (margin / (log.clientBill || 1)) * 100 : 0;
+                          const marginPct = calculateMarginPercentage(log.clientBill || 0, log.subCost || 0);
                           
                           return (
                             <tr key={logDoc.id} className="hover:bg-gray-50">

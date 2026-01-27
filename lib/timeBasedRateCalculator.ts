@@ -105,8 +105,13 @@ export function calculateTimeBasedCost(
       
       // Check if current time falls within this rate's range
       if (normalizedCurrent >= rateStartMinutes && normalizedCurrent < rateEndMinutes) {
-        // Also check day of week if applicable
-        if (dayOfWeek && rate.applicableDays && rate.applicableDays.length > 0) {
+        // If this rate has day restrictions
+        if (rate.applicableDays && rate.applicableDays.length > 0) {
+          // Date must be provided when rates have day restrictions
+          if (!dayOfWeek) {
+            // Skip this rate if no date provided but day restrictions exist
+            continue;
+          }
           // Only apply this rate if the day matches
           if (rate.applicableDays.includes(dayOfWeek as any)) {
             applicableRate = rate;
@@ -114,7 +119,7 @@ export function calculateTimeBasedCost(
           }
           // If day doesn't match, continue to next rate
         } else {
-          // No day restriction or no date provided, apply the rate
+          // No day restriction, apply the rate
           applicableRate = rate;
           break;
         }

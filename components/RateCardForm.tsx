@@ -5,6 +5,7 @@ import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { X, Plus, Trash2, DollarSign, Tag, Receipt, ChevronDown, ChevronUp, Clock } from 'lucide-react';
 import { RateCard, RateEntry, ResourceCategory, RateCardTemplate, ExpenseEntry, TimeframeDefinition } from '@/lib/types';
+import { calculateMarginValue, calculateMarginPercentage } from '@/lib/currencyUtils';
 
 interface RateCardFormProps {
   rateCard: RateCard | null;
@@ -173,10 +174,8 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
           if (field === 'subcontractorRate' || field === 'clientRate') {
             const subRate = field === 'subcontractorRate' ? value : updatedRate.subcontractorRate;
             const clientRate = field === 'clientRate' ? value : updatedRate.clientRate;
-            const margin = clientRate - subRate;
-            const marginPct = clientRate > 0 ? (margin / clientRate) * 100 : 0;
-            updatedRate.marginValue = Math.max(0, margin);
-            updatedRate.marginPercentage = Math.max(0, marginPct);
+            updatedRate.marginValue = calculateMarginValue(clientRate, subRate);
+            updatedRate.marginPercentage = calculateMarginPercentage(clientRate, subRate);
           }
 
           // Update timeframe name if timeframe changed
