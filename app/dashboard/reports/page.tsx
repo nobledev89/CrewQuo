@@ -6,6 +6,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { BarChart3, TrendingUp, DollarSign, Percent, Download, Calendar, Users, Briefcase, Clock, TrendingDown } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
+import { useClientFilter } from '@/lib/ClientFilterContext';
 
 interface ReportData {
   totalProjects: number;
@@ -49,6 +50,9 @@ export default function ReportsPage() {
   const [expensesSnap, setExpensesSnap] = useState<any>(null);
   const [selectedProject, setSelectedProject] = useState<ProjectStats | null>(null);
   const [subsMap, setSubsMap] = useState<Map<string, string>>(new Map());
+  
+  // Get client filter from context
+  const { selectedClient } = useClientFilter();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -60,8 +64,32 @@ export default function ReportsPage() {
             const userData = userDoc.data();
             const userCompanyId = userData.activeCompanyId || userData.companyId;
             
-            // Fetch all data
-            const projectsQuery = query(collection(db, 'projects'), where('companyId', '==', userCompanyId));
+            // Get project IDs for client filtering
+            let clientProjectIds: string[] | null = null;
+            if (selectedClient.clientId) {
+              const clientProjectsQuery = query(
+                collection(db, 'projects'),
+                where('companyId', '==', userCompanyId),
+                where('clientId', '==', selectedClient.clientId)
+              );
+              const clientProjectsSnap = await getDocs(clientProjectsQuery);
+              clientProjectIds = clientProjectsSnap.docs.map(doc => doc.id);
+            }
+            
+            // Fetch all data - filter by client if workspace is active
+            let projectsQuery;
+            if (selectedClient.clientId) {
+              projectsQuery = query(
+                collection(db, 'projects'),
+                where('companyId', '==', userCompanyId),
+                where('clientId', '==', selectedClient.clientId)
+              );
+            } else {
+              projectsQuery = query(
+                collection(db, 'projects'),
+                where('companyId', '==', userCompanyId)
+              );
+            }
             const projectsSnap = await getDocs(projectsQuery);
             const activeProjects = projectsSnap.docs.filter(doc => doc.data().status === 'ACTIVE').length;
             
@@ -99,6 +127,12 @@ export default function ReportsPage() {
             
             logsSnap.forEach(logDoc => {
               const log = logDoc.data();
+              
+              // Filter by client workspace if active
+              if (clientProjectIds && !clientProjectIds.includes(log.projectId)) {
+                return; // Skip logs not in client's projects
+              }
+              
               totalRegularHours += log.hoursRegular || 0;
               totalOTHours += log.hoursOT || 0;
               totalSubCost += log.subCost || 0;
@@ -121,6 +155,12 @@ export default function ReportsPage() {
             // Add expenses to totals
             expensesSnap.forEach(expDoc => {
               const exp = expDoc.data();
+              
+              // Filter by client workspace if active
+              if (clientProjectIds && !clientProjectIds.includes(exp.projectId)) {
+                return; // Skip expenses not in client's projects
+              }
+              
               totalExpenses += exp.amount || 0;
               currency = exp.currency || 'GBP';
               
@@ -131,8 +171,8 @@ export default function ReportsPage() {
               }
               const stats = projectStatsMap.get(projectId)!;
               stats.cost += exp.amount || 0;
-              // Expenses reduce margin
-              stats.margin -= exp.amount || 0;
+              // Recalculate margin as billing - cost (includes expenses now)
+              stats.margin = stats.billing - stats.cost;
             });
             
             // Calculate total cost including expenses
@@ -144,14 +184,18 @@ export default function ReportsPage() {
               projectsMap.set(doc.id, doc.data().name);
             });
             
-            const projectStatsArray = Array.from(projectStatsMap.entries()).map(([projectId, stats]) => ({
-              projectId,
-              projectName: projectsMap.get(projectId) || 'Unknown Project',
-              hours: stats.hours,
-              cost: stats.cost,
-              billing: stats.billing,
-              margin: stats.margin,
-            })).sort((a, b) => b.billing - a.billing);
+            const projectStatsArray = Array.from(projectStatsMap.entries()).map(([projectId, stats]) => {
+              // Final margin recalculation to ensure accuracy
+              const finalMargin = stats.billing - stats.cost;
+              return {
+                projectId,
+                projectName: projectsMap.get(projectId) || 'Unknown Project',
+                hours: stats.hours,
+                cost: stats.cost,
+                billing: stats.billing,
+                margin: finalMargin,
+              };
+            }).sort((a, b) => b.billing - a.billing);
             
             setReportData({
               totalProjects: projectsSnap.size,
@@ -176,8 +220,15 @@ export default function ReportsPage() {
             
             const subcontractorStatsMap = new Map<string, { hours: number; cost: number; billing: number; projects: Set<string> }>();
             
+            // Aggregate time logs by subcontractor
             logsSnap.forEach(logDoc => {
               const log = logDoc.data();
+              
+              // Filter by client workspace if active
+              if (clientProjectIds && !clientProjectIds.includes(log.projectId)) {
+                return; // Skip logs not in client's projects
+              }
+              
               const subId = log.subcontractorId;
               
               if (!subcontractorStatsMap.has(subId)) {
@@ -189,6 +240,30 @@ export default function ReportsPage() {
               stats.cost += log.subCost || 0;
               stats.billing += log.clientBill || 0;
               stats.projects.add(log.projectId);
+            });
+            
+            // Add expenses to subcontractor costs if they have a subcontractorId
+            expensesSnap.forEach(expDoc => {
+              const exp = expDoc.data();
+              
+              // Filter by client workspace if active
+              if (clientProjectIds && !clientProjectIds.includes(exp.projectId)) {
+                return; // Skip expenses not in client's projects
+              }
+              
+              // Only add expenses that are attributed to a specific subcontractor
+              if (exp.subcontractorId) {
+                const subId = exp.subcontractorId;
+                
+                if (!subcontractorStatsMap.has(subId)) {
+                  subcontractorStatsMap.set(subId, { hours: 0, cost: 0, billing: 0, projects: new Set() });
+                }
+                
+                const stats = subcontractorStatsMap.get(subId)!;
+                stats.cost += exp.amount || 0;
+                // Note: Expenses don't add to billing, they just increase cost
+                stats.projects.add(exp.projectId);
+              }
             });
             
             const subcontractorStatsArray = Array.from(subcontractorStatsMap.entries())
@@ -220,7 +295,7 @@ export default function ReportsPage() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [selectedClient.clientId]);
 
   const formatCurrency = (amount: number, currency: string) => {
     return new Intl.NumberFormat('en-GB', {
@@ -248,8 +323,14 @@ export default function ReportsPage() {
     <DashboardLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900">Business Overview</h2>
-          <p className="text-gray-600 mt-1">Comprehensive analytics and insights</p>
+          <h2 className="text-2xl font-bold text-gray-900">
+            {selectedClient.clientId ? `Reports for ${selectedClient.clientName}` : 'Business Overview'}
+          </h2>
+          <p className="text-gray-600 mt-1">
+            {selectedClient.clientId 
+              ? `Client-specific analytics and insights` 
+              : 'Comprehensive analytics and insights'}
+          </p>
         </div>
 
         {/* Summary Stats */}
@@ -462,6 +543,7 @@ export default function ReportsPage() {
                           if (log.projectId !== selectedProject.projectId) return null;
                           const dateObj = log.date?.toDate ? log.date.toDate() : new Date(log.date);
                           const dateStr = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                          const totalHours = (log.hoursRegular || 0) + (log.hoursOT || 0);
                           const margin = (log.clientBill || 0) - (log.subCost || 0);
                           const marginPct = (log.clientBill || 0) > 0 ? (margin / (log.clientBill || 1)) * 100 : 0;
                           
@@ -470,7 +552,8 @@ export default function ReportsPage() {
                               <td className="px-6 py-3 text-sm text-gray-600">{dateStr}</td>
                               <td className="px-6 py-3 text-sm font-medium text-gray-900">Time Log</td>
                               <td className="px-6 py-3 text-sm text-gray-900">{subsMap.get(log.subcontractorId) || log.subcontractorName || 'Unknown'}</td>
-                              <td className="px-6 py-3 text-sm text-gray-900">{log.roleName} - {log.shiftType}</td>
+                              <td className="px-6 py-3 text-sm text-gray-900">{log.roleName || 'Unknown Role'} - {log.shiftType || 'Standard'}</td>
+                              <td className="px-6 py-3 text-center text-sm text-gray-900">{totalHours.toFixed(1)}h</td>
                               <td className="px-6 py-3 text-right text-sm text-gray-900">£{(log.subCost || 0).toFixed(2)}</td>
                               <td className="px-6 py-3 text-right text-sm text-gray-900">£{(log.clientBill || 0).toFixed(2)}</td>
                               <td className="px-6 py-3 text-right text-sm font-semibold">

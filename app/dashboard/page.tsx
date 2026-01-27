@@ -10,13 +10,16 @@ import {
 import DashboardLayout from '@/components/DashboardLayout';
 import { useAuth } from '@/lib/AuthContext';
 import { useStats } from '@/lib/hooks/useCompanyData';
+import { useClientFilter } from '@/lib/ClientFilterContext';
 
 export default function DashboardPage() {
   const router = useRouter();
   const { userData, companyData, loading: authLoading } = useAuth();
+  const { selectedClient } = useClientFilter();
   
   // Use React Query hook for stats - automatically cached and fresh
-  const { data: stats, isLoading: statsLoading } = useStats(userData?.companyId);
+  // Pass clientId to get client-specific stats when in workspace
+  const { data: stats, isLoading: statsLoading } = useStats(userData?.companyId, selectedClient.clientId);
   
   // Default stats if not loaded yet
   const displayStats = stats || { projects: 0, clients: 0, subcontractors: 0, rateCards: 0 };
@@ -50,7 +53,9 @@ export default function DashboardPage() {
             Welcome back! 👋
           </h2>
           <p className="text-gray-600">
-            Here's an overview of your contractor management system
+            {selectedClient.clientId 
+              ? `Here's an overview for ${selectedClient.clientName}`
+              : 'Here\'s an overview of your contractor management system'}
           </p>
         </div>
 
@@ -67,7 +72,9 @@ export default function DashboardPage() {
               <span className="text-xs font-semibold text-gray-500 uppercase">Projects</span>
             </div>
             <p className="text-3xl font-bold text-gray-900">{displayStats.projects}</p>
-            <p className="text-sm text-gray-600 mt-1">Active projects</p>
+            <p className="text-sm text-gray-600 mt-1">
+              {selectedClient.clientId ? 'Client projects' : 'Active projects'}
+            </p>
           </a>
 
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition">
@@ -78,7 +85,9 @@ export default function DashboardPage() {
               <span className="text-xs font-semibold text-gray-500 uppercase">Clients</span>
             </div>
             <p className="text-3xl font-bold text-gray-900">{displayStats.clients}</p>
-            <p className="text-sm text-gray-600 mt-1">Total clients</p>
+            <p className="text-sm text-gray-600 mt-1">
+              {selectedClient.clientId ? 'Current client' : 'Total clients'}
+            </p>
           </div>
 
           <a 
@@ -92,7 +101,9 @@ export default function DashboardPage() {
               <span className="text-xs font-semibold text-gray-500 uppercase">Subcontractors</span>
             </div>
             <p className="text-3xl font-bold text-gray-900">{displayStats.subcontractors}</p>
-            <p className="text-sm text-gray-600 mt-1">Active subcontractors</p>
+            <p className="text-sm text-gray-600 mt-1">
+              {selectedClient.clientId ? 'Assigned subcontractors' : 'Active subcontractors'}
+            </p>
           </a>
 
           <a 

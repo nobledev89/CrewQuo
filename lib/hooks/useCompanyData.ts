@@ -213,25 +213,69 @@ export function useRateCards(companyId: string | undefined) {
 }
 
 // Combined stats hook - fetches lazily
-export function useStats(companyId: string | undefined) {
+export function useStats(companyId: string | undefined, clientId: string | null = null) {
   return useQuery({
-    queryKey: ['stats', companyId],
+    queryKey: ['stats', companyId, clientId],
     queryFn: async () => {
       if (!companyId) {
         return { projects: 0, clients: 0, subcontractors: 0, rateCards: 0 };
       }
       
-      const [projectsSnap, clientsSnap, subsSnap, ratesSnap] = await Promise.all([
-        getDocs(query(collection(db, 'projects'), where('companyId', '==', companyId))),
+      // Fetch projects - filter by client if specified
+      let projectsQuery;
+      if (clientId) {
+        projectsQuery = query(
+          collection(db, 'projects'),
+          where('companyId', '==', companyId),
+          where('clientId', '==', clientId)
+        );
+      } else {
+        projectsQuery = query(
+          collection(db, 'projects'),
+          where('companyId', '==', companyId)
+        );
+      }
+      const projectsSnap = await getDocs(projectsQuery);
+      
+      // For client workspace: filter subcontractors by project assignments
+      let subcontractorsCount = 0;
+      if (clientId) {
+        const projectIds = projectsSnap.docs.map(doc => doc.id);
+        
+        if (projectIds.length > 0) {
+          const assignmentsQuery = query(
+            collection(db, 'projectAssignments'),
+            where('companyId', '==', companyId)
+          );
+          const assignmentsSnap = await getDocs(assignmentsQuery);
+          
+          const subcontractorIds = new Set<string>();
+          assignmentsSnap.docs.forEach(doc => {
+            const assignment = doc.data();
+            if (projectIds.includes(assignment.projectId)) {
+              subcontractorIds.add(assignment.subcontractorId);
+            }
+          });
+          
+          subcontractorsCount = subcontractorIds.size;
+        }
+      } else {
+        const subsSnap = await getDocs(
+          query(collection(db, 'subcontractors'), where('companyId', '==', companyId))
+        );
+        subcontractorsCount = subsSnap.size;
+      }
+      
+      // Clients and rate cards are always company-wide
+      const [clientsSnap, ratesSnap] = await Promise.all([
         getDocs(query(collection(db, 'clients'), where('companyId', '==', companyId))),
-        getDocs(query(collection(db, 'subcontractors'), where('companyId', '==', companyId))),
         getDocs(query(collection(db, 'rateCards'), where('companyId', '==', companyId)))
       ]);
       
       return {
         projects: projectsSnap.size,
-        clients: clientsSnap.size,
-        subcontractors: subsSnap.size,
+        clients: clientId ? 1 : clientsSnap.size, // If viewing a client workspace, show 1
+        subcontractors: subcontractorsCount,
         rateCards: ratesSnap.size,
       };
     },

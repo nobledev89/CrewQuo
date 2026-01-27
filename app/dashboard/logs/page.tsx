@@ -7,6 +7,8 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { Clock, ArrowLeft, Calendar, DollarSign, Briefcase, Users } from 'lucide-react';
 import Link from 'next/link';
+import { useClientFilter } from '@/lib/ClientFilterContext';
+import DashboardLayout from '@/components/DashboardLayout';
 
 interface TimeLog {
   id: string;
@@ -32,6 +34,9 @@ export default function LogsPage() {
   const router = useRouter();
   const [logs, setLogs] = useState<TimeLog[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Get client filter from context
+  const { selectedClient } = useClientFilter();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -42,6 +47,18 @@ export default function LogsPage() {
           if (userDoc.exists()) {
             const userData = userDoc.data();
             const userCompanyId = userData.companyId;
+            
+            // Get project IDs for client filtering if in client workspace
+            let clientProjectIds: string[] | null = null;
+            if (selectedClient.clientId) {
+              const clientProjectsQuery = query(
+                collection(db, 'projects'),
+                where('companyId', '==', userCompanyId),
+                where('clientId', '==', selectedClient.clientId)
+              );
+              const clientProjectsSnap = await getDocs(clientProjectsQuery);
+              clientProjectIds = clientProjectsSnap.docs.map(doc => doc.id);
+            }
             
             // Fetch time logs
             const logsQuery = query(
@@ -66,28 +83,36 @@ export default function LogsPage() {
             const rolesMap = new Map();
             rolesSnap.forEach(doc => rolesMap.set(doc.id, doc.data().name));
             
-            const logsData = logsSnap.docs.map(doc => {
-              const data = doc.data();
-              return {
-                id: doc.id,
-                projectId: data.projectId,
-                projectName: projectsMap.get(data.projectId) || 'Unknown',
-                subcontractorId: data.subcontractorId,
-                subcontractorName: subsMap.get(data.subcontractorId) || 'Unknown',
-                roleId: data.roleId,
-                roleName: rolesMap.get(data.roleId) || 'Unknown',
-                date: data.date,
-                hoursRegular: data.hoursRegular,
-                hoursOT: data.hoursOT,
-                subCost: data.subCost,
-                clientBill: data.clientBill,
-                marginValue: data.marginValue,
-                marginPct: data.marginPct,
-                currency: data.currency,
-                status: data.status,
-                notes: data.notes || '',
-              };
-            });
+            const logsData = logsSnap.docs
+              .map(doc => {
+                const data = doc.data();
+                return {
+                  id: doc.id,
+                  projectId: data.projectId,
+                  projectName: projectsMap.get(data.projectId) || 'Unknown',
+                  subcontractorId: data.subcontractorId,
+                  subcontractorName: subsMap.get(data.subcontractorId) || 'Unknown',
+                  roleId: data.roleId,
+                  roleName: rolesMap.get(data.roleId) || 'Unknown',
+                  date: data.date,
+                  hoursRegular: data.hoursRegular,
+                  hoursOT: data.hoursOT,
+                  subCost: data.subCost,
+                  clientBill: data.clientBill,
+                  marginValue: data.marginValue,
+                  marginPct: data.marginPct,
+                  currency: data.currency,
+                  status: data.status,
+                  notes: data.notes || '',
+                };
+              })
+              .filter(log => {
+                // Filter by client workspace if active
+                if (clientProjectIds) {
+                  return clientProjectIds.includes(log.projectId);
+                }
+                return true; // Show all logs if no client filter
+              });
             
             setLogs(logsData);
           }
@@ -102,7 +127,7 @@ export default function LogsPage() {
     });
 
     return () => unsubscribe();
-  }, [router]);
+  }, [router, selectedClient.clientId]);
 
   const formatDate = (timestamp: any) => {
     if (!timestamp) return 'N/A';
@@ -136,12 +161,14 @@ export default function LogsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading time logs...</p>
+      <DashboardLayout>
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading time logs...</p>
+          </div>
         </div>
-      </div>
+      </DashboardLayout>
     );
   }
 
@@ -152,34 +179,8 @@ export default function LogsPage() {
   const totalMargin = logs.reduce((sum, log) => sum + log.marginValue, 0);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-4">
-              <Link 
-                href="/dashboard"
-                className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition"
-              >
-                <ArrowLeft className="w-5 h-5" />
-                <span>Back to Dashboard</span>
-              </Link>
-            </div>
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-orange-600 to-red-600 rounded-xl flex items-center justify-center">
-                <Clock className="w-6 h-6 text-white" />
-              </div>
-              <h1 className="text-xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
-                Time Logs
-              </h1>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <DashboardLayout>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Summary Cards */}
         {logs.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -209,9 +210,13 @@ export default function LogsPage() {
         )}
 
         <div className="mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">All Time Logs</h2>
+          <h2 className="text-2xl font-bold text-gray-900">
+            {selectedClient.clientId ? `Time Logs for ${selectedClient.clientName}` : 'All Time Logs'}
+          </h2>
           <p className="text-gray-600 mt-1">
-            Total: {logs.length} {logs.length === 1 ? 'log' : 'logs'}
+            {selectedClient.clientId 
+              ? `Showing ${logs.length} ${logs.length === 1 ? 'log' : 'logs'} for this client`
+              : `Total: ${logs.length} ${logs.length === 1 ? 'log' : 'logs'}`}
           </p>
         </div>
 
@@ -279,7 +284,7 @@ export default function LogsPage() {
             ))}
           </div>
         )}
-      </main>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }
