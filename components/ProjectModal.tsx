@@ -239,6 +239,8 @@ export default function ProjectModal({
       key: e.id,
       label: e.categoryName,
       rate: e.rate,
+      rateType: e.rateType || 'CAPPED',
+      unitType: e.unitType,
     })) || [];
 
   const selectedExpense = expenseOptions.find((e: any) => e.key === expenseForm.expenseKey);
@@ -363,11 +365,10 @@ export default function ProjectModal({
       return;
     }
 
+    // Calculate amount based on rate type
+    // CAPPED: quantity × rate (rate is max per unit, e.g., £0.45/mile max)
+    // FIXED: quantity × rate (rate is exact per unit, e.g., £50/night fixed)
     const calculatedAmount = expenseForm.quantity * selectedExpense.rate;
-    if (calculatedAmount > selectedExpense.rate) {
-      alert('Amount cannot exceed rate cap');
-      return;
-    }
 
     setSavingExpense(true);
     try {
@@ -777,7 +778,7 @@ export default function ProjectModal({
                           <option value="">Choose...</option>
                           {expenseOptions.map((o: any) => (
                             <option key={o.key} value={o.key}>
-                              {o.label} (cap £{o.rate.toFixed(2)})
+                              {o.label} ({o.rateType === 'FIXED' ? 'fixed' : 'max'} £{o.rate.toFixed(2)}/{o.unitType.replace('per_', '')})
                             </option>
                           ))}
                         </select>

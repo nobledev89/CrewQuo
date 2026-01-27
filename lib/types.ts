@@ -223,12 +223,15 @@ export interface TimeframeDefinition {
   applicableDays: DayOfWeek[];    // e.g., ['monday', 'tuesday', 'wednesday']
 }
 
+export type ExpenseRateType = 'CAPPED' | 'FIXED';
+
 export interface ExpenseCategory {
   id: string;
   name: string;                    // e.g., "Accommodation", "Mileage", "Parking Fees"
   description?: string;
   unitType: 'flat' | 'per_unit' | 'per_mile' | 'per_day' | 'per_hour';
   defaultRate?: number;
+  rateType?: ExpenseRateType;      // CAPPED = max rate per unit, FIXED = exact rate per unit (default: CAPPED for backward compatibility)
   taxable?: boolean;
 }
 
@@ -334,6 +337,7 @@ export interface ExpenseEntry {
   description?: string;
   unitType: 'flat' | 'per_unit' | 'per_mile' | 'per_day' | 'per_hour';
   rate: number;
+  rateType: ExpenseRateType;     // CAPPED = max rate per unit, FIXED = exact rate per unit
   taxable: boolean;
   notes?: string;
 }

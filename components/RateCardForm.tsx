@@ -207,6 +207,7 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
       description: '',
       unitType: firstExpense.unitType,
       rate: firstExpense.defaultRate || 0,
+      rateType: firstExpense.rateType || 'CAPPED',
       taxable: firstExpense.taxable || false,
       notes: '',
     };
@@ -238,6 +239,7 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
               updated.categoryName = category.name;
               updated.unitType = category.unitType;
               updated.rate = category.defaultRate || 0;
+              updated.rateType = category.rateType || 'CAPPED';
               updated.taxable = category.taxable || false;
             }
           }
