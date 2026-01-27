@@ -15,9 +15,18 @@ import {
   deleteDoc,
   serverTimestamp 
 } from 'firebase/firestore';
-import { Briefcase, Users, UserPlus, X, Trash2, ArrowLeft } from 'lucide-react';
+import { Briefcase, Users, UserPlus, X, Trash2, ArrowLeft, Activity, Clock, DollarSign, TrendingUp } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
+import SubcontractorCostBreakdown from '@/components/SubcontractorCostBreakdown';
 import { useParams, useRouter } from 'next/navigation';
+import { 
+  aggregateProjectCosts, 
+  formatCurrency, 
+  getStatusColor,
+  type TimeLogData,
+  type ExpenseData,
+  type ProjectTracking
+} from '@/lib/projectTrackingUtils';
 
 interface Project {
   id: string;
@@ -58,6 +67,14 @@ export default function ProjectDetailPage() {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedSubcontractorId, setSelectedSubcontractorId] = useState<string>('');
   const [saving, setSaving] = useState(false);
+  
+  // Live tracking state
+  const [activeTab, setActiveTab] = useState<'assignments' | 'liveTracking'>('assignments');
+  const [timeLogs, setTimeLogs] = useState<TimeLogData[]>([]);
+  const [expenses, setExpenses] = useState<ExpenseData[]>([]);
+  const [projectTracking, setProjectTracking] = useState<ProjectTracking | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'submitted' | 'approved'>('all');
+  const [currency] = useState<string>('GBP');
 
   useEffect(() => {
     // Safety check: ensure projectId is available
@@ -95,7 +112,8 @@ export default function ProjectDetailPage() {
           await Promise.all([
             fetchProject(projectId),
             fetchSubcontractors(companyIdToUse),
-            fetchAssignments(companyIdToUse, projectId)
+            fetchAssignments(companyIdToUse, projectId),
+            fetchLiveTrackingData(companyIdToUse, projectId)
           ]);
         } catch (error) {
           console.error('Error fetching data:', error);
@@ -256,6 +274,87 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const fetchLiveTrackingData = async (compId: string, projId: string) => {
+    try {
+      // Fetch ALL time logs regardless of status (no orderBy to avoid index requirement)
+      const logsQuery = query(
+        collection(db, 'timeLogs'),
+        where('companyId', '==', compId),
+        where('projectId', '==', projId)
+      );
+      const logsSnap = await getDocs(logsQuery);
+      
+      const logsData: TimeLogData[] = logsSnap.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          date: data.date?.toDate ? data.date.toDate() : (data.date || null),
+          roleName: data.roleName || 'Unknown Role',
+          timeframeName: data.timeframeName,
+          shiftType: data.shiftType,
+          hoursRegular: data.hoursRegular || 0,
+          hoursOT: data.hoursOT || 0,
+          quantity: data.quantity || 1,
+          subCost: data.subCost || 0,
+          clientBill: data.clientBill || 0,
+          marginValue: data.marginValue || 0,
+          marginPct: data.marginPct || 0,
+          status: data.status || 'DRAFT',
+          subcontractorId: data.subcontractorId,
+          startTime: data.startTime,
+          endTime: data.endTime,
+        };
+      }).sort((a, b) => {
+        // Sort by date descending
+        const dateA = a.date ? new Date(a.date).getTime() : 0;
+        const dateB = b.date ? new Date(b.date).getTime() : 0;
+        return dateB - dateA;
+      });
+      
+      // Fetch ALL expenses regardless of status
+      const expensesQuery = query(
+        collection(db, 'expenses'),
+        where('companyId', '==', compId),
+        where('projectId', '==', projId)
+      );
+      const expensesSnap = await getDocs(expensesQuery);
+      
+      const expensesData: ExpenseData[] = expensesSnap.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          date: data.date?.toDate ? data.date.toDate() : (data.date || null),
+          category: data.category || 'Unknown',
+          amount: data.amount || 0,
+          quantity: data.quantity || 1,
+          unitRate: data.unitRate,
+          status: data.status || 'DRAFT',
+          subcontractorId: data.subcontractorId,
+        };
+      }).sort((a, b) => {
+        // Sort by date descending
+        const dateA = a.date ? new Date(a.date).getTime() : 0;
+        const dateB = b.date ? new Date(b.date).getTime() : 0;
+        return dateB - dateA;
+      });
+      
+      setTimeLogs(logsData);
+      setExpenses(expensesData);
+      
+      // Build subcontractors map for aggregation
+      const subsMap = new Map<string, string>();
+      subcontractors.forEach(sub => {
+        subsMap.set(sub.id, sub.name);
+      });
+      
+      // Aggregate the data
+      const tracking = aggregateProjectCosts(logsData, expensesData, subsMap);
+      setProjectTracking(tracking);
+    } catch (error) {
+      console.error('Error fetching live tracking data:', error);
+    }
+  };
+
   const formatDate = (timestamp: any) => {
     if (!timestamp) return 'N/A';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -369,82 +468,260 @@ export default function ProjectDetailPage() {
           </div>
         </div>
 
-        {/* Subcontractors Section */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-3">
-              <Users className="w-6 h-6 text-blue-600" />
-              <h3 className="text-xl font-bold text-gray-900">Assigned Subcontractors</h3>
-            </div>
-            {canEdit && availableSubcontractors.length > 0 && (
-              <button
-                onClick={openAssignModal}
-                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-              >
-                <UserPlus className="w-4 h-4" />
-                <span>Assign Subcontractor</span>
-              </button>
-            )}
+        {/* Tab Navigation */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6 overflow-hidden">
+          <div className="flex border-b border-gray-200">
+            <button
+              onClick={() => setActiveTab('assignments')}
+              className={`flex-1 px-6 py-4 text-sm font-semibold transition flex items-center justify-center space-x-2 ${
+                activeTab === 'assignments'
+                  ? 'bg-white text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900 bg-gray-50'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span>Subcontractor Assignments</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('liveTracking')}
+              className={`flex-1 px-6 py-4 text-sm font-semibold transition flex items-center justify-center space-x-2 ${
+                activeTab === 'liveTracking'
+                  ? 'bg-white text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900 bg-gray-50'
+              }`}
+            >
+              <Activity className="w-4 h-4" />
+              <span>Live Tracking & Running Bill</span>
+            </button>
           </div>
-
-          {assignments.length === 0 ? (
-            <div className="text-center py-12">
-              <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h4 className="text-lg font-semibold text-gray-900 mb-2">No subcontractors assigned</h4>
-              <p className="text-gray-600 mb-4">Assign subcontractors to this project to get started.</p>
-              {canEdit && availableSubcontractors.length > 0 && (
-                <button
-                  onClick={openAssignModal}
-                  className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  <span>Assign Subcontractor</span>
-                </button>
-              )}
-              {availableSubcontractors.length === 0 && (
-                <p className="text-sm text-gray-500 mt-2">
-                  No available subcontractors. Create subcontractors first.
-                </p>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {assignments.map((assignment) => (
-                <div
-                  key={assignment.id}
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition"
-                >
-                  <div className="flex-1">
-                    <p className="font-semibold text-gray-900">{assignment.subcontractorName}</p>
-                    <p className="text-xs text-gray-500">Assigned on {formatDate(assignment.assignedAt)}</p>
-                  </div>
-                  {canEdit && (
-                    <button
-                      onClick={() => handleRemoveAssignment(assignment.id)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                      title="Remove"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
-        {/* Info Box */}
-        {project.clientId && assignments.length > 0 && (
-          <div className="mt-6 bg-blue-50 rounded-xl border border-blue-200 p-4">
-            <p className="text-sm text-blue-800">
-              💡 <strong>Tip:</strong> Go to the client's subcontractors page to assign rate cards to these subcontractors for billing.
-            </p>
-            <button
-              onClick={() => router.push(`/dashboard/clients/${project.clientId}/subcontractors`)}
-              className="mt-3 inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
-            >
-              <span>Manage Rate Cards for {project.clientName}</span>
-            </button>
+        {/* Assignments Tab */}
+        {activeTab === 'assignments' && (
+          <>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center space-x-3">
+                  <Users className="w-6 h-6 text-blue-600" />
+                  <h3 className="text-xl font-bold text-gray-900">Assigned Subcontractors</h3>
+                </div>
+                {canEdit && availableSubcontractors.length > 0 && (
+                  <button
+                    onClick={openAssignModal}
+                    className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    <span>Assign Subcontractor</span>
+                  </button>
+                )}
+              </div>
+
+              {assignments.length === 0 ? (
+                <div className="text-center py-12">
+                  <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <h4 className="text-lg font-semibold text-gray-900 mb-2">No subcontractors assigned</h4>
+                  <p className="text-gray-600 mb-4">Assign subcontractors to this project to get started.</p>
+                  {canEdit && availableSubcontractors.length > 0 && (
+                    <button
+                      onClick={openAssignModal}
+                      className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      <span>Assign Subcontractor</span>
+                    </button>
+                  )}
+                  {availableSubcontractors.length === 0 && (
+                    <p className="text-sm text-gray-500 mt-2">
+                      No available subcontractors. Create subcontractors first.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {assignments.map((assignment) => (
+                    <div
+                      key={assignment.id}
+                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition"
+                    >
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900">{assignment.subcontractorName}</p>
+                        <p className="text-xs text-gray-500">Assigned on {formatDate(assignment.assignedAt)}</p>
+                      </div>
+                      {canEdit && (
+                        <button
+                          onClick={() => handleRemoveAssignment(assignment.id)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                          title="Remove"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Info Box */}
+            {project.clientId && assignments.length > 0 && (
+              <div className="mt-6 bg-blue-50 rounded-xl border border-blue-200 p-4">
+                <p className="text-sm text-blue-800">
+                  💡 <strong>Tip:</strong> Go to the client's subcontractors page to assign rate cards to these subcontractors for billing.
+                </p>
+                <button
+                  onClick={() => router.push(`/dashboard/clients/${project.clientId}/subcontractors`)}
+                  className="mt-3 inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
+                >
+                  <span>Manage Rate Cards for {project.clientName}</span>
+                </button>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Live Tracking Tab */}
+        {activeTab === 'liveTracking' && projectTracking && (
+          <div className="space-y-6">
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl shadow-sm border border-blue-200 p-6">
+                <div className="flex items-center space-x-3 mb-2">
+                  <Clock className="w-5 h-5 text-blue-600" />
+                  <p className="text-sm font-semibold text-blue-700">Total Hours</p>
+                </div>
+                <p className="text-3xl font-bold text-blue-900">{projectTracking.totals.hours.toFixed(1)}h</p>
+                <p className="text-xs text-blue-600 mt-1">All logged hours</p>
+              </div>
+
+              <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl shadow-sm border border-red-200 p-6">
+                <div className="flex items-center space-x-3 mb-2">
+                  <DollarSign className="w-5 h-5 text-red-600" />
+                  <p className="text-sm font-semibold text-red-700">Total Cost</p>
+                </div>
+                <p className="text-3xl font-bold text-red-900">{formatCurrency(projectTracking.totals.cost, currency)}</p>
+                <p className="text-xs text-red-600 mt-1">What you pay</p>
+              </div>
+
+              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl shadow-sm border border-green-200 p-6">
+                <div className="flex items-center space-x-3 mb-2">
+                  <DollarSign className="w-5 h-5 text-green-600" />
+                  <p className="text-sm font-semibold text-green-700">Total Billing</p>
+                </div>
+                <p className="text-3xl font-bold text-green-900">{formatCurrency(projectTracking.totals.billing, currency)}</p>
+                <p className="text-xs text-green-600 mt-1">What you charge</p>
+              </div>
+
+              <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl shadow-sm border border-purple-200 p-6">
+                <div className="flex items-center space-x-3 mb-2">
+                  <TrendingUp className="w-5 h-5 text-purple-600" />
+                  <p className="text-sm font-semibold text-purple-700">Total Margin</p>
+                </div>
+                <p className="text-3xl font-bold text-purple-900">{formatCurrency(projectTracking.totals.margin, currency)}</p>
+                <p className="text-xs text-purple-600 mt-1">{projectTracking.totals.marginPct.toFixed(1)}% margin</p>
+              </div>
+            </div>
+
+            {/* Status Breakdown */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Breakdown by Status</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-yellow-700">🟡 DRAFT (Unsubmitted)</span>
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor('DRAFT')}`}>
+                      {projectTracking.byStatus.draft.count}
+                    </span>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-yellow-700">Hours:</span>
+                      <span className="font-semibold text-yellow-900">{projectTracking.byStatus.draft.hours.toFixed(1)}h</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-yellow-700">Cost:</span>
+                      <span className="font-semibold text-yellow-900">{formatCurrency(projectTracking.byStatus.draft.cost, currency)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-yellow-700">Bill:</span>
+                      <span className="font-semibold text-yellow-900">{formatCurrency(projectTracking.byStatus.draft.billing, currency)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-orange-700">🟠 SUBMITTED (Pending)</span>
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor('SUBMITTED')}`}>
+                      {projectTracking.byStatus.submitted.count}
+                    </span>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-orange-700">Hours:</span>
+                      <span className="font-semibold text-orange-900">{projectTracking.byStatus.submitted.hours.toFixed(1)}h</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-orange-700">Cost:</span>
+                      <span className="font-semibold text-orange-900">{formatCurrency(projectTracking.byStatus.submitted.cost, currency)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-orange-700">Bill:</span>
+                      <span className="font-semibold text-orange-900">{formatCurrency(projectTracking.byStatus.submitted.billing, currency)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-green-700">🟢 APPROVED (Finalized)</span>
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor('APPROVED')}`}>
+                      {projectTracking.byStatus.approved.count}
+                    </span>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-green-700">Hours:</span>
+                      <span className="font-semibold text-green-900">{projectTracking.byStatus.approved.hours.toFixed(1)}h</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-green-700">Cost:</span>
+                      <span className="font-semibold text-green-900">{formatCurrency(projectTracking.byStatus.approved.cost, currency)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-green-700">Bill:</span>
+                      <span className="font-semibold text-green-900">{formatCurrency(projectTracking.byStatus.approved.billing, currency)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Subcontractor Breakdown */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Subcontractor Breakdown</h3>
+                <p className="text-sm text-gray-600">{projectTracking.subcontractors.length} subcontractor{projectTracking.subcontractors.length !== 1 ? 's' : ''} with activity</p>
+              </div>
+              
+              {projectTracking.subcontractors.length === 0 ? (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-12 text-center">
+                  <Activity className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <h4 className="text-lg font-semibold text-gray-900 mb-2">No Activity Yet</h4>
+                  <p className="text-gray-600">Time logs and expenses will appear here once subcontractors start logging work.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {projectTracking.subcontractors.map((sub) => (
+                    <SubcontractorCostBreakdown
+                      key={sub.id}
+                      subcontractor={sub}
+                      currency={currency}
+                      showLineItems={true}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
