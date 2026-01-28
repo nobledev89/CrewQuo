@@ -15,7 +15,7 @@ import {
   deleteDoc,
   serverTimestamp 
 } from 'firebase/firestore';
-import { FileText, Plus, Edit2, Trash2, X, DollarSign, Copy } from 'lucide-react';
+import { FileText, Plus, Edit2, Trash2, X, DollarSign, Copy, ChevronDown, ChevronUp } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { RateCard, RateEntry, ResourceCategory, ShiftType } from '@/lib/types';
 import RateCardForm, { RateCardFormData } from '@/components/RateCardForm';
@@ -31,6 +31,7 @@ export default function RateCardsPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingRateCard, setEditingRateCard] = useState<RateCard | null>(null);
   const [saving, setSaving] = useState(false);
+  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const { cachedData, updateRateCards } = useClientData();
 
   // Use cached data when available
@@ -294,50 +295,60 @@ export default function RateCardsPage() {
                 </div>
 
                 {rateCard.rates && rateCard.rates.length > 0 && (
-                  <div className="space-y-2 mb-3">
-                    <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
-                      <p className="text-xs font-semibold text-blue-800 mb-2">
-                        <DollarSign className="w-3 h-3 inline mr-1" />
-                        {rateCard.rates.length} rate {rateCard.rates.length === 1 ? 'entry' : 'entries'}
-                      </p>
-                      {/* Display first few rate entries with timeframe */}
-                      <div className="space-y-1 mt-2">
-                        {rateCard.rates.slice(0, 3).map((rate, idx) => (
-                          <div key={idx} className="text-xs text-blue-900">
-                            <span className="font-medium">{rate.roleName}</span>
-                            {rate.timeframeName && (
-                              <span className="text-blue-700"> - {rate.timeframeName}</span>
-                            )}
-                            <span className="text-blue-600">
-                              {' '}(Sub: £{rate.subcontractorRate.toFixed(2)}/hr, Client: £{rate.clientRate.toFixed(2)}/hr)
-                            </span>
+                  <div className="mb-3">
+                    {/* Summary Row - Always Visible */}
+                    <div
+                      className="bg-gray-50 rounded-lg p-3 border border-gray-200 cursor-pointer hover:bg-gray-100 transition"
+                      onClick={() => setExpandedCardId(expandedCardId === rateCard.id ? null : rateCard.id)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <DollarSign className="w-4 h-4 text-gray-600" />
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">
+                              {rateCard.rates.length} Rate {rateCard.rates.length === 1 ? 'Entry' : 'Entries'}
+                            </p>
+                            <p className="text-xs text-gray-600">
+                              Avg Margin: £
+                              {(rateCard.rates.reduce((sum, r) => sum + (r.marginValue || 0), 0) / rateCard.rates.length).toFixed(2)}
+                            </p>
                           </div>
-                        ))}
-                        {rateCard.rates.length > 3 && (
-                          <p className="text-xs text-blue-700 italic">
-                            +{rateCard.rates.length - 3} more {rateCard.rates.length - 3 === 1 ? 'entry' : 'entries'}
-                          </p>
+                        </div>
+                        {expandedCardId === rateCard.id ? (
+                          <ChevronUp className="w-5 h-5 text-gray-600" />
+                        ) : (
+                          <ChevronDown className="w-5 h-5 text-gray-600" />
                         )}
                       </div>
                     </div>
 
-                    {/* Margin Summary */}
-                    {rateCard.rates.some(r => r.marginValue !== undefined && r.marginValue > 0) && (
-                      <div className="bg-green-50 rounded-lg p-3 border border-green-100">
-                        <p className="text-xs font-semibold text-green-800 mb-2">Margin Summary</p>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                          {rateCard.rates.map((rate, idx) => {
-                            if (rate.marginValue !== undefined && rate.marginPercentage !== undefined && rate.marginValue > 0) {
-                              return (
-                                <div key={idx} className="text-xs">
-                                  <p className="text-green-700 font-medium">{rate.roleName}</p>
-                                  <p className="text-green-600">£{rate.marginValue.toFixed(2)} ({rate.marginPercentage.toFixed(1)}%)</p>
-                                </div>
-                              );
-                            }
-                            return null;
-                          })}
-                        </div>
+                    {/* Expanded Details Table */}
+                    {expandedCardId === rateCard.id && (
+                      <div className="mt-2 border border-gray-200 rounded-lg overflow-hidden">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-700">Role</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-700">Timeframe</th>
+                              <th className="px-4 py-2 text-right text-xs font-medium text-gray-700">Sub Rate</th>
+                              <th className="px-4 py-2 text-right text-xs font-medium text-gray-700">Client Rate</th>
+                              <th className="px-4 py-2 text-right text-xs font-medium text-gray-700">Margin</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {rateCard.rates.map((rate, idx) => (
+                              <tr key={idx} className="hover:bg-gray-50">
+                                <td className="px-4 py-2 text-sm text-gray-900">{rate.roleName}</td>
+                                <td className="px-4 py-2 text-xs text-gray-600">{rate.timeframeName || 'N/A'}</td>
+                                <td className="px-4 py-2 text-sm text-gray-900 text-right">£{rate.subcontractorRate.toFixed(2)}/hr</td>
+                                <td className="px-4 py-2 text-sm text-gray-900 text-right">£{rate.clientRate.toFixed(2)}/hr</td>
+                                <td className="px-4 py-2 text-sm font-semibold text-green-700 text-right">
+                                  £{(rate.marginValue || 0).toFixed(2)} ({(rate.marginPercentage || 0).toFixed(1)}%)
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     )}
                   </div>
