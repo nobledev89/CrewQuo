@@ -482,6 +482,7 @@ export interface Expense {
   date: Timestamp;
   category: string;        // Expense category label
   amount: number;
+  description?: string;    // Optional notes/description (e.g., hotel name, details, etc.)
   
   // Quantity support (NEW) - allows flexible expense logging
   quantity: number;        // Number of units (miles, nights, rooms, etc.) - default: 1

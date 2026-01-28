@@ -82,7 +82,7 @@ export default function ProjectModal({
     expenseKey: '',
     quantity: 1,
     amount: 0,
-    notes: '',
+    description: '',
     manualAmount: 0, // For CAPPED expenses - user can input any amount up to cap
   });
 
@@ -406,6 +406,7 @@ export default function ProjectModal({
         date: new Date(expenseForm.date),
         category: selectedExpense.label,
         amount: finalAmount,
+        description: expenseForm.description || '',
         quantity: expenseForm.quantity,
         unitRate: isCappedExpense ? (finalAmount / expenseForm.quantity) : selectedExpense.rate,
         unitType: selectedExpense.unitType,
@@ -422,7 +423,7 @@ export default function ProjectModal({
         expenseKey: '',
         quantity: 1,
         amount: 0,
-        notes: '',
+        description: '',
         manualAmount: 0,
       });
       await fetchProjectData();
@@ -766,102 +767,116 @@ export default function ProjectModal({
                         <p className="text-sm text-orange-700">You have submitted items for approval. New items cannot be added until they are approved or rejected.</p>
                       </div>
                     )}
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
-                        <input
-                          type="date"
-                          value={expenseForm.date}
-                          onChange={(e) => setExpenseForm((p) => ({ ...p, date: e.target.value }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Expense Type *</label>
-                        <select
-                          value={expenseForm.expenseKey}
-                          onChange={(e) => {
-                            const key = e.target.value;
-                            const selected = expenseOptions.find((opt: any) => opt.key === key);
-                            const isCapped = selected?.rateType === 'CAPPED';
-                            setExpenseForm((p) => ({
-                              ...p,
-                              expenseKey: key,
-                              quantity: 1,
-                              amount: selected ? selected.rate : 0,
-                              manualAmount: selected && isCapped ? selected.rate : 0, // Initialize with cap for CAPPED
-                            }));
-                          }}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
-                        >
-                          <option value="">Choose...</option>
-                          {expenseOptions.map((o: any) => (
-                            <option key={o.key} value={o.key}>
-                              {o.label} ({o.rateType === 'FIXED' ? 'fixed' : 'cap'} £{o.rate.toFixed(2)})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Qty</label>
-                        <input
-                          type="number"
-                          min="1"
-                          step="0.5"
-                          value={expenseForm.quantity}
-                          onChange={(e) => {
-                            const qty = Math.max(0.5, Number(e.target.value));
-                            setExpenseForm((p) => ({
-                              ...p,
-                              quantity: qty,
-                            }));
-                          }}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          {isCappedExpense ? `Amount (max £${(selectedExpense ? selectedExpense.rate * expenseForm.quantity : 0).toFixed(2)})` : 'Amount (Auto)'}
-                        </label>
-                        {isCappedExpense ? (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
                           <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={expenseForm.manualAmount}
+                            type="date"
+                            value={expenseForm.date}
+                            onChange={(e) => setExpenseForm((p) => ({ ...p, date: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Expense Type *</label>
+                          <select
+                            value={expenseForm.expenseKey}
                             onChange={(e) => {
+                              const key = e.target.value;
+                              const selected = expenseOptions.find((opt: any) => opt.key === key);
+                              const isCapped = selected?.rateType === 'CAPPED';
                               setExpenseForm((p) => ({
                                 ...p,
-                                manualAmount: Math.max(0, Number(e.target.value)),
+                                expenseKey: key,
+                                quantity: 1,
+                                amount: selected ? selected.rate : 0,
+                                manualAmount: selected && isCapped ? selected.rate : 0, // Initialize with cap for CAPPED
                               }));
                             }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-sm font-bold text-gray-900"
-                            placeholder="0.00"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                          >
+                            <option value="">Choose...</option>
+                            {expenseOptions.map((o: any) => (
+                              <option key={o.key} value={o.key}>
+                                {o.label} ({o.rateType === 'FIXED' ? 'fixed' : 'cap'} £{o.rate.toFixed(2)})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Qty</label>
+                          <input
+                            type="number"
+                            min="1"
+                            step="0.5"
+                            value={expenseForm.quantity}
+                            onChange={(e) => {
+                              const qty = Math.max(0.5, Number(e.target.value));
+                              setExpenseForm((p) => ({
+                                ...p,
+                                quantity: qty,
+                              }));
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
                           />
-                        ) : (
-                          <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-green-50 text-sm font-bold text-green-900">
-                            £{calculatedExpenseAmount.toFixed(2)}
-                          </div>
-                        )}
-                        {isCappedExpense && selectedExpense && (
-                          <p className="text-xs text-gray-600 mt-1">
-                            Enter actual amount (capped at £{(selectedExpense.rate * expenseForm.quantity).toFixed(2)})
-                          </p>
-                        )}
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            {isCappedExpense ? `Amount (max £${(selectedExpense ? selectedExpense.rate * expenseForm.quantity : 0).toFixed(2)})` : 'Amount (Auto)'}
+                          </label>
+                          {isCappedExpense ? (
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={expenseForm.manualAmount}
+                              onChange={(e) => {
+                                setExpenseForm((p) => ({
+                                  ...p,
+                                  manualAmount: Math.max(0, Number(e.target.value)),
+                                }));
+                              }}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-sm font-bold text-gray-900"
+                              placeholder="0.00"
+                            />
+                          ) : (
+                            <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-green-50 text-sm font-bold text-green-900">
+                              £{calculatedExpenseAmount.toFixed(2)}
+                            </div>
+                          )}
+                          {isCappedExpense && selectedExpense && (
+                            <p className="text-xs text-gray-600 mt-1">
+                              Enter actual amount (capped at £{(selectedExpense.rate * expenseForm.quantity).toFixed(2)})
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex items-end">
+                          <button
+                            onClick={() => saveExpense('DRAFT')}
+                            disabled={savingExpense || !selectedExpense}
+                            className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm font-medium"
+                          >
+                            <Plus className="w-4 h-4 inline mr-1" />
+                            Add
+                          </button>
+                        </div>
                       </div>
 
-                      <div className="flex items-end">
-                        <button
-                          onClick={() => saveExpense('DRAFT')}
-                          disabled={savingExpense || !selectedExpense}
-                          className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm font-medium"
-                        >
-                          <Plus className="w-4 h-4 inline mr-1" />
-                          Add
-                        </button>
+                      {/* Description field on a new row */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Description (e.g., hotel name, parking location, etc.)</label>
+                        <input
+                          type="text"
+                          value={expenseForm.description}
+                          onChange={(e) => setExpenseForm((p) => ({ ...p, description: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                          placeholder="Add details about this expense..."
+                        />
                       </div>
                     </div>
                   </div>
@@ -893,6 +908,7 @@ export default function ProjectModal({
                             <tr>
                               <th className="px-4 py-2 text-left font-semibold text-gray-900">Date</th>
                               <th className="px-4 py-2 text-left font-semibold text-gray-900">Category</th>
+                              <th className="px-4 py-2 text-left font-semibold text-gray-900">Description</th>
                               <th className="px-4 py-2 text-center font-semibold text-gray-900">Qty</th>
                               <th className="px-4 py-2 text-right font-semibold text-gray-900">Amount</th>
                               <th className="px-4 py-2 text-center font-semibold text-gray-900">Actions</th>
@@ -903,6 +919,13 @@ export default function ProjectModal({
                               <tr key={exp.id} className="border-b border-gray-200 hover:bg-gray-50">
                                 <td className="px-4 py-2 text-gray-900">{formatDate(exp.date)}</td>
                                 <td className="px-4 py-2 text-gray-900">{exp.category}</td>
+                                <td className="px-4 py-2 text-gray-600 text-sm">
+                                  {exp.description ? (
+                                    <span className="italic">{exp.description}</span>
+                                  ) : (
+                                    <span className="text-gray-400">-</span>
+                                  )}
+                                </td>
                                 <td className="px-4 py-2 text-center text-gray-900">{(exp.quantity || 1).toFixed(1)}</td>
                                 <td className="px-4 py-2 text-right text-gray-900 font-semibold">£{(exp.amount || 0).toFixed(2)}</td>
                                 <td className="px-4 py-2 text-center flex items-center justify-center gap-2">
