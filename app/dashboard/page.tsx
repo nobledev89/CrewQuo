@@ -24,10 +24,10 @@ export default function DashboardPage() {
   // Default stats if not loaded yet
   const displayStats = stats || { projects: 0, clients: 0, subcontractors: 0, rateCards: 0 };
 
-  // Redirect subcontractors to their workspace
+  // Redirect subcontractors to their workspace summary page
   useEffect(() => {
     if (!authLoading && userData && userData.role === 'SUBCONTRACTOR') {
-      router.push('/dashboard/my-work');
+      router.push('/dashboard/my-work/summary');
     }
   }, [authLoading, userData, router]);
 
