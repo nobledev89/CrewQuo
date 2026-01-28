@@ -1222,35 +1222,68 @@ function ExpenseEntryRow({ expense, index, onUpdate, onRemove, expenseCategories
   index: number;
   onUpdate: (index: number, field: keyof ExpenseEntry, value: any) => void;
   onRemove: (index: number) => void;
-  expenseCategories: Array<{ id: string; name: string; unitType: string; defaultRate?: number; taxable?: boolean }>;
+  expenseCategories: Array<{ id: string; name: string; unitType: string; defaultRate?: number; taxable?: boolean; rateType?: 'CAPPED' | 'FIXED' }>;
 }) {
-  const [usePercentage, setUsePercentage] = useState(false);
-  const [marginPercent, setMarginPercent] = useState(0);
+  // Initialize client markup percentage from marginPercentage field
+  const [clientMarkupPercent, setClientMarkupPercent] = useState(expense.marginPercentage ?? 10);
 
   // Initialize values for backward compatibility
+  const maxCap = expense.subcontractorRate ?? expense.rate;
+  const isCapped = expense.rateType === 'CAPPED';
+
+  // For CAPPED: Calculate example client charge based on cap and markup
+  const exampleClientCharge = isCapped ? maxCap * (1 + clientMarkupPercent / 100) : 0;
+
+  const handleCapChange = (value: number) => {
+    onUpdate(index, 'subcontractorRate', value);
+    onUpdate(index, 'rate', value); // Keep legacy field in sync
+    
+    if (isCapped) {
+      // For CAPPED: client rate is just for display, actual calculation happens during expense logging
+      const calculatedClientRate = value * (1 + clientMarkupPercent / 100);
+      onUpdate(index, 'clientRate', calculatedClientRate);
+      onUpdate(index, 'marginValue', calculateMarginValue(calculatedClientRate, value));
+      onUpdate(index, 'marginPercentage', clientMarkupPercent);
+    }
+  };
+
+  const handleMarkupPercentChange = (value: number) => {
+    setClientMarkupPercent(value);
+    
+    if (isCapped) {
+      const calculatedClientRate = maxCap * (1 + value / 100);
+      onUpdate(index, 'clientRate', calculatedClientRate);
+      onUpdate(index, 'marginValue', calculateMarginValue(calculatedClientRate, maxCap));
+      onUpdate(index, 'marginPercentage', value);
+    }
+  };
+
+  // For FIXED expenses - use the dual rate model
+  const [usePercentage, setUsePercentage] = useState(false);
+  const [marginPercent, setMarginPercent] = useState(expense.marginPercentage ?? 0);
   const subRate = expense.subcontractorRate ?? expense.rate;
   const clientRate = expense.clientRate ?? expense.rate;
 
-  const handleSubRateChange = (value: number) => {
+  const handleFixedSubRateChange = (value: number) => {
     const updatedSubRate = value;
     const updatedClientRate = usePercentage 
       ? updatedSubRate * (1 + marginPercent / 100)
       : clientRate;
     
     onUpdate(index, 'subcontractorRate', updatedSubRate);
-    onUpdate(index, 'rate', updatedSubRate); // Keep legacy field in sync
+    onUpdate(index, 'rate', updatedSubRate);
     onUpdate(index, 'clientRate', updatedClientRate);
     onUpdate(index, 'marginValue', calculateMarginValue(updatedClientRate, updatedSubRate));
     onUpdate(index, 'marginPercentage', calculateMarginPercentage(updatedClientRate, updatedSubRate));
   };
 
-  const handleClientRateChange = (value: number) => {
+  const handleFixedClientRateChange = (value: number) => {
     onUpdate(index, 'clientRate', value);
     onUpdate(index, 'marginValue', calculateMarginValue(value, subRate));
     onUpdate(index, 'marginPercentage', calculateMarginPercentage(value, subRate));
   };
 
-  const handleMarginPercentChange = (value: number) => {
+  const handleFixedMarginPercentChange = (value: number) => {
     setMarginPercent(value);
     const calculatedClientRate = subRate * (1 + value / 100);
     onUpdate(index, 'clientRate', calculatedClientRate);
@@ -1260,7 +1293,6 @@ function ExpenseEntryRow({ expense, index, onUpdate, onRemove, expenseCategories
 
   const toggleInputMode = () => {
     if (!usePercentage) {
-      // Switching to percentage mode - calculate current margin %
       const currentMarginPct = calculateMarginPercentage(clientRate, subRate);
       setMarginPercent(currentMarginPct);
     }
@@ -1273,7 +1305,14 @@ function ExpenseEntryRow({ expense, index, onUpdate, onRemove, expenseCategories
         <div className="flex items-center gap-2">
           <span className="text-sm font-bold text-gray-900">Expense #{index + 1}</span>
           <span className="text-xs text-gray-600">- {expense.categoryName}</span>
-          {(expense.marginValue ?? 0) > 0 && (
+          <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+            isCapped 
+              ? 'bg-blue-100 text-blue-700' 
+              : 'bg-orange-100 text-orange-700'
+          }`}>
+            {isCapped ? 'CAPPED' : 'FIXED'}
+          </span>
+          {!isCapped && (expense.marginValue ?? 0) > 0 && (
             <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-medium">
               Margin: £{(expense.marginValue ?? 0).toFixed(2)} ({(expense.marginPercentage ?? 0).toFixed(1)}%)
             </span>
@@ -1319,43 +1358,35 @@ function ExpenseEntryRow({ expense, index, onUpdate, onRemove, expenseCategories
           </div>
         </div>
 
-        {/* Rates Section */}
-        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h5 className="text-sm font-semibold text-purple-900">Pricing & Margin</h5>
-            <button
-              type="button"
-              onClick={toggleInputMode}
-              className="text-xs px-2 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 transition"
-            >
-              {usePercentage ? 'Switch to Manual' : 'Switch to %'}
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {/* Subcontractor Rate */}
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Subcontractor Rate (£) *
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                required
-                min="0"
-                value={subRate}
-                onChange={(e) => handleSubRateChange(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 text-sm border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
-                placeholder="0.00"
-              />
-              <p className="text-xs text-purple-700 mt-1">What you pay</p>
+        {/* CAPPED Model: Max Cap + Markup % */}
+        {isCapped ? (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h5 className="text-sm font-semibold text-blue-900">Reimbursement Cap & Client Markup</h5>
+              <span className="text-xs text-blue-600 font-medium">Variable Cost Model</span>
             </div>
 
-            {/* Client Rate or Margin % */}
-            {usePercentage ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Margin (%) *
+                  Maximum Reimbursement Cap (£) *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  min="0"
+                  value={maxCap}
+                  onChange={(e) => handleCapChange(parseFloat(e.target.value) || 0)}
+                  className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                  placeholder="100.00"
+                />
+                <p className="text-xs text-blue-700 mt-1">Max you'll pay subcontractor per unit</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Client Markup (%) *
                 </label>
                 <input
                   type="number"
@@ -1363,53 +1394,127 @@ function ExpenseEntryRow({ expense, index, onUpdate, onRemove, expenseCategories
                   required
                   min="0"
                   max="100"
-                  value={marginPercent}
-                  onChange={(e) => handleMarginPercentChange(parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 text-sm border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                  value={clientMarkupPercent}
+                  onChange={(e) => handleMarkupPercentChange(parseFloat(e.target.value) || 0)}
+                  className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
                   placeholder="10.0"
                 />
-                <p className="text-xs text-purple-700 mt-1">Margin percentage</p>
+                <p className="text-xs text-blue-700 mt-1">% added when billing client</p>
               </div>
-            ) : (
+            </div>
+
+            {/* Example Calculation */}
+            <div className="bg-white border border-blue-300 rounded-lg p-3">
+              <div className="text-xs font-semibold text-blue-900 mb-2">How This Works:</div>
+              <div className="space-y-1 text-xs text-gray-700">
+                <div className="flex justify-between">
+                  <span>• If subcontractor claims £60:</span>
+                  <span className="font-medium">Client pays £{(60 * (1 + clientMarkupPercent / 100)).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>• If subcontractor claims £{maxCap.toFixed(0)} (at cap):</span>
+                  <span className="font-medium">Client pays £{exampleClientCharge.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>• If subcontractor claims £{(maxCap + 20).toFixed(0)} (over cap):</span>
+                  <span className="font-medium">Capped at £{maxCap.toFixed(0)}, client pays £{exampleClientCharge.toFixed(2)}</span>
+                </div>
+              </div>
+              <div className="text-xs text-blue-600 mt-2 font-medium">
+                💡 Actual amounts are entered when logging expenses. Rate card defines limits only.
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* FIXED Model: Fixed Rates */
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h5 className="text-sm font-semibold text-purple-900">Fixed Pricing & Margin</h5>
+              <button
+                type="button"
+                onClick={toggleInputMode}
+                className="text-xs px-2 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 transition"
+              >
+                {usePercentage ? 'Switch to Manual' : 'Switch to %'}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Client Rate (£) *
+                  Subcontractor Rate (£) *
                 </label>
                 <input
                   type="number"
                   step="0.01"
                   required
                   min="0"
-                  value={clientRate}
-                  onChange={(e) => handleClientRateChange(parseFloat(e.target.value) || 0)}
+                  value={subRate}
+                  onChange={(e) => handleFixedSubRateChange(parseFloat(e.target.value) || 0)}
                   className="w-full px-3 py-2 text-sm border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
                   placeholder="0.00"
                 />
-                <p className="text-xs text-purple-700 mt-1">What you charge</p>
+                <p className="text-xs text-purple-700 mt-1">Fixed cost per unit</p>
               </div>
-            )}
 
-            {/* Calculated Margin Display */}
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                {usePercentage ? 'Client Rate (Auto)' : 'Margin (Auto)'}
-              </label>
-              <div className={`w-full px-3 py-2 text-sm rounded-lg border-2 font-bold text-center ${
-                (expense.marginValue ?? 0) > 0
-                  ? 'bg-green-50 border-green-300 text-green-700'
-                  : 'bg-gray-50 border-gray-300 text-gray-700'
-              }`}>
-                {usePercentage 
-                  ? `£${clientRate.toFixed(2)}`
-                  : `£${(expense.marginValue ?? 0).toFixed(2)} (${(expense.marginPercentage ?? 0).toFixed(1)}%)`
-                }
+              {usePercentage ? (
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Margin (%) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    required
+                    min="0"
+                    max="100"
+                    value={marginPercent}
+                    onChange={(e) => handleFixedMarginPercentChange(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 text-sm border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                    placeholder="10.0"
+                  />
+                  <p className="text-xs text-purple-700 mt-1">Margin percentage</p>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Client Rate (£) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    min="0"
+                    value={clientRate}
+                    onChange={(e) => handleFixedClientRateChange(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 text-sm border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                    placeholder="0.00"
+                  />
+                  <p className="text-xs text-purple-700 mt-1">Fixed charge to client</p>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  {usePercentage ? 'Client Rate (Auto)' : 'Margin (Auto)'}
+                </label>
+                <div className={`w-full px-3 py-2 text-sm rounded-lg border-2 font-bold text-center ${
+                  (expense.marginValue ?? 0) > 0
+                    ? 'bg-green-50 border-green-300 text-green-700'
+                    : 'bg-gray-50 border-gray-300 text-gray-700'
+                }`}>
+                  {usePercentage 
+                    ? `£${clientRate.toFixed(2)}`
+                    : `£${(expense.marginValue ?? 0).toFixed(2)} (${(expense.marginPercentage ?? 0).toFixed(1)}%)`
+                  }
+                </div>
+                <p className="text-xs text-gray-600 mt-1">
+                  {usePercentage ? 'Calculated rate' : 'Profit per unit'}
+                </p>
               </div>
-              <p className="text-xs text-gray-600 mt-1">
-                {usePercentage ? 'Calculated rate' : 'Profit per unit'}
-              </p>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Additional Options */}
         <div className="flex items-center gap-4">
@@ -1422,9 +1527,6 @@ function ExpenseEntryRow({ expense, index, onUpdate, onRemove, expenseCategories
             />
             <span className="ml-2 text-xs text-gray-700">Taxable</span>
           </label>
-          <span className="text-xs text-gray-600">
-            Rate Type: <span className="font-medium">{expense.rateType}</span>
-          </span>
         </div>
       </div>
     </div>
