@@ -34,6 +34,7 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
   const [selectedTemplate, setSelectedTemplate] = useState<RateCardTemplate | null>(null);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [expandedRateIndex, setExpandedRateIndex] = useState<number | null>(0); // First entry expanded by default
+  const [showMultiTimeframeModal, setShowMultiTimeframeModal] = useState(false);
 
   const [formData, setFormData] = useState<RateCardFormData>({
     name: rateCard?.name || '',
@@ -114,39 +115,24 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
     }));
   };
 
-  const addRateEntry = () => {
+  const openMultiTimeframeModal = () => {
     if (timeframeDefinitions.length === 0) {
       alert('Please select a template with timeframe definitions first');
       return;
     }
+    setShowMultiTimeframeModal(true);
+  };
 
-    const firstTimeframe = timeframeDefinitions[0];
-    const newEntry: RateEntry = {
-      roleName: '',
-      category: resourceCategories[0] || 'Labour',
-      description: '',
-      timeframeId: firstTimeframe.id,
-      timeframeName: firstTimeframe.name,
-      subcontractorRate: 0,
-      clientRate: 0,
-      marginValue: 0,
-      marginPercentage: 0,
-      congestionChargeApplicable: false,
-      congestionChargeAmount: 15,
-      vehicleIncluded: false,
-      driverIncluded: false,
-      overtimeRules: '',
-      specialConditions: '',
-      invoicingNotes: '',
-    };
-
+  const handleMultiTimeframeSave = (entries: RateEntry[]) => {
     setFormData(prev => ({
       ...prev,
-      rates: [...prev.rates, newEntry]
+      rates: [...prev.rates, ...entries]
     }));
-
-    // Expand the newly added entry
-    setExpandedRateIndex(formData.rates.length);
+    setShowMultiTimeframeModal(false);
+    // Expand the first newly added entry
+    if (entries.length > 0) {
+      setExpandedRateIndex(formData.rates.length);
+    }
   };
 
   const removeRateEntry = (index: number) => {
@@ -261,21 +247,22 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white z-10">
-          <h3 className="text-xl font-bold text-gray-900">
-            {rateCard ? 'Edit Rate Card' : 'Create New Rate Card'}
-          </h3>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition"
-          >
-            <X className="w-5 h-5 text-gray-600" />
-          </button>
-        </div>
+    <>
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-xl shadow-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white z-10">
+            <h3 className="text-xl font-bold text-gray-900">
+              {rateCard ? 'Edit Rate Card' : 'Create New Rate Card'}
+            </h3>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition"
+            >
+              <X className="w-5 h-5 text-gray-600" />
+            </button>
+          </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          <form onSubmit={handleSubmit} className="p-6 space-y-6">
           {/* Basic Information */}
           <div className="space-y-4">
             <h4 className="text-lg font-semibold text-gray-900 flex items-center">
@@ -368,7 +355,7 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
               </h4>
               <button
                 type="button"
-                onClick={addRateEntry}
+                onClick={openMultiTimeframeModal}
                 disabled={!selectedTemplate || timeframeDefinitions.length === 0}
                 className="flex items-center space-x-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
@@ -392,7 +379,7 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
                 <p className="text-sm text-gray-500 mb-4">Add entries for each role/resource and timeframe combination</p>
                 <button
                   type="button"
-                  onClick={addRateEntry}
+                  onClick={openMultiTimeframeModal}
                   disabled={!selectedTemplate || timeframeDefinitions.length === 0}
                   className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
@@ -468,6 +455,296 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400"
             >
               {saving ? 'Saving...' : (rateCard ? 'Update Rate Card' : 'Create Rate Card')}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+      {/* Multi-Timeframe Modal */}
+      {showMultiTimeframeModal && (
+        <MultiTimeframeModal
+          resourceCategories={resourceCategories}
+          timeframeDefinitions={timeframeDefinitions}
+          onSave={handleMultiTimeframeSave}
+          onClose={() => setShowMultiTimeframeModal(false)}
+        />
+      )}
+    </>
+  );
+}
+
+// Multi-Timeframe Modal Component
+function MultiTimeframeModal({
+  resourceCategories,
+  timeframeDefinitions,
+  onSave,
+  onClose
+}: {
+  resourceCategories: string[];
+  timeframeDefinitions: TimeframeDefinition[];
+  onSave: (entries: RateEntry[]) => void;
+  onClose: () => void;
+}) {
+  const [roleName, setRoleName] = useState('');
+  const [category, setCategory] = useState(resourceCategories[0] || 'Labour');
+  const [description, setDescription] = useState('');
+  
+  // State for rates per timeframe
+  const [timeframeRates, setTimeframeRates] = useState<{
+    [timeframeId: string]: {
+      subcontractorRate: number;
+      clientRate: number;
+      enabled: boolean;
+    };
+  }>(() => {
+    // Initialize all timeframes as enabled with 0 rates
+    const initial: any = {};
+    timeframeDefinitions.forEach(tf => {
+      initial[tf.id] = {
+        subcontractorRate: 0,
+        clientRate: 0,
+        enabled: true
+      };
+    });
+    return initial;
+  });
+
+  const updateTimeframeRate = (timeframeId: string, field: 'subcontractorRate' | 'clientRate', value: number) => {
+    setTimeframeRates(prev => ({
+      ...prev,
+      [timeframeId]: {
+        ...prev[timeframeId],
+        [field]: value
+      }
+    }));
+  };
+
+  const toggleTimeframe = (timeframeId: string) => {
+    setTimeframeRates(prev => ({
+      ...prev,
+      [timeframeId]: {
+        ...prev[timeframeId],
+        enabled: !prev[timeframeId].enabled
+      }
+    }));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!roleName.trim()) {
+      alert('Please enter a role name');
+      return;
+    }
+
+    // Create rate entries for all enabled timeframes
+    const entries: RateEntry[] = [];
+    timeframeDefinitions.forEach(tf => {
+      const rates = timeframeRates[tf.id];
+      if (rates && rates.enabled) {
+        const marginValue = calculateMarginValue(rates.clientRate, rates.subcontractorRate);
+        const marginPercentage = calculateMarginPercentage(rates.clientRate, rates.subcontractorRate);
+        
+        entries.push({
+          roleName: roleName.trim(),
+          category,
+          description: description.trim(),
+          timeframeId: tf.id,
+          timeframeName: tf.name,
+          subcontractorRate: rates.subcontractorRate,
+          clientRate: rates.clientRate,
+          marginValue,
+          marginPercentage,
+          congestionChargeApplicable: false,
+          congestionChargeAmount: 15,
+          vehicleIncluded: false,
+          driverIncluded: false,
+          overtimeRules: '',
+          specialConditions: '',
+          invoicingNotes: '',
+        });
+      }
+    });
+
+    if (entries.length === 0) {
+      alert('Please enable at least one timeframe');
+      return;
+    }
+
+    onSave(entries);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white z-10">
+          <h3 className="text-xl font-bold text-gray-900 flex items-center">
+            <Clock className="w-6 h-6 mr-2 text-green-600" />
+            Add Rates for All Timeframes
+          </h3>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-lg transition"
+          >
+            <X className="w-5 h-5 text-gray-600" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {/* Role Information */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h4 className="text-sm font-semibold text-blue-900 mb-3">Role / Resource Information</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Role Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={roleName}
+                  onChange={(e) => setRoleName(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                  placeholder="e.g., Fitter, Supervisor"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Category *</label>
+                <select
+                  required
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  {resourceCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
+                <input
+                  type="text"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                  placeholder="Optional notes"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Timeframe Rates */}
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900 mb-3">Rates by Timeframe</h4>
+            <p className="text-xs text-gray-600 mb-4">
+              Set rates for each timeframe. Uncheck timeframes that don't apply to this role.
+            </p>
+            
+            <div className="space-y-3">
+              {timeframeDefinitions.map(tf => {
+                const rates = timeframeRates[tf.id];
+                const daysDisplay = tf.applicableDays.length > 0
+                  ? tf.applicableDays.map(d => d.slice(0, 3)).join(', ')
+                  : 'All days';
+                const marginValue = rates ? calculateMarginValue(rates.clientRate, rates.subcontractorRate) : 0;
+                const marginPercentage = rates ? calculateMarginPercentage(rates.clientRate, rates.subcontractorRate) : 0;
+
+                return (
+                  <div
+                    key={tf.id}
+                    className={`border-2 rounded-lg p-4 transition ${
+                      rates?.enabled 
+                        ? 'border-green-300 bg-green-50' 
+                        : 'border-gray-200 bg-gray-50 opacity-60'
+                    }`}
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="flex items-center pt-2">
+                        <input
+                          type="checkbox"
+                          checked={rates?.enabled || false}
+                          onChange={() => toggleTimeframe(tf.id)}
+                          className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <h5 className="font-semibold text-gray-900">{tf.name}</h5>
+                            <p className="text-xs text-gray-600">
+                              {tf.startTime} - {tf.endTime} ({daysDisplay})
+                            </p>
+                            {tf.description && (
+                              <p className="text-xs text-gray-500 mt-1">{tf.description}</p>
+                            )}
+                          </div>
+                          {rates?.enabled && marginValue > 0 && (
+                            <div className="text-right">
+                              <div className="text-xs text-gray-600">Margin</div>
+                              <div className="font-bold text-green-700">
+                                £{marginValue.toFixed(2)} ({marginPercentage.toFixed(1)}%)
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {rates?.enabled && (
+                          <div className="grid grid-cols-2 gap-3 mt-3">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">
+                                Subcontractor Rate (£/hr) *
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                required={rates.enabled}
+                                min="0"
+                                value={rates.subcontractorRate}
+                                onChange={(e) => updateTimeframeRate(tf.id, 'subcontractorRate', parseFloat(e.target.value) || 0)}
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 bg-white"
+                                placeholder="0.00"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">
+                                Client Rate (£/hr) *
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                required={rates.enabled}
+                                min="0"
+                                value={rates.clientRate}
+                                onChange={(e) => updateTimeframeRate(tf.id, 'clientRate', parseFloat(e.target.value) || 0)}
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 bg-white"
+                                placeholder="0.00"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center space-x-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Rates</span>
             </button>
           </div>
         </form>
