@@ -83,6 +83,7 @@ export default function ProjectModal({
     quantity: 1,
     amount: 0,
     notes: '',
+    manualAmount: 0, // For CAPPED expenses - user can input any amount up to cap
   });
 
   useEffect(() => {
@@ -238,12 +239,20 @@ export default function ProjectModal({
     payCard?.expenses?.map((e: any) => ({
       key: e.id,
       label: e.categoryName,
-      rate: e.rate,
+      rate: e.rate || e.subcontractorRate || 0,
       rateType: e.rateType || 'CAPPED',
-      unitType: e.unitType,
+      unitType: e.unitType || 'per_unit',
     })) || [];
 
   const selectedExpense = expenseOptions.find((e: any) => e.key === expenseForm.expenseKey);
+  
+  // Calculate amount based on expense type
+  const isCappedExpense = selectedExpense?.rateType === 'CAPPED';
+  const calculatedExpenseAmount = selectedExpense 
+    ? (isCappedExpense 
+        ? Math.min(expenseForm.manualAmount, selectedExpense.rate * expenseForm.quantity) // Capped: use manual input but cap it
+        : selectedExpense.rate * expenseForm.quantity) // Fixed: quantity × rate
+    : 0;
 
   const saveLog = async (status: 'DRAFT' | 'SUBMITTED') => {
     if (!selectedRateEntry || !logForm.date) {
@@ -365,10 +374,19 @@ export default function ProjectModal({
       return;
     }
 
-    // Calculate amount based on rate type
-    // CAPPED: quantity × rate (rate is max per unit, e.g., £0.45/mile max)
-    // FIXED: quantity × rate (rate is exact per unit, e.g., £50/night fixed)
-    const calculatedAmount = expenseForm.quantity * selectedExpense.rate;
+    // Validation based on expense type
+    if (isCappedExpense) {
+      if (expenseForm.manualAmount <= 0) {
+        alert('Please enter an amount greater than 0');
+        return;
+      }
+      if (expenseForm.manualAmount > selectedExpense.rate * expenseForm.quantity) {
+        alert(`Amount cannot exceed the cap of £${(selectedExpense.rate * expenseForm.quantity).toFixed(2)}`);
+        return;
+      }
+    }
+
+    const finalAmount = calculatedExpenseAmount;
 
     setSavingExpense(true);
     try {
@@ -387,11 +405,10 @@ export default function ProjectModal({
         createdByUserId: user.uid,
         date: new Date(expenseForm.date),
         category: selectedExpense.label,
-        amount: calculatedAmount,
-        // Quantity support - NEW
+        amount: finalAmount,
         quantity: expenseForm.quantity,
-        unitRate: selectedExpense.rate,
-        unitType: 'per_unit', // Default unit type
+        unitRate: isCappedExpense ? (finalAmount / expenseForm.quantity) : selectedExpense.rate,
+        unitType: selectedExpense.unitType,
         currency: 'GBP',
         payRateCardId: rateAssignment?.payRateCardId || null,
         billRateCardId: rateAssignment?.billRateCardId || null,
@@ -406,6 +423,7 @@ export default function ProjectModal({
         quantity: 1,
         amount: 0,
         notes: '',
+        manualAmount: 0,
       });
       await fetchProjectData();
     } catch (error) {
@@ -766,11 +784,13 @@ export default function ProjectModal({
                           onChange={(e) => {
                             const key = e.target.value;
                             const selected = expenseOptions.find((opt: any) => opt.key === key);
+                            const isCapped = selected?.rateType === 'CAPPED';
                             setExpenseForm((p) => ({
                               ...p,
                               expenseKey: key,
                               quantity: 1,
                               amount: selected ? selected.rate : 0,
+                              manualAmount: selected && isCapped ? selected.rate : 0, // Initialize with cap for CAPPED
                             }));
                           }}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
@@ -778,7 +798,7 @@ export default function ProjectModal({
                           <option value="">Choose...</option>
                           {expenseOptions.map((o: any) => (
                             <option key={o.key} value={o.key}>
-                              {o.label} ({o.rateType === 'FIXED' ? 'fixed' : 'max'} £{o.rate.toFixed(2)}/{o.unitType.replace('per_', '')})
+                              {o.label} ({o.rateType === 'FIXED' ? 'fixed' : 'cap'} £{o.rate.toFixed(2)})
                             </option>
                           ))}
                         </select>
@@ -796,7 +816,6 @@ export default function ProjectModal({
                             setExpenseForm((p) => ({
                               ...p,
                               quantity: qty,
-                              amount: selectedExpense ? Math.min(qty * selectedExpense.rate, selectedExpense.rate) : 0,
                             }));
                           }}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
@@ -804,10 +823,34 @@ export default function ProjectModal({
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-                        <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-green-50 text-sm font-bold text-green-900">
-                          £{(selectedExpense ? (expenseForm.quantity * selectedExpense.rate) : 0).toFixed(2)}
-                        </div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {isCappedExpense ? `Amount (max £${(selectedExpense ? selectedExpense.rate * expenseForm.quantity : 0).toFixed(2)})` : 'Amount (Auto)'}
+                        </label>
+                        {isCappedExpense ? (
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={expenseForm.manualAmount}
+                            onChange={(e) => {
+                              setExpenseForm((p) => ({
+                                ...p,
+                                manualAmount: Math.max(0, Number(e.target.value)),
+                              }));
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-sm font-bold text-gray-900"
+                            placeholder="0.00"
+                          />
+                        ) : (
+                          <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-green-50 text-sm font-bold text-green-900">
+                            £{calculatedExpenseAmount.toFixed(2)}
+                          </div>
+                        )}
+                        {isCappedExpense && selectedExpense && (
+                          <p className="text-xs text-gray-600 mt-1">
+                            Enter actual amount (capped at £{(selectedExpense.rate * expenseForm.quantity).toFixed(2)})
+                          </p>
+                        )}
                       </div>
 
                       <div className="flex items-end">
