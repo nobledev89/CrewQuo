@@ -186,13 +186,18 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
     }
 
     const firstExpense = selectedTemplate.expenseCategories[0];
+    const defaultRate = firstExpense.defaultRate || 0;
     const newExpense: ExpenseEntry = {
       id: crypto.randomUUID(),
       categoryId: firstExpense.id,
       categoryName: firstExpense.name,
       description: '',
       unitType: firstExpense.unitType,
-      rate: firstExpense.defaultRate || 0,
+      rate: defaultRate,
+      subcontractorRate: defaultRate,
+      clientRate: defaultRate,
+      marginValue: 0,
+      marginPercentage: 0,
       rateType: firstExpense.rateType || 'CAPPED',
       taxable: firstExpense.taxable || false,
       notes: '',
@@ -1219,62 +1224,196 @@ function ExpenseEntryRow({ expense, index, onUpdate, onRemove, expenseCategories
   onRemove: (index: number) => void;
   expenseCategories: Array<{ id: string; name: string; unitType: string; defaultRate?: number; taxable?: boolean }>;
 }) {
+  const [usePercentage, setUsePercentage] = useState(false);
+  const [marginPercent, setMarginPercent] = useState(0);
+
+  // Initialize values for backward compatibility
+  const subRate = expense.subcontractorRate ?? expense.rate;
+  const clientRate = expense.clientRate ?? expense.rate;
+
+  const handleSubRateChange = (value: number) => {
+    const updatedSubRate = value;
+    const updatedClientRate = usePercentage 
+      ? updatedSubRate * (1 + marginPercent / 100)
+      : clientRate;
+    
+    onUpdate(index, 'subcontractorRate', updatedSubRate);
+    onUpdate(index, 'rate', updatedSubRate); // Keep legacy field in sync
+    onUpdate(index, 'clientRate', updatedClientRate);
+    onUpdate(index, 'marginValue', calculateMarginValue(updatedClientRate, updatedSubRate));
+    onUpdate(index, 'marginPercentage', calculateMarginPercentage(updatedClientRate, updatedSubRate));
+  };
+
+  const handleClientRateChange = (value: number) => {
+    onUpdate(index, 'clientRate', value);
+    onUpdate(index, 'marginValue', calculateMarginValue(value, subRate));
+    onUpdate(index, 'marginPercentage', calculateMarginPercentage(value, subRate));
+  };
+
+  const handleMarginPercentChange = (value: number) => {
+    setMarginPercent(value);
+    const calculatedClientRate = subRate * (1 + value / 100);
+    onUpdate(index, 'clientRate', calculatedClientRate);
+    onUpdate(index, 'marginValue', calculateMarginValue(calculatedClientRate, subRate));
+    onUpdate(index, 'marginPercentage', calculateMarginPercentage(calculatedClientRate, subRate));
+  };
+
+  const toggleInputMode = () => {
+    if (!usePercentage) {
+      // Switching to percentage mode - calculate current margin %
+      const currentMarginPct = calculateMarginPercentage(clientRate, subRate);
+      setMarginPercent(currentMarginPct);
+    }
+    setUsePercentage(!usePercentage);
+  };
+
   return (
-    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-bold text-gray-900">Expense #{index + 1}</span>
+    <div className="bg-white rounded-lg p-4 border-2 border-gray-200">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold text-gray-900">Expense #{index + 1}</span>
+          <span className="text-xs text-gray-600">- {expense.categoryName}</span>
+          {(expense.marginValue ?? 0) > 0 && (
+            <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-medium">
+              Margin: £{(expense.marginValue ?? 0).toFixed(2)} ({(expense.marginPercentage ?? 0).toFixed(1)}%)
+            </span>
+          )}
+        </div>
         <button
           type="button"
           onClick={() => onRemove(index)}
-          className="p-1 text-red-600 hover:bg-red-50 rounded transition"
+          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
           title="Remove"
         >
           <Trash2 className="w-4 h-4" />
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Expense Category *</label>
-          <select
-            required
-            value={expense.categoryId}
-            onChange={(e) => onUpdate(index, 'categoryId', e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-          >
-            {expenseCategories.map(cat => (
-              <option key={cat.id} value={cat.id}>{cat.name}</option>
-            ))}
-          </select>
+      <div className="space-y-4">
+        {/* Category and Description */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Expense Category *</label>
+            <select
+              required
+              value={expense.categoryId}
+              onChange={(e) => onUpdate(index, 'categoryId', e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              {expenseCategories.map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">{expense.unitType.replace('_', ' ')}</p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
+            <input
+              type="text"
+              value={expense.description || ''}
+              onChange={(e) => onUpdate(index, 'description', e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="Optional description"
+            />
+          </div>
         </div>
 
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Rate (£) *</label>
-          <input
-            type="number"
-            step="0.01"
-            required
-            value={expense.rate}
-            onChange={(e) => onUpdate(index, 'rate', parseFloat(e.target.value))}
-            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            placeholder="0.00"
-          />
-          <p className="text-xs text-gray-500 mt-1">{expense.unitType.replace('_', ' ')}</p>
+        {/* Rates Section */}
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h5 className="text-sm font-semibold text-purple-900">Pricing & Margin</h5>
+            <button
+              type="button"
+              onClick={toggleInputMode}
+              className="text-xs px-2 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 transition"
+            >
+              {usePercentage ? 'Switch to Manual' : 'Switch to %'}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* Subcontractor Rate */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Subcontractor Rate (£) *
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                required
+                min="0"
+                value={subRate}
+                onChange={(e) => handleSubRateChange(parseFloat(e.target.value) || 0)}
+                className="w-full px-3 py-2 text-sm border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                placeholder="0.00"
+              />
+              <p className="text-xs text-purple-700 mt-1">What you pay</p>
+            </div>
+
+            {/* Client Rate or Margin % */}
+            {usePercentage ? (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Margin (%) *
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  required
+                  min="0"
+                  max="100"
+                  value={marginPercent}
+                  onChange={(e) => handleMarginPercentChange(parseFloat(e.target.value) || 0)}
+                  className="w-full px-3 py-2 text-sm border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                  placeholder="10.0"
+                />
+                <p className="text-xs text-purple-700 mt-1">Margin percentage</p>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Client Rate (£) *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  min="0"
+                  value={clientRate}
+                  onChange={(e) => handleClientRateChange(parseFloat(e.target.value) || 0)}
+                  className="w-full px-3 py-2 text-sm border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                  placeholder="0.00"
+                />
+                <p className="text-xs text-purple-700 mt-1">What you charge</p>
+              </div>
+            )}
+
+            {/* Calculated Margin Display */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                {usePercentage ? 'Client Rate (Auto)' : 'Margin (Auto)'}
+              </label>
+              <div className={`w-full px-3 py-2 text-sm rounded-lg border-2 font-bold text-center ${
+                (expense.marginValue ?? 0) > 0
+                  ? 'bg-green-50 border-green-300 text-green-700'
+                  : 'bg-gray-50 border-gray-300 text-gray-700'
+              }`}>
+                {usePercentage 
+                  ? `£${clientRate.toFixed(2)}`
+                  : `£${(expense.marginValue ?? 0).toFixed(2)} (${(expense.marginPercentage ?? 0).toFixed(1)}%)`
+                }
+              </div>
+              <p className="text-xs text-gray-600 mt-1">
+                {usePercentage ? 'Calculated rate' : 'Profit per unit'}
+              </p>
+            </div>
+          </div>
         </div>
 
-        <div className="md:col-span-2">
-          <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
-          <input
-            type="text"
-            value={expense.description || ''}
-            onChange={(e) => onUpdate(index, 'description', e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            placeholder="Optional description"
-          />
-        </div>
-
-        <div className="flex items-center">
-          <label className="flex items-center mt-5">
+        {/* Additional Options */}
+        <div className="flex items-center gap-4">
+          <label className="flex items-center">
             <input
               type="checkbox"
               checked={expense.taxable}
@@ -1283,6 +1422,9 @@ function ExpenseEntryRow({ expense, index, onUpdate, onRemove, expenseCategories
             />
             <span className="ml-2 text-xs text-gray-700">Taxable</span>
           </label>
+          <span className="text-xs text-gray-600">
+            Rate Type: <span className="font-medium">{expense.rateType}</span>
+          </span>
         </div>
       </div>
     </div>

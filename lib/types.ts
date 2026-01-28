@@ -336,7 +336,14 @@ export interface ExpenseEntry {
   categoryName: string;          // Denormalized for display
   description?: string;
   unitType: 'flat' | 'per_unit' | 'per_mile' | 'per_day' | 'per_hour';
-  rate: number;
+  
+  // Pricing fields
+  rate: number;                  // Legacy field (= subcontractorRate for backward compatibility)
+  subcontractorRate?: number;    // What you pay the subcontractor (per unit)
+  clientRate?: number;           // What you charge the client (per unit)
+  marginValue?: number;          // Auto-calculated: clientRate - subcontractorRate
+  marginPercentage?: number;     // Auto-calculated: (marginValue / clientRate) * 100
+  
   rateType: ExpenseRateType;     // CAPPED = max rate per unit, FIXED = exact rate per unit
   taxable: boolean;
   notes?: string;
