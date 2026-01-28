@@ -71,7 +71,7 @@ export default function ProjectDetailPage() {
     expenseKey: '',
     quantity: 1,
     amount: 0,
-    notes: '',
+    description: '',
     manualAmount: 0, // For CAPPED expenses - user can input any amount up to cap
   });
 
@@ -716,6 +716,7 @@ export default function ProjectDetailPage() {
         date: new Date(expenseForm.date),
         category: selectedExpense.label,
         amount: finalAmount,
+        description: expenseForm.description || '',
         quantity: expenseForm.quantity,
         unitRate: isCappedExpense ? (finalAmount / expenseForm.quantity) : selectedExpense.rate,
         unitType: selectedExpense.unitType,
@@ -732,7 +733,7 @@ export default function ProjectDetailPage() {
         expenseKey: '',
         quantity: 1,
         amount: 0,
-        notes: '',
+        description: '',
         manualAmount: 0,
       });
 
@@ -1488,6 +1489,16 @@ export default function ProjectDetailPage() {
                       </button>
                     </div>
                   </div>
+                  <div className="mt-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Description / Notes</label>
+                    <input
+                      type="text"
+                      value={expenseForm.description}
+                      onChange={(e) => setExpenseForm((p) => ({ ...p, description: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                      placeholder="e.g., Hotel name, parking location, meal details..."
+                    />
+                  </div>
                 </div>
 
                 {/* Expenses Table */}
@@ -1518,6 +1529,7 @@ export default function ProjectDetailPage() {
                             <tr>
                               <th className="px-4 py-2 text-left font-semibold text-gray-900">Date</th>
                               <th className="px-4 py-2 text-left font-semibold text-gray-900">Category</th>
+                              <th className="px-4 py-2 text-left font-semibold text-gray-900">Description</th>
                               <th className="px-4 py-2 text-center font-semibold text-gray-900">Qty</th>
                               <th className="px-4 py-2 text-right font-semibold text-gray-900">Amount</th>
                               <th className="px-4 py-2 text-center font-semibold text-gray-900">Actions</th>
@@ -1528,6 +1540,7 @@ export default function ProjectDetailPage() {
                               <tr key={exp.id} className="border-b border-gray-200 hover:bg-gray-50">
                                 <td className="px-4 py-2 text-gray-900">{formatDate(exp.date)}</td>
                                 <td className="px-4 py-2 text-gray-900">{exp.category}</td>
+                                <td className="px-4 py-2 text-gray-600 text-xs">{exp.description || '-'}</td>
                                 <td className="px-4 py-2 text-center text-gray-900">{(exp.quantity || 1).toFixed(1)}</td>
                                 <td className="px-4 py-2 text-right text-gray-900 font-semibold">£{(exp.amount || 0).toFixed(2)}</td>
                                 <td className="px-4 py-2 text-center">
