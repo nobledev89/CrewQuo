@@ -388,21 +388,15 @@ export default function RateCardForm({ rateCard, onSave, onClose, saving, compan
                 </button>
               </div>
             ) : (
-              <div className="space-y-3">
-                {formData.rates.map((rate, index) => (
-                  <RateEntryRow
-                    key={index}
-                    rate={rate}
-                    index={index}
-                    isExpanded={expandedRateIndex === index}
-                    onToggleExpansion={() => toggleRateExpansion(index)}
-                    onUpdate={updateRateEntry}
-                    onRemove={removeRateEntry}
-                    resourceCategories={resourceCategories}
-                    timeframeDefinitions={timeframeDefinitions}
-                  />
-                ))}
-              </div>
+              <GroupedRateEntries
+                rates={formData.rates}
+                expandedRateIndex={expandedRateIndex}
+                onToggleExpansion={toggleRateExpansion}
+                onUpdate={updateRateEntry}
+                onRemove={removeRateEntry}
+                resourceCategories={resourceCategories}
+                timeframeDefinitions={timeframeDefinitions}
+              />
             )}
           </div>
 
@@ -749,6 +743,231 @@ function MultiTimeframeModal({
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+// Grouped Rate Entries Component
+function GroupedRateEntries({
+  rates,
+  expandedRateIndex,
+  onToggleExpansion,
+  onUpdate,
+  onRemove,
+  resourceCategories,
+  timeframeDefinitions
+}: {
+  rates: RateEntry[];
+  expandedRateIndex: number | null;
+  onToggleExpansion: (index: number) => void;
+  onUpdate: (index: number, field: keyof RateEntry, value: any) => void;
+  onRemove: (index: number) => void;
+  resourceCategories: string[];
+  timeframeDefinitions: TimeframeDefinition[];
+}) {
+  // Group rates by role name
+  const groupedRates: { [roleName: string]: { indices: number[]; rates: RateEntry[] } } = {};
+  
+  rates.forEach((rate, index) => {
+    const key = rate.roleName || 'Unnamed Role';
+    if (!groupedRates[key]) {
+      groupedRates[key] = { indices: [], rates: [] };
+    }
+    groupedRates[key].indices.push(index);
+    groupedRates[key].rates.push(rate);
+  });
+
+  return (
+    <div className="space-y-3">
+      {Object.entries(groupedRates).map(([roleName, group]) => {
+        const firstRate = group.rates[0];
+        const firstIndex = group.indices[0];
+        const isExpanded = group.indices.includes(expandedRateIndex ?? -1);
+        
+        // Calculate total averages for display
+        const avgSubRate = group.rates.reduce((sum, r) => sum + r.subcontractorRate, 0) / group.rates.length;
+        const avgClientRate = group.rates.reduce((sum, r) => sum + r.clientRate, 0) / group.rates.length;
+        const totalMargin = group.rates.reduce((sum, r) => sum + (r.marginValue || 0), 0);
+
+        return (
+          <div key={roleName} className="bg-white rounded-lg border-2 border-gray-200 overflow-hidden hover:border-blue-300 transition">
+            {/* Collapsed Header */}
+            <div
+              className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50"
+              onClick={() => onToggleExpansion(firstIndex)}
+            >
+              <div className="flex-1 flex items-center gap-4">
+                <div className="flex-1">
+                  <div className="font-semibold text-gray-900 text-lg">{roleName}</div>
+                  <div className="text-xs text-gray-600 flex items-center gap-2 mt-1">
+                    <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{firstRate.category}</span>
+                    <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded font-medium">
+                      {group.rates.length} timeframe{group.rates.length > 1 ? 's' : ''}
+                    </span>
+                    {totalMargin > 0 && (
+                      <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">
+                        Total Margin: £{totalMargin.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm text-gray-600">
+                    Avg Sub: £{avgSubRate.toFixed(2)}/hr | Avg Client: £{avgClientRate.toFixed(2)}/hr
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 ml-4">
+                {isExpanded ? (
+                  <ChevronUp className="w-5 h-5 text-gray-600" />
+                ) : (
+                  <ChevronDown className="w-5 h-5 text-gray-600" />
+                )}
+              </div>
+            </div>
+
+            {/* Expanded Content - Show all timeframes */}
+            {isExpanded && (
+              <div className="border-t border-gray-200 bg-gray-50">
+                {group.rates.map((rate, groupIndex) => {
+                  const actualIndex = group.indices[groupIndex];
+                  const timeframe = timeframeDefinitions.find(tf => tf.id === rate.timeframeId);
+                  const timeframeDisplay = timeframe
+                    ? `${timeframe.name} (${timeframe.startTime}-${timeframe.endTime})`
+                    : rate.timeframeName || 'Unknown';
+
+                  return (
+                    <div key={actualIndex} className="p-4 border-b border-gray-200 last:border-b-0">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <Clock className="w-4 h-4 text-purple-600" />
+                          <h5 className="font-semibold text-gray-900">{timeframeDisplay}</h5>
+                          {rate.marginValue !== undefined && rate.marginValue > 0 && (
+                            <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-medium">
+                              Margin: £{rate.marginValue.toFixed(2)} ({rate.marginPercentage?.toFixed(1)}%)
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm(`Remove ${timeframeDisplay} for ${roleName}?`)) {
+                              onRemove(actualIndex);
+                            }
+                          }}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                          title="Remove this timeframe"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Subcontractor Rate (£/hr) *</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            required
+                            min="0"
+                            value={rate.subcontractorRate}
+                            onChange={(e) => onUpdate(actualIndex, 'subcontractorRate', parseFloat(e.target.value) || 0)}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                            placeholder="15.00"
+                          />
+                          <p className="text-xs text-gray-600 mt-1">What you pay</p>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Client Rate (£/hr) *</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            required
+                            min="0"
+                            value={rate.clientRate}
+                            onChange={(e) => onUpdate(actualIndex, 'clientRate', parseFloat(e.target.value) || 0)}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                            placeholder="21.00"
+                          />
+                          <p className="text-xs text-gray-600 mt-1">What you charge</p>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Margin (Auto-calculated)</label>
+                          <div className={`w-full px-3 py-2 text-sm rounded-lg border-2 font-bold text-center ${
+                            (rate.marginValue || 0) > 0
+                              ? 'bg-green-50 border-green-300 text-green-700'
+                              : 'bg-gray-50 border-gray-300 text-gray-700'
+                          }`}>
+                            {rate.marginValue !== undefined && rate.marginPercentage !== undefined
+                              ? `£${rate.marginValue.toFixed(2)} (${rate.marginPercentage.toFixed(1)}%)`
+                              : '—'}
+                          </div>
+                          <p className="text-xs text-gray-600 mt-1">Profit per hour</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Role-level details (shared across all timeframes) */}
+                <div className="p-4 bg-blue-50 border-t border-blue-200">
+                  <h5 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                    <Tag className="w-4 h-4 mr-1" /> Role Details (applies to all timeframes)
+                  </h5>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Role Name *</label>
+                      <input
+                        type="text"
+                        required
+                        value={firstRate.roleName}
+                        onChange={(e) => {
+                          // Update all entries with this role name
+                          group.indices.forEach(idx => onUpdate(idx, 'roleName', e.target.value));
+                        }}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                        placeholder="e.g., Supervisor, Fitter"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Category *</label>
+                      <select
+                        required
+                        value={firstRate.category}
+                        onChange={(e) => {
+                          // Update all entries with this category
+                          group.indices.forEach(idx => onUpdate(idx, 'category', e.target.value));
+                        }}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
+                        {resourceCategories.map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
+                      <input
+                        type="text"
+                        value={firstRate.description || ''}
+                        onChange={(e) => {
+                          // Update all entries with this description
+                          group.indices.forEach(idx => onUpdate(idx, 'description', e.target.value));
+                        }}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                        placeholder="Optional notes"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
