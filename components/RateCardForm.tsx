@@ -1329,8 +1329,8 @@ function ExpenseEntryRow({ expense, index, onUpdate, onRemove, expenseCategories
       </div>
 
       <div className="space-y-4">
-        {/* Category and Description */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* Category, Rate Type, and Description */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Expense Category *</label>
             <select
@@ -1344,6 +1344,34 @@ function ExpenseEntryRow({ expense, index, onUpdate, onRemove, expenseCategories
               ))}
             </select>
             <p className="text-xs text-gray-500 mt-1">{expense.unitType.replace('_', ' ')}</p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Rate Type *</label>
+            <select
+              required
+              value={expense.rateType}
+              onChange={(e) => {
+                const newRateType = e.target.value as 'CAPPED' | 'FIXED';
+                onUpdate(index, 'rateType', newRateType);
+                
+                // When switching to CAPPED, set initial markup if not set
+                if (newRateType === 'CAPPED' && !expense.marginPercentage) {
+                  onUpdate(index, 'marginPercentage', 10);
+                  const currentRate = expense.subcontractorRate || expense.rate;
+                  const calculatedClientRate = currentRate * 1.1;
+                  onUpdate(index, 'clientRate', calculatedClientRate);
+                  onUpdate(index, 'marginValue', calculateMarginValue(calculatedClientRate, currentRate));
+                }
+              }}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              <option value="CAPPED">Capped (Variable)</option>
+              <option value="FIXED">Fixed (Exact)</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              {expense.rateType === 'CAPPED' ? 'Max per unit' : 'Fixed per unit'}
+            </p>
           </div>
 
           <div>
