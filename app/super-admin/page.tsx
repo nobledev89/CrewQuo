@@ -34,6 +34,7 @@ export default function SuperAdminDashboard() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<string[]>([]);
   
   // Data states
   const [users, setUsers] = useState<UserWithCompany[]>([]);
@@ -67,44 +68,56 @@ export default function SuperAdminDashboard() {
     enterprise: 199
   });
 
+  // Helper to add debug info
+  const addDebugLog = (log: string) => {
+    console.log(log);
+    setDebugInfo(prev => [...prev, log]);
+  };
+
   // Check super admin status
   useEffect(() => {
-    console.log('[SuperAdmin] Setting up auth listener...');
+    addDebugLog('[SuperAdmin] Setting up auth listener...');
     
     const unsubscribe = auth.onAuthStateChanged(async (currentUser) => {
-      console.log('[SuperAdmin] Auth state changed');
-      console.log('[SuperAdmin] Current user:', currentUser?.email);
+      addDebugLog('[SuperAdmin] Auth state changed');
+      addDebugLog(`[SuperAdmin] Current user: ${currentUser?.email || 'null'}`);
       
       if (currentUser) {
         setUser(currentUser);
+        setLoading(false); // Stop loading so we can see debug info
         
         try {
           const tokenResult = await currentUser.getIdTokenResult();
-          console.log('[SuperAdmin] Token result:', tokenResult);
-          console.log('[SuperAdmin] All claims:', tokenResult.claims);
-          console.log('[SuperAdmin] isSuperAdmin claim:', tokenResult.claims.isSuperAdmin);
-          console.log('[SuperAdmin] Type of isSuperAdmin:', typeof tokenResult.claims.isSuperAdmin);
+          addDebugLog('[SuperAdmin] Token retrieved successfully');
+          addDebugLog(`[SuperAdmin] All claims: ${JSON.stringify(tokenResult.claims, null, 2)}`);
+          addDebugLog(`[SuperAdmin] isSuperAdmin claim value: ${tokenResult.claims.isSuperAdmin}`);
+          addDebugLog(`[SuperAdmin] Type of isSuperAdmin: ${typeof tokenResult.claims.isSuperAdmin}`);
           
           if (tokenResult.claims.isSuperAdmin === true) {
-            console.log('[SuperAdmin] ✅ User IS a super admin! Loading dashboard...');
+            addDebugLog('[SuperAdmin] ✅ User IS a super admin! Loading dashboard...');
             setIsSuperAdmin(true);
             loadData();
           } else {
-            console.log('[SuperAdmin] ❌ User is NOT a super admin');
-            console.log('[SuperAdmin] WAITING 5 seconds before redirect so you can see the logs...');
-            // Wait 5 seconds before redirecting so user can see the logs
+            addDebugLog('[SuperAdmin] ❌ User is NOT a super admin');
+            addDebugLog('[SuperAdmin] WAITING 30 seconds before redirect so you can see these logs...');
+            // Wait 30 seconds before redirecting so user can see the logs
             setTimeout(() => {
-              console.log('[SuperAdmin] Now redirecting to /dashboard...');
+              addDebugLog('[SuperAdmin] Now redirecting to /dashboard...');
               router.push('/dashboard');
-            }, 5000);
+            }, 30000);
           }
         } catch (error) {
+          addDebugLog(`[SuperAdmin] ERROR getting token: ${error}`);
           console.error('[SuperAdmin] Error getting token result:', error);
-          router.push('/dashboard');
+          setTimeout(() => router.push('/dashboard'), 30000);
         }
       } else {
-        console.log('[SuperAdmin] No user logged in, redirecting to /login');
-        router.push('/login');
+        addDebugLog('[SuperAdmin] No user logged in');
+        setLoading(false);
+        setTimeout(() => {
+          addDebugLog('[SuperAdmin] Redirecting to /login...');
+          router.push('/login');
+        }, 5000);
       }
     });
 
@@ -301,6 +314,36 @@ export default function SuperAdminDashboard() {
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-600">Loading super admin dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show debug panel if not super admin
+  if (!isSuperAdmin && debugInfo.length > 0) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 flex items-center justify-center p-4">
+        <div className="max-w-4xl w-full bg-white rounded-xl shadow-2xl border-4 border-red-500 p-8">
+          <h1 className="text-3xl font-bold text-red-600 mb-4">🔍 Super Admin Debug Information</h1>
+          <p className="text-gray-700 mb-6">You are being redirected in 30 seconds. Here's what happened:</p>
+          
+          <div className="bg-gray-900 text-green-400 font-mono text-sm p-6 rounded-lg overflow-auto max-h-96 space-y-2">
+            {debugInfo.map((log, index) => (
+              <div key={index} className="whitespace-pre-wrap break-all">
+                {log}
+              </div>
+            ))}
+          </div>
+          
+          <div className="mt-6 p-4 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-800">
+            <p className="font-semibold mb-2">💡 Next Steps:</p>
+            <ul className="list-disc list-inside space-y-1 text-sm">
+              <li>Check the isSuperAdmin claim value above</li>
+              <li>If undefined or false: Log out completely, clear cookies, and log back in</li>
+              <li>Take a screenshot of this debug info and share it</li>
+              <li>The page will redirect to /dashboard in 30 seconds</li>
+            </ul>
+          </div>
         </div>
       </div>
     );
