@@ -69,18 +69,38 @@ export default function SuperAdminDashboard() {
 
   // Check super admin status
   useEffect(() => {
+    console.log('[SuperAdmin] Setting up auth listener...');
+    
     const unsubscribe = auth.onAuthStateChanged(async (currentUser) => {
+      console.log('[SuperAdmin] Auth state changed');
+      console.log('[SuperAdmin] Current user:', currentUser?.email);
+      
       if (currentUser) {
         setUser(currentUser);
-        const tokenResult = await currentUser.getIdTokenResult();
-        if (tokenResult.claims.isSuperAdmin === true) {
-          setIsSuperAdmin(true);
-          loadData();
-        } else {
-          // Not a super admin, redirect
+        
+        try {
+          const tokenResult = await currentUser.getIdTokenResult();
+          console.log('[SuperAdmin] Token result:', tokenResult);
+          console.log('[SuperAdmin] All claims:', tokenResult.claims);
+          console.log('[SuperAdmin] isSuperAdmin claim:', tokenResult.claims.isSuperAdmin);
+          console.log('[SuperAdmin] Type of isSuperAdmin:', typeof tokenResult.claims.isSuperAdmin);
+          
+          if (tokenResult.claims.isSuperAdmin === true) {
+            console.log('[SuperAdmin] ✅ User IS a super admin! Loading dashboard...');
+            setIsSuperAdmin(true);
+            loadData();
+          } else {
+            console.log('[SuperAdmin] ❌ User is NOT a super admin');
+            console.log('[SuperAdmin] Redirecting to /dashboard...');
+            // Not a super admin, redirect
+            router.push('/dashboard');
+          }
+        } catch (error) {
+          console.error('[SuperAdmin] Error getting token result:', error);
           router.push('/dashboard');
         }
       } else {
+        console.log('[SuperAdmin] No user logged in, redirecting to /login');
         router.push('/login');
       }
     });
