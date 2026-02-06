@@ -93,7 +93,12 @@ export default function SuperAdminDashboard() {
           addDebugLog(`[SuperAdmin] isSuperAdmin claim value: ${tokenResult.claims.isSuperAdmin}`);
           addDebugLog(`[SuperAdmin] Type of isSuperAdmin: ${typeof tokenResult.claims.isSuperAdmin}`);
           
-          if (tokenResult.claims.isSuperAdmin === true) {
+          // Check both isSuperAdmin claim AND role === 'SUPER_ADMIN'
+          const isSuperAdminUser = tokenResult.claims.isSuperAdmin === true || tokenResult.claims.role === 'SUPER_ADMIN';
+          addDebugLog(`[SuperAdmin] Checking access: isSuperAdmin=${tokenResult.claims.isSuperAdmin}, role=${tokenResult.claims.role}`);
+          addDebugLog(`[SuperAdmin] Final result: ${isSuperAdminUser ? 'GRANTED' : 'DENIED'}`);
+          
+          if (isSuperAdminUser) {
             addDebugLog('[SuperAdmin] ✅ User IS a super admin! Loading dashboard...');
             setIsSuperAdmin(true);
             loadData();
