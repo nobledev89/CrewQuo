@@ -4,7 +4,7 @@ import { Timestamp } from 'firebase/firestore';
 // CORE TYPES
 // ============================================
 
-export type UserRole = 'ADMIN' | 'MANAGER' | 'SUBCONTRACTOR';
+export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'SUBCONTRACTOR';
 
 export type SubscriptionPlan = 'free' | 'starter' | 'professional' | 'enterprise';
 
@@ -550,10 +550,68 @@ export interface CustomClaims {
   ownCompanyId: string;
   activeCompanyId: string;
   role: UserRole;
+  isSuperAdmin?: boolean;
   subcontractorRoles?: {
     [companyId: string]: {
       subcontractorId: string;
       status: string;
     };
+  };
+}
+
+// ============================================
+// PRICING CONFIGURATION (SUPER ADMIN)
+// ============================================
+
+export interface PlanPricing {
+  price: number;
+  name: string;
+  description?: string;
+  features?: string[];
+}
+
+export interface PricingConfig {
+  plans: {
+    free: PlanPricing;
+    starter: PlanPricing;
+    professional: PlanPricing;
+    enterprise: PlanPricing;
+  };
+  trialDurationDays: number;
+  currency: string;
+  updatedAt: Timestamp;
+  updatedBy: string; // Super admin user ID
+}
+
+// ============================================
+// SUPER ADMIN TYPES
+// ============================================
+
+export interface UserWithCompany extends User {
+  companyName?: string;
+  trialDaysRemaining?: number;
+}
+
+export interface CompanyWithStats extends Company {
+  ownerEmail?: string;
+  userCount?: number;
+  projectCount?: number;
+  clientCount?: number;
+  subcontractorCount?: number;
+  trialDaysRemaining?: number;
+}
+
+export interface SystemStats {
+  totalUsers: number;
+  totalCompanies: number;
+  activeSubscriptions: number;
+  trialSubscriptions: number;
+  inactiveSubscriptions: number;
+  monthlyRecurringRevenue: number;
+  subscriptionsByPlan: {
+    free: number;
+    starter: number;
+    professional: number;
+    enterprise: number;
   };
 }

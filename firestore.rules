@@ -7,6 +7,10 @@ service cloud.firestore {
       return request.auth != null;
     }
     
+    function isSuperAdmin() {
+      return request.auth != null && request.auth.token.isSuperAdmin == true;
+    }
+    
     function companyId() {
       return request.auth.token.companyId;
     }
@@ -63,28 +67,34 @@ service cloud.firestore {
       return userRole() in ['ADMIN', 'MANAGER'];
     }
     
+    // System Settings (Super Admin Only)
+    match /systemSettings/{docId} {
+      allow read: if authed();
+      allow write: if isSuperAdmin();
+    }
+    
     // Companies collection
     match /companies/{compId} {
-      allow read: if authed() && hasAccessToCompany(compId);
+      allow read: if isSuperAdmin() || (authed() && hasAccessToCompany(compId));
       allow create: if authed(); // Signup creates company
-      allow update: if authed() && compId == ownCompanyId() && isAdmin();
-      allow delete: if false; // Never allow delete via client
+      allow update: if isSuperAdmin() || (authed() && compId == ownCompanyId() && isAdmin());
+      allow delete: if isSuperAdmin();
     }
     
     // Users collection
     match /users/{userId} {
-      allow read: if authed() && (
+      allow read: if isSuperAdmin() || (authed() && (
         request.auth.uid == userId ||
         hasAccessToCompany(resource.data.ownCompanyId)
-      );
+      ));
       // Allow user creation during signup
       allow create: if request.auth.uid == userId;
-      // Allow user to update their own document or admins in their own company
-      allow update: if authed() && (
+      // Allow user to update their own document, admins in their own company, or super admin
+      allow update: if isSuperAdmin() || (authed() && (
         request.auth.uid == userId ||
         (resource.data.ownCompanyId == ownCompanyId() && isAdmin())
-      );
-      allow delete: if false; // Never delete users via client
+      ));
+      allow delete: if isSuperAdmin();
     }
     
     // Role Catalog
