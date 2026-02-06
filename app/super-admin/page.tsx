@@ -91,9 +91,12 @@ export default function SuperAdminDashboard() {
             loadData();
           } else {
             console.log('[SuperAdmin] ❌ User is NOT a super admin');
-            console.log('[SuperAdmin] Redirecting to /dashboard...');
-            // Not a super admin, redirect
-            router.push('/dashboard');
+            console.log('[SuperAdmin] WAITING 5 seconds before redirect so you can see the logs...');
+            // Wait 5 seconds before redirecting so user can see the logs
+            setTimeout(() => {
+              console.log('[SuperAdmin] Now redirecting to /dashboard...');
+              router.push('/dashboard');
+            }, 5000);
           }
         } catch (error) {
           console.error('[SuperAdmin] Error getting token result:', error);
