@@ -28,6 +28,7 @@ export default function LandingPage() {
             <div className="hidden md:flex items-center space-x-8">
               <a href="#features" className="text-slate-600 hover:text-slate-900 transition">Features</a>
               <a href="/introduction" className="text-slate-600 hover:text-slate-900 transition">Platform Guide</a>
+              <a href="/docs" className="text-slate-600 hover:text-slate-900 transition">Documentation</a>
               <a href="#pricing" className="text-slate-600 hover:text-slate-900 transition">Pricing</a>
               <a href="/login" className="text-slate-600 hover:text-slate-900 transition">Login</a>
               <a
@@ -467,8 +468,8 @@ export default function LandingPage() {
               <ul className="space-y-2 text-sm">
                 <li><a href="#features" className="hover:text-white transition">Features</a></li>
                 <li><a href="#pricing" className="hover:text-white transition">Pricing</a></li>
-                <li><a href="#" className="hover:text-white transition">Integrations</a></li>
-                <li><a href="#" className="hover:text-white transition">Security</a></li>
+                <li><a href="/docs" className="hover:text-white transition">Documentation</a></li>
+                <li><a href="/introduction" className="hover:text-white transition">Platform Guide</a></li>
               </ul>
             </div>
 
