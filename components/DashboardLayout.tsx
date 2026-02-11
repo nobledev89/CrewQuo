@@ -72,6 +72,27 @@ function DashboardContent({ children }: DashboardLayoutProps) {
     }
   }, [loading, user, router]);
 
+  // Route protection for subcontractors - only allow /dashboard/my-work/* routes
+  useEffect(() => {
+    if (!loading && userData && isActingAsSubcontractor()) {
+      const allowedPaths = [
+        '/dashboard/my-work/summary',
+        '/dashboard/my-work/projects',
+        '/dashboard/my-work/submissions',
+        '/dashboard/settings'
+      ];
+      
+      // Check if current path starts with allowed paths or is a project detail page
+      const isAllowed = allowedPaths.some(path => pathname.startsWith(path)) ||
+                       pathname.match(/^\/dashboard\/my-work\/projects\/[^/]+$/);
+      
+      if (!isAllowed) {
+        console.log('[Route Guard] Subcontractor accessing unauthorized route:', pathname);
+        router.push('/dashboard/my-work/summary');
+      }
+    }
+  }, [loading, userData, pathname, router, isActingAsSubcontractor]);
+
   const handleSignOut = async () => {
     try {
       // Clear the auth cookie
