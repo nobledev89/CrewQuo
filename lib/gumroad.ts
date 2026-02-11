@@ -148,7 +148,12 @@ export function generateGumroadCheckoutUrl(
   email?: string
 ): string {
   const permalink = GUMROAD_CONFIG.productPermalink;
-  const baseUrl = `https://dunehunter.gumroad.com/l/${permalink}`;
+  
+  // Get Gumroad username from environment variable
+  // Fallback to 'dunehunter' if not set
+  const gumroadUsername = process.env.NEXT_PUBLIC_GUMROAD_USERNAME || 'dunehunter';
+  const baseUrl = `https://${gumroadUsername}.gumroad.com/l/${permalink}`;
+  
   const params = new URLSearchParams({
     wanted: 'true',
     // Pass user_id as query parameter - Gumroad will include it in webhook
