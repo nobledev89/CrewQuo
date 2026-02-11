@@ -7,7 +7,6 @@ export function middleware(request: NextRequest) {
   // Check if the request is for a dashboard route
   if (pathname.startsWith('/dashboard')) {
     // Check for Firebase auth token in cookies
-    // Firebase sets cookies with patterns like firebase-auth-*
     const cookies = request.cookies
     let hasAuthCookie = false
     
@@ -21,7 +20,6 @@ export function middleware(request: NextRequest) {
     // If no auth cookie exists, redirect to login
     if (!hasAuthCookie) {
       const loginUrl = new URL('/login', request.url)
-      // Add a redirect parameter so user can return after login
       loginUrl.searchParams.set('from', pathname)
       return NextResponse.redirect(loginUrl)
     }

@@ -24,11 +24,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setThemeState(storedTheme);
       applyTheme(storedTheme);
     } else {
-      // Check system preference
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const systemTheme = prefersDark ? 'dark' : 'light';
-      setThemeState(systemTheme);
-      applyTheme(systemTheme);
+      // Default to light theme - don't auto-detect system preference
+      setThemeState('light');
+      applyTheme('light');
     }
   }, []);
 
