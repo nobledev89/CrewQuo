@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { useAuth } from '@/lib/AuthContext';
 import { doc, getDoc, collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { Clock, ArrowLeft, Calendar, DollarSign, Briefcase, Users } from 'lucide-react';
 import Link from 'next/link';
@@ -32,11 +33,19 @@ interface TimeLog {
 
 export default function LogsPage() {
   const router = useRouter();
+  const { userData, loading: authLoading } = useAuth();
   const [logs, setLogs] = useState<TimeLog[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Get client filter from context
   const { selectedClient } = useClientFilter();
+
+  // Redirect subcontractors to their workspace
+  useEffect(() => {
+    if (!authLoading && userData && userData.role === 'SUBCONTRACTOR') {
+      router.push('/dashboard/my-work/summary');
+    }
+  }, [authLoading, userData, router]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -159,7 +168,7 @@ export default function LogsPage() {
     }
   };
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center py-12">
@@ -170,6 +179,11 @@ export default function LogsPage() {
         </div>
       </DashboardLayout>
     );
+  }
+
+  // Don't render if subcontractor (will be redirected)
+  if (userData && userData.role === 'SUBCONTRACTOR') {
+    return null;
   }
 
   const totalRegularHours = logs.reduce((sum, log) => sum + log.hoursRegular, 0);

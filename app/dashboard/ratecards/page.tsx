@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { useAuth } from '@/lib/AuthContext';
 import { 
   doc, 
   getDoc, 
@@ -23,6 +25,8 @@ import { useClientData } from '@/lib/ClientDataContext';
 
 export default function RateCardsPage() {
   // State management
+  const router = useRouter();
+  const { userData, loading: authLoading } = useAuth();
   const [rateCards, setRateCards] = useState<RateCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [companyId, setCompanyId] = useState<string>('');
@@ -33,6 +37,13 @@ export default function RateCardsPage() {
   const [saving, setSaving] = useState(false);
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const { cachedData, updateRateCards } = useClientData();
+
+  // Redirect subcontractors to their workspace
+  useEffect(() => {
+    if (!authLoading && userData && userData.role === 'SUBCONTRACTOR') {
+      router.push('/dashboard/my-work/summary');
+    }
+  }, [authLoading, userData, router]);
 
   // Use cached data when available
   useEffect(() => {
@@ -189,7 +200,7 @@ export default function RateCardsPage() {
 
   const canEdit = userRole === 'ADMIN' || userRole === 'MANAGER';
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <DashboardLayout>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -202,6 +213,11 @@ export default function RateCardsPage() {
         </div>
       </DashboardLayout>
     );
+  }
+
+  // Don't render if subcontractor (will be redirected)
+  if (userData && userData.role === 'SUBCONTRACTOR') {
+    return null;
   }
 
   return (

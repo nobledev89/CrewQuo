@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { 
+import { useAuth } from '@/lib/AuthContext';
+import {
   doc, 
   getDoc, 
   collection, 
@@ -22,6 +24,8 @@ import { RateCardTemplate } from '@/lib/types';
 import RateCardTemplateForm, { RateCardTemplateFormData } from '@/components/RateCardTemplateForm';
 
 export default function RateTemplatesPage() {
+  const router = useRouter();
+  const { userData, loading: authLoading } = useAuth();
   const [templates, setTemplates] = useState<RateCardTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [companyId, setCompanyId] = useState<string>('');
@@ -33,6 +37,13 @@ export default function RateTemplatesPage() {
   const [syncingTemplateId, setSyncingTemplateId] = useState<string | null>(null);
   const [rateCardsCounts, setRateCardsCounts] = useState<Map<string, number>>(new Map());
   const [loadingCounts, setLoadingCounts] = useState(false);
+
+  // Redirect subcontractors to their workspace
+  useEffect(() => {
+    if (!authLoading && userData && userData.role === 'SUBCONTRACTOR') {
+      router.push('/dashboard/my-work/summary');
+    }
+  }, [authLoading, userData, router]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -296,7 +307,7 @@ export default function RateTemplatesPage() {
 
   const canEdit = userRole === 'ADMIN' || userRole === 'MANAGER';
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <DashboardLayout>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -309,6 +320,11 @@ export default function RateTemplatesPage() {
         </div>
       </DashboardLayout>
     );
+  }
+
+  // Don't render if subcontractor (will be redirected)
+  if (userData && userData.role === 'SUBCONTRACTOR') {
+    return null;
   }
 
   return (

@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { useAuth } from '@/lib/AuthContext';
 import {
   collection,
   query,
@@ -53,6 +55,8 @@ interface TimesheetData {
 }
 
 export default function TimesheetsPage() {
+  const router = useRouter();
+  const { userData, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<string>('');
   const [activeCompanyId, setActiveCompanyId] = useState<string>('');
@@ -64,6 +68,13 @@ export default function TimesheetsPage() {
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
   const [rejectionNotes, setRejectionNotes] = useState<Record<string, string>>({});
   const [editingNote, setEditingNote] = useState<ExpandedNote | null>(null);
+
+  // Redirect subcontractors to their workspace
+  useEffect(() => {
+    if (!authLoading && userData && userData.role === 'SUBCONTRACTOR') {
+      router.push('/dashboard/my-work/summary');
+    }
+  }, [authLoading, userData, router]);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
@@ -552,7 +563,7 @@ export default function TimesheetsPage() {
     document.body.removeChild(link);
   };
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <DashboardLayout>
         <div className="min-h-screen flex items-center justify-center">
@@ -565,7 +576,13 @@ export default function TimesheetsPage() {
     );
   }
 
-  if (userRole !== 'ADMIN' && userRole !== 'MANAGER') {
+  // Don't render if subcontractor (will be redirected)
+  if (userData && userData.role === 'SUBCONTRACTOR') {
+    return null;
+  }
+
+  // Additional check for other non-admin/manager roles
+  if (userRole && userRole !== 'ADMIN' && userRole !== 'MANAGER') {
     return (
       <DashboardLayout>
         <div className="max-w-4xl mx-auto px-4 py-12">

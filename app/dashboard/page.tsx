@@ -44,6 +44,18 @@ export default function DashboardPage() {
     );
   }
 
+  // Don't render dashboard for subcontractors (will be redirected)
+  if (userData && userData.role === 'SUBCONTRACTOR') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Redirecting to your workspace...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <DashboardLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

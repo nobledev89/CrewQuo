@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { useAuth } from '@/lib/AuthContext';
 import { 
   doc, 
   getDoc, 
@@ -45,6 +47,8 @@ interface FormData {
 
 // Inner component that uses the client filter context
 function SubcontractorsContent() {
+  const router = useRouter();
+  const { userData, loading: authLoading } = useAuth();
   const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
   const [loading, setLoading] = useState(true);
   const [companyId, setCompanyId] = useState<string>('');
@@ -65,6 +69,13 @@ function SubcontractorsContent() {
   // Get client filter from context
   const { selectedClient } = useClientFilter();
   const { updateSubcontractors } = useClientData();
+
+  // Redirect subcontractors to their workspace
+  useEffect(() => {
+    if (!authLoading && userData && userData.role === 'SUBCONTRACTOR') {
+      router.push('/dashboard/my-work/summary');
+    }
+  }, [authLoading, userData, router]);
 
   useEffect(() => {
     let isMounted = true;
@@ -315,7 +326,7 @@ function SubcontractorsContent() {
 
   const canEdit = userRole === 'ADMIN' || userRole === 'MANAGER';
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-center">
@@ -324,6 +335,11 @@ function SubcontractorsContent() {
         </div>
       </div>
     );
+  }
+
+  // Don't render if subcontractor (will be redirected)
+  if (userData && userData.role === 'SUBCONTRACTOR') {
+    return null;
   }
 
   return (

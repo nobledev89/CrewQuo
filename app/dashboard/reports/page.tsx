@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { useAuth } from '@/lib/AuthContext';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { BarChart3, TrendingUp, DollarSign, Percent, Download, Calendar, Users, Briefcase, Clock, TrendingDown } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -43,6 +45,8 @@ interface SubcontractorStats {
 }
 
 export default function ReportsPage() {
+  const router = useRouter();
+  const { userData, loading: authLoading } = useAuth();
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [projectStats, setProjectStats] = useState<ProjectStats[]>([]);
   const [subcontractorStats, setSubcontractorStats] = useState<SubcontractorStats[]>([]);
@@ -54,6 +58,13 @@ export default function ReportsPage() {
   
   // Get client filter from context
   const { selectedClient } = useClientFilter();
+
+  // Redirect subcontractors to their workspace
+  useEffect(() => {
+    if (!authLoading && userData && userData.role === 'SUBCONTRACTOR') {
+      router.push('/dashboard/my-work/summary');
+    }
+  }, [authLoading, userData, router]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -304,7 +315,7 @@ export default function ReportsPage() {
     }).format(amount);
   };
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center">
@@ -313,6 +324,11 @@ export default function ReportsPage() {
         </div>
       </div>
     );
+  }
+
+  // Don't render if subcontractor (will be redirected)
+  if (userData && userData.role === 'SUBCONTRACTOR') {
+    return null;
   }
 
   if (!reportData) {

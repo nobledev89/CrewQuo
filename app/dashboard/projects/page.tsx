@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { useAuth } from '@/lib/AuthContext';
 import { 
   doc, 
   getDoc, 
@@ -53,6 +55,8 @@ interface FormData {
 
 // Inner component that uses the client filter context
 function ProjectsContent() {
+  const router = useRouter();
+  const { userData, loading: authLoading } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,6 +79,13 @@ function ProjectsContent() {
   // Get client filter from context
   const { selectedClient } = useClientFilter();
   const { cachedData, updateProjects } = useClientData();
+
+  // Redirect subcontractors to their workspace
+  useEffect(() => {
+    if (!authLoading && userData && userData.role === 'SUBCONTRACTOR') {
+      router.push('/dashboard/my-work/summary');
+    }
+  }, [authLoading, userData, router]);
 
   // Use cached data when available
   useEffect(() => {
@@ -359,7 +370,7 @@ function ProjectsContent() {
 
   const canEdit = userRole === 'ADMIN' || userRole === 'MANAGER';
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-center">
@@ -368,6 +379,11 @@ function ProjectsContent() {
         </div>
       </div>
     );
+  }
+
+  // Don't render if subcontractor (will be redirected)
+  if (userData && userData.role === 'SUBCONTRACTOR') {
+    return null;
   }
 
   return (
