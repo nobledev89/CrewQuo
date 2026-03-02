@@ -1,6 +1,3 @@
 {
-  "regions": ["iad1"],
-  "functions": {
-    "region": "iad1"
-  }
+  "regions": ["iad1"]
 }
