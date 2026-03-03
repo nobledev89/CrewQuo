@@ -72,10 +72,12 @@ export function calculateTimeBasedCost(
 
   // Get day of week from date if provided
   let dayOfWeek: string | null = null;
+  let dateObj: Date | null = null;
+  const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  
   if (date) {
-    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    dateObj = typeof date === 'string' ? new Date(date) : date;
     const dayIndex = dateObj.getDay(); // 0 = Sunday, 1 = Monday, etc.
-    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     dayOfWeek = dayNames[dayIndex];
   }
 
@@ -108,12 +110,43 @@ export function calculateTimeBasedCost(
         // If this rate has day restrictions
         if (rate.applicableDays && rate.applicableDays.length > 0) {
           // Date must be provided when rates have day restrictions
-          if (!dayOfWeek) {
+          if (!dayOfWeek || !dateObj) {
             // Skip this rate if no date provided but day restrictions exist
             continue;
           }
-          // Only apply this rate if the day matches
-          if (rate.applicableDays.includes(dayOfWeek as any)) {
+          
+          // FOOLPROOF OVERNIGHT LOGIC:
+          // For overnight rates (spanning midnight), check if the rate applies to
+          // EITHER the current day OR the previous day
+          
+          const isOvernightRate = rateEndMinutes > 24 * 60;
+          const isAfterMidnight = currentMinute >= 24 * 60;
+          
+          let dayMatches = false;
+          
+          if (isOvernightRate && isAfterMidnight) {
+            // We're in the "next day" portion of work that started yesterday
+            // Check if rate applies to YESTERDAY (the day the shift started)
+            const prevDayIndex = (dateObj.getDay() - 1 + 7) % 7;
+            const prevDay = dayNames[prevDayIndex];
+            
+            // Rate applies if it's valid for EITHER today OR yesterday
+            dayMatches = rate.applicableDays.includes(dayOfWeek as any) || 
+                        rate.applicableDays.includes(prevDay as any);
+          } else if (isOvernightRate && !isAfterMidnight) {
+            // We're in the "before midnight" portion of an overnight rate
+            // Check if rate applies to today OR tomorrow
+            const nextDayIndex = (dateObj.getDay() + 1) % 7;
+            const nextDay = dayNames[nextDayIndex];
+            
+            dayMatches = rate.applicableDays.includes(dayOfWeek as any) || 
+                        rate.applicableDays.includes(nextDay as any);
+          } else {
+            // Standard same-day rate, or we're working within a single day
+            dayMatches = rate.applicableDays.includes(dayOfWeek as any);
+          }
+          
+          if (dayMatches) {
             applicableRate = rate;
             break;
           }
