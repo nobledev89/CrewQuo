@@ -254,6 +254,9 @@ export default function ProjectDetailPage() {
       );
       const rateAssignmentsSnap = await getDocs(rateAssignmentsQuery);
 
+      // Declare cardsMap at a higher scope so it's accessible later for rate checking
+      const cardsMap = new Map<string, any>();
+
       if (!rateAssignmentsSnap.empty) {
         const rateData = rateAssignmentsSnap.docs[0].data();
         setRateAssignment({
@@ -262,7 +265,6 @@ export default function ProjectDetailPage() {
         });
 
         // Fetch rate cards
-        const cardsMap = new Map<string, any>();
         const cardIds = [rateData.payRateCardId || rateData.rateCardId, rateData.billRateCardId].filter(Boolean);
 
         for (const cardId of cardIds) {
@@ -324,7 +326,7 @@ export default function ProjectDetailPage() {
         // NOW check for rate mismatches after we have both logs/expenses AND rate cards
         if (!rateAssignmentsSnap.empty) {
           const rateData = rateAssignmentsSnap.docs[0].data();
-          const currentPayCard = rateCards.get(rateData.payRateCardId || rateData.rateCardId);
+          const currentPayCard = cardsMap.get(rateData.payRateCardId || rateData.rateCardId);
           
           if (currentPayCard) {
             const draftLogs = logs.filter((log: any) => log.status === 'DRAFT');
