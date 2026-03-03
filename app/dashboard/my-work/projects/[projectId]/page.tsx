@@ -1276,6 +1276,13 @@ export default function ProjectDetailPage() {
                     </div>
 
                     <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Rate/Hour</label>
+                      <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-green-50 text-sm font-semibold text-green-900">
+                        £{payRate.toFixed(2)}/hr
+                      </div>
+                    </div>
+
+                    <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Cost Preview</label>
                       <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-blue-50 text-sm font-bold text-blue-900">
                         £{calculatedLog.cost.toFixed(2)}
@@ -1357,17 +1364,21 @@ export default function ProjectDetailPage() {
                               <th className="px-4 py-2 text-left font-semibold text-gray-900">Role / Shift</th>
                               <th className="px-4 py-2 text-center font-semibold text-gray-900">Time</th>
                               <th className="px-4 py-2 text-right font-semibold text-gray-900">Hours</th>
+                              <th className="px-4 py-2 text-right font-semibold text-gray-900">Rate</th>
                               <th className="px-4 py-2 text-right font-semibold text-gray-900">Cost</th>
                               <th className="px-4 py-2 text-center font-semibold text-gray-900">Actions</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {filteredLogs.map((log) => (
+                            {filteredLogs.map((log) => {
+                              const hourlyRate = log.unitSubCost || (log.hoursRegular > 0 ? log.subCost / log.hoursRegular / (log.quantity || 1) : 0);
+                              return (
                               <tr key={log.id} className="border-b border-gray-200 hover:bg-gray-50">
                                 <td className="px-4 py-2 text-gray-900">{formatDate(log.date)}</td>
                                 <td className="px-4 py-2 text-gray-900">{log.roleName} - {log.timeframeName || log.shiftType || 'Standard'}</td>
                                 <td className="px-4 py-2 text-center text-gray-600 text-xs">{log.startTime && log.endTime ? `${log.startTime}-${log.endTime}` : '-'}</td>
                                 <td className="px-4 py-2 text-right text-gray-900">{(log.hoursRegular || 0).toFixed(1)}h</td>
+                                <td className="px-4 py-2 text-right text-green-700 font-medium">£{hourlyRate.toFixed(2)}/hr</td>
                                 <td className="px-4 py-2 text-right text-gray-900 font-semibold">£{(log.subCost || 0).toFixed(2)}</td>
                                 <td className="px-4 py-2 text-center">
                                   <div className="flex items-center justify-center gap-2">
@@ -1381,7 +1392,8 @@ export default function ProjectDetailPage() {
                                   </div>
                                 </td>
                               </tr>
-                            ))}
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
