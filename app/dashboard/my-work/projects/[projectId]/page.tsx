@@ -341,19 +341,20 @@ export default function ProjectDetailPage() {
           let outdatedCount = 0;
           
           draftLogs.forEach((log: any) => {
-            // Item is outdated if:
-            // 1. It has a payRateCardId that doesn't match current
-            // 2. It doesn't have a payRateCardId at all (old items before field was added)
+            // Item is outdated if it's missing payRateCardId or doesn't match current
             const isOutdated = !log.payRateCardId || log.payRateCardId !== currentPayCardId;
-            console.log('🔍 [RATE DETECTION] Checking log:', log.id, 'payRateCardId:', log.payRateCardId, 'isOutdated:', isOutdated);
+            
+            console.log('🔍 [RATE DETECTION] Checking log:', log.id, 'payRateCardId:', log.payRateCardId, 'logRate:', log.unitSubCost, 'isOutdated:', isOutdated);
             if (isOutdated) {
               outdatedCount++;
             }
           });
           
           draftExps.forEach((exp: any) => {
-            // Same logic for expenses
-            if (!exp.payRateCardId || exp.payRateCardId !== currentPayCardId) {
+            // Item is outdated if it's missing payRateCardId or doesn't match current
+            const isOutdated = !exp.payRateCardId || exp.payRateCardId !== currentPayCardId;
+            
+            if (isOutdated) {
               outdatedCount++;
             }
           });
