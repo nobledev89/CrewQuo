@@ -77,9 +77,11 @@ interface ProjectSummary {
   clientName?: string;
   totalCost: number;
   totalHours: number;
-  status: 'DRAFT' | 'SUBMITTED' | 'APPROVED';
+  status: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED';
   itemCount: number;
   items: GroupedItem[];
+  rejectionReason?: string;
+  lineItemRejectionNotes?: Array<{itemId: string; itemType: string; note: string}>;
 }
 
 export default function SubmissionsPage() {
@@ -94,10 +96,11 @@ export default function SubmissionsPage() {
   const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'draft' | 'submitted' | 'approved'>('draft');
+  const [filter, setFilter] = useState<'all' | 'draft' | 'submitted' | 'approved' | 'rejected'>('draft');
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
   const [selectedProjectForModal, setSelectedProjectForModal] = useState<ProjectSummary | null>(null);
+  const [submissions, setSubmissions] = useState<Record<string, any>>({});
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
@@ -121,6 +124,7 @@ export default function SubmissionsPage() {
         await Promise.all([
           fetchTimeLogs(activeId, subRole.subcontractorId, currentUser.uid),
           fetchExpenses(activeId, subRole.subcontractorId, currentUser.uid),
+          fetchSubmissions(activeId, subRole.subcontractorId),
         ]);
       } catch (err) {
         console.error('Error loading submissions', err);
@@ -212,6 +216,28 @@ export default function SubmissionsPage() {
     setExpenses(exps);
   };
 
+  const fetchSubmissions = async (companyId: string, subId: string) => {
+    const snap = await getDocs(
+      query(
+        collection(db, 'projectSubmissions'),
+        where('companyId', '==', companyId),
+        where('subcontractorId', '==', subId)
+      )
+    );
+    const submissionsMap: Record<string, any> = {};
+    snap.docs.forEach((d) => {
+      const data = d.data();
+      submissionsMap[data.projectId] = {
+        id: d.id,
+        status: data.status,
+        rejectionReason: data.rejectionReason,
+        lineItemRejectionNotes: data.lineItemRejectionNotes || [],
+        submittedAt: data.submittedAt,
+      };
+    });
+    setSubmissions(submissionsMap);
+  };
+
   const allItems = useMemo(() => {
     return [
       ...timeLogs.map(log => ({
@@ -291,13 +317,18 @@ export default function SubmissionsPage() {
           return sum + log.hoursRegular + (log.hoursOT || 0);
         }, 0);
 
-      // Get the status - prefer APPROVED > SUBMITTED > DRAFT
-      let status: 'DRAFT' | 'SUBMITTED' | 'APPROVED' = 'DRAFT';
-      if (items.some(i => i.status === 'APPROVED')) {
+      // Get the status - prefer REJECTED > APPROVED > SUBMITTED > DRAFT
+      let status: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED' = 'DRAFT';
+      if (items.some(i => i.status === 'REJECTED')) {
+        status = 'REJECTED';
+      } else if (items.some(i => i.status === 'APPROVED')) {
         status = 'APPROVED';
       } else if (items.some(i => i.status === 'SUBMITTED')) {
         status = 'SUBMITTED';
       }
+
+      // Get submission data if it exists
+      const submission = submissions[projectId];
 
       summaries.push({
         projectId,
@@ -309,11 +340,13 @@ export default function SubmissionsPage() {
         status,
         itemCount: items.length,
         items,
+        rejectionReason: submission?.rejectionReason,
+        lineItemRejectionNotes: submission?.lineItemRejectionNotes,
       });
     });
 
     return summaries;
-  }, [groupedByProject, projects, clients]);
+  }, [groupedByProject, projects, clients, submissions]);
 
   const handleSelectProject = (projectId: string) => {
     const newSelected = new Set(selectedProjects);
@@ -543,7 +576,7 @@ export default function SubmissionsPage() {
         {/* Filter Tabs */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
           <div className="flex flex-wrap gap-2">
-            {(['all', 'draft', 'submitted', 'approved'] as const).map(f => (
+            {(['all', 'draft', 'submitted', 'approved', 'rejected'] as const).map(f => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
@@ -605,6 +638,7 @@ export default function SubmissionsPage() {
                   DRAFT: 'bg-gray-100 text-gray-700',
                   SUBMITTED: 'bg-yellow-100 text-yellow-700',
                   APPROVED: 'bg-green-100 text-green-700',
+                  REJECTED: 'bg-red-100 text-red-700',
                 };
 
                 return (
@@ -612,7 +646,9 @@ export default function SubmissionsPage() {
                     key={project.projectId}
                     onClick={() => setSelectedProjectForModal(project)}
                     className={`rounded-xl border-2 p-5 cursor-pointer transition-all hover:shadow-md ${
-                      isDraftProject && isSelected
+                      project.status === 'REJECTED'
+                        ? 'border-red-500 bg-red-50'
+                        : isDraftProject && isSelected
                         ? 'border-blue-500 bg-blue-50'
                         : 'border-gray-200 bg-white hover:border-gray-300'
                     }`}
@@ -671,11 +707,24 @@ export default function SubmissionsPage() {
                       </div>
                     </div>
 
-                    {/* Click to View */}
-                    <p className="text-xs text-blue-600 font-medium">Click to view breakdown →</p>
+                    {/* Rejection Reason - Show if rejected */}
+                    {project.status === 'REJECTED' && project.rejectionReason && (
+                      <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-xs font-semibold text-red-800 mb-1">Rejection Reason:</p>
+                            <p className="text-xs text-red-700 line-clamp-2">{project.rejectionReason}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
-                    {/* Cancel Button for Submitted/Approved */}
-                    {(project.status === 'SUBMITTED' || project.status === 'APPROVED') && (
+                    {/* Click to View */}
+                    <p className="text-xs text-blue-600 font-medium">Click to view {project.status === 'REJECTED' ? 'feedback & ' : ''}breakdown →</p>
+
+                    {/* Cancel Button for Submitted/Approved/Rejected */}
+                    {(project.status === 'SUBMITTED' || project.status === 'APPROVED' || project.status === 'REJECTED') && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -719,6 +768,22 @@ export default function SubmissionsPage() {
 
               {/* Modal Content */}
               <div className="p-6">
+                {/* Rejection Banner */}
+                {selectedProjectForModal.status === 'REJECTED' && selectedProjectForModal.rejectionReason && (
+                  <div className="mb-6 bg-red-50 border-2 border-red-300 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <h4 className="font-bold text-red-900 mb-2">Timesheet Rejected</h4>
+                        <p className="text-sm text-red-800 mb-3">{selectedProjectForModal.rejectionReason}</p>
+                        <p className="text-xs text-red-700">
+                          <strong>Next Steps:</strong> Review the feedback below, make necessary corrections, then cancel this submission to edit your entries and resubmit.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Entries Table */}
                 <div className="mb-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Detailed Breakdown</h3>
@@ -731,12 +796,18 @@ export default function SubmissionsPage() {
                           <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Description</th>
                           <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Hours</th>
                           <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700">Cost</th>
+                          {selectedProjectForModal.status === 'REJECTED' && (
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Admin Notes</th>
+                          )}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
                         {selectedProjectForModal.items.map((item) => {
                           const dateObj = item.date?.toDate ? item.date.toDate() : new Date(item.date);
                           const dateStr = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                          const [type, itemId] = item.id.split('_', 2);
+                          const actualItemId = itemId || item.id.substring(type.length + 1);
+                          const itemNotes = selectedProjectForModal.lineItemRejectionNotes?.filter(n => n.itemId === actualItemId) || [];
                           
                           if (item.type === 'timeLog') {
                             const log = item.data as TimeLog;
@@ -752,6 +823,21 @@ export default function SubmissionsPage() {
                                 </td>
                                 <td className="px-6 py-3 text-center text-sm text-gray-900">{totalHours.toFixed(1)}h</td>
                                 <td className="px-6 py-3 text-right text-sm font-semibold text-gray-900">£{log.subCost.toFixed(2)}</td>
+                                {selectedProjectForModal.status === 'REJECTED' && (
+                                  <td className="px-6 py-3 text-sm">
+                                    {itemNotes.length > 0 ? (
+                                      <div className="space-y-1">
+                                        {itemNotes.map((note, idx) => (
+                                          <div key={idx} className="bg-amber-50 border border-amber-200 rounded px-2 py-1 text-xs text-amber-900">
+                                            {note.note}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <span className="text-gray-400 text-xs italic">No notes</span>
+                                    )}
+                                  </td>
+                                )}
                               </tr>
                             );
                           } else {
@@ -764,6 +850,21 @@ export default function SubmissionsPage() {
                                 <td className="px-6 py-3 text-sm text-gray-900">{exp.category}</td>
                                 <td className="px-6 py-3 text-center text-sm text-gray-600">—</td>
                                 <td className="px-6 py-3 text-right text-sm font-semibold text-gray-900">£{exp.amount.toFixed(2)}</td>
+                                {selectedProjectForModal.status === 'REJECTED' && (
+                                  <td className="px-6 py-3 text-sm">
+                                    {itemNotes.length > 0 ? (
+                                      <div className="space-y-1">
+                                        {itemNotes.map((note, idx) => (
+                                          <div key={idx} className="bg-amber-50 border border-amber-200 rounded px-2 py-1 text-xs text-amber-900">
+                                            {note.note}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <span className="text-gray-400 text-xs italic">No notes</span>
+                                    )}
+                                  </td>
+                                )}
                               </tr>
                             );
                           }

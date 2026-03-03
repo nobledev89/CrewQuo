@@ -53,6 +53,9 @@ export default function ProjectDetailPage() {
   const [success, setSuccess] = useState<string>('');
   const [debugInfo, setDebugInfo] = useState<any>(null);
   const [refreshingPermissions, setRefreshingPermissions] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
+  const [showRateUpdateBanner, setShowRateUpdateBanner] = useState(false);
+  const [outdatedItemsCount, setOutdatedItemsCount] = useState(0);
 
   // Form state - Always use time picker for subcontractors
   const [useTimePicker, setUseTimePicker] = useState(true);
@@ -315,6 +318,37 @@ export default function ProjectDetailPage() {
         };
       });
         setExpenses(exps);
+        
+        // Check for rate card updates in DRAFT items
+        if (!rateAssignmentsSnap.empty) {
+          const rateData = rateAssignmentsSnap.docs[0].data();
+          const currentPayCardId = rateData.payRateCardId || rateData.rateCardId;
+          
+          const draftLogs = logs.filter((log: any) => log.status === 'DRAFT');
+          const draftExps = exps.filter((exp: any) => exp.status === 'DRAFT');
+          
+          let outdatedCount = 0;
+          
+          draftLogs.forEach((log: any) => {
+            if (log.payRateCardId && log.payRateCardId !== currentPayCardId) {
+              outdatedCount++;
+            }
+          });
+          
+          draftExps.forEach((exp: any) => {
+            if (exp.payRateCardId && exp.payRateCardId !== currentPayCardId) {
+              outdatedCount++;
+            }
+          });
+          
+          if (outdatedCount > 0) {
+            setShowRateUpdateBanner(true);
+            setOutdatedItemsCount(outdatedCount);
+          } else {
+            setShowRateUpdateBanner(false);
+            setOutdatedItemsCount(0);
+          }
+        }
       }, 2); // Retry up to 2 times if permission errors occur
 
     } catch (error: any) {

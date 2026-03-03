@@ -68,6 +68,9 @@ export default function TimesheetsPage() {
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
   const [rejectionNotes, setRejectionNotes] = useState<Record<string, string>>({});
   const [editingNote, setEditingNote] = useState<ExpandedNote | null>(null);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectingTimesheetId, setRejectingTimesheetId] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
 
   // Redirect subcontractors to their workspace
   useEffect(() => {
@@ -294,22 +297,47 @@ export default function TimesheetsPage() {
     }
   };
 
-  const handleRejectTimesheet = async (timesheetId: string) => {
-    setProcessingId(timesheetId);
+  const openRejectModal = (timesheetId: string) => {
+    setRejectingTimesheetId(timesheetId);
+    setRejectionReason('');
+    setShowRejectModal(true);
+  };
+
+  const closeRejectModal = () => {
+    setShowRejectModal(false);
+    setRejectingTimesheetId(null);
+    setRejectionReason('');
+  };
+
+  const handleRejectTimesheet = async () => {
+    if (!rejectionReason.trim()) {
+      setError('Please provide a reason for rejection');
+      return;
+    }
+
+    if (rejectionReason.trim().length < 10) {
+      setError('Rejection reason must be at least 10 characters');
+      return;
+    }
+
+    if (!rejectingTimesheetId) return;
+
+    setProcessingId(rejectingTimesheetId);
     setError('');
 
     try {
       const batch = writeBatch(db);
-      const timesheet = timesheets.find(ts => ts.submission.id === timesheetId);
+      const timesheet = timesheets.find(ts => ts.submission.id === rejectingTimesheetId);
 
       if (!timesheet) {
         setError('Timesheet not found');
         return;
       }
 
-      // Update submission status
-      batch.update(doc(db, 'projectSubmissions', timesheetId), {
+      // Update submission status with rejection reason
+      batch.update(doc(db, 'projectSubmissions', rejectingTimesheetId), {
         status: 'REJECTED',
+        rejectionReason: rejectionReason.trim(),
         updatedAt: Timestamp.now(),
       });
 
@@ -329,9 +357,10 @@ export default function TimesheetsPage() {
       });
 
       await batch.commit();
-      setSuccess('Timesheet rejected');
+      setSuccess('Timesheet rejected with reason provided');
 
-      // Refresh data
+      // Close modal and refresh data
+      closeRejectModal();
       if (activeCompanyId) {
         await fetchTimesheets(activeCompanyId);
       }
@@ -914,7 +943,7 @@ export default function TimesheetsPage() {
                       Approve Timesheet
                     </button>
                     <button
-                      onClick={() => handleRejectTimesheet(timesheet.submission.id)}
+                      onClick={() => openRejectModal(timesheet.submission.id)}
                       disabled={processingId !== null}
                       className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50"
                     >
@@ -927,6 +956,74 @@ export default function TimesheetsPage() {
             ))
           )}
         </div>
+
+        {/* Rejection Reason Modal */}
+        {showRejectModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                <h2 className="text-xl font-bold text-gray-900">Provide Rejection Reason</h2>
+                <button
+                  onClick={closeRejectModal}
+                  className="text-gray-500 hover:text-gray-700 transition text-2xl font-light"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="p-6">
+                <p className="text-sm text-gray-600 mb-4">
+                  Please provide a detailed reason for rejecting this timesheet. The subcontractor will see this explanation.
+                </p>
+                
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Rejection Reason <span className="text-red-600">*</span>
+                </label>
+                <textarea
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 text-sm"
+                  rows={4}
+                  placeholder="e.g., Hours on March 1st don't match site records. Please review and correct."
+                  autoFocus
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Minimum 10 characters required
+                </p>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
+                <button
+                  onClick={closeRejectModal}
+                  disabled={processingId !== null}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleRejectTimesheet}
+                  disabled={processingId !== null || rejectionReason.trim().length < 10}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50"
+                >
+                  {processingId !== null ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Rejecting...
+                    </>
+                  ) : (
+                    <>
+                      <X className="w-4 h-4" />
+                      Reject Timesheet
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );
