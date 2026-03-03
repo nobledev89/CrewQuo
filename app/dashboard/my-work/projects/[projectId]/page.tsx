@@ -1363,6 +1363,21 @@ export default function ProjectDetailPage() {
   return (
     <DashboardLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        {/* DEBUG PANEL - TEMPORARY */}
+        <div className="bg-gray-900 text-white p-4 rounded-lg font-mono text-xs">
+          <div className="font-bold mb-2">🔍 DEBUG INFO:</div>
+          <div>showRateUpdateBanner: {showRateUpdateBanner ? '✅ TRUE' : '❌ FALSE'}</div>
+          <div>outdatedItemsCount: {outdatedItemsCount}</div>
+          <div>Draft logs: {timeLogs.filter(l => l.status === 'DRAFT').length}</div>
+          <div>Current payRateCardId: {rateAssignment?.payRateCardId || 'null'}</div>
+          <div className="mt-2">Draft log IDs and their payRateCardId:</div>
+          {timeLogs.filter(l => l.status === 'DRAFT').map((log: any) => (
+            <div key={log.id} className="ml-4">
+              • {log.id.substring(0, 8)}: {log.payRateCardId || 'null'} {!log.payRateCardId || log.payRateCardId !== rateAssignment?.payRateCardId ? '⚠️ OUTDATED' : '✅ OK'}
+            </div>
+          ))}
+        </div>
+
         {/* Rate Update Banner */}
         {showRateUpdateBanner && outdatedItemsCount > 0 && (
           <div className="bg-yellow-50 border-2 border-yellow-400 rounded-lg p-4 shadow-md">
