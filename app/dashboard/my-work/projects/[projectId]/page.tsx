@@ -329,12 +329,13 @@ export default function ProjectDetailPage() {
           const currentPayCard = cardsMap.get(rateData.payRateCardId || rateData.rateCardId);
           
           if (currentPayCard) {
-            const draftLogs = logs.filter((log: any) => log.status === 'DRAFT');
-            const draftExps = exps.filter((exp: any) => exp.status === 'DRAFT');
+            // Check DRAFT and REJECTED items (rejected items can be edited after canceling submission)
+            const draftLogs = logs.filter((log: any) => log.status === 'DRAFT' || log.status === 'REJECTED');
+            const draftExps = exps.filter((exp: any) => exp.status === 'DRAFT' || exp.status === 'REJECTED');
             
             let outdatedCount = 0;
             
-            // Check each draft log's rate against current rate card
+            // Check each draft/rejected log's rate against current rate card
             draftLogs.forEach((log: any) => {
               const matchingRates = currentPayCard.rates?.filter((r: any) => r.roleName === log.roleName) || [];
               let currentRate = 0;
@@ -905,13 +906,38 @@ export default function ProjectDetailPage() {
       const currentPayCardId = rateAssignment.payRateCardId;
       const currentBillCardId = rateAssignment.billRateCardId;
 
-      // Filter draft items with outdated rate cards (including items without payRateCardId)
-      const outdatedLogs = timeLogs.filter(
-        (log: any) => log.status === 'DRAFT' && (!log.payRateCardId || log.payRateCardId !== currentPayCardId)
-      );
-      const outdatedExpenses = expenses.filter(
-        (exp: any) => exp.status === 'DRAFT' && (!exp.payRateCardId || exp.payRateCardId !== currentPayCardId)
-      );
+      // Filter draft/rejected items where actual rate values don't match current rate card
+      const outdatedLogs = timeLogs.filter((log: any) => {
+        if (log.status !== 'DRAFT' && log.status !== 'REJECTED') return false;
+        
+        // Calculate current rate from rate card
+        const matchingRates = payCard.rates?.filter((r: any) => r.roleName === log.roleName) || [];
+        let currentRate = 0;
+        
+        if (log.timeframeId) {
+          const entry = matchingRates.find((r: any) => r.timeframeId === log.timeframeId);
+          currentRate = entry?.subcontractorRate ?? entry?.hourlyRate ?? entry?.baseRate ?? 0;
+        } else if (log.shiftType) {
+          const entry = matchingRates.find((r: any) => r.shiftType === log.shiftType);
+          currentRate = entry?.subcontractorRate ?? entry?.hourlyRate ?? entry?.baseRate ?? 0;
+        } else if (matchingRates.length > 0) {
+          currentRate = matchingRates[0]?.subcontractorRate ?? matchingRates[0]?.hourlyRate ?? matchingRates[0]?.baseRate ?? 0;
+        }
+        
+        const storedRate = log.unitSubCost || 0;
+        return Math.abs(currentRate - storedRate) > 0.01;
+      });
+      
+      const outdatedExpenses = expenses.filter((exp: any) => {
+        if (exp.status !== 'DRAFT' && exp.status !== 'REJECTED') return false;
+        
+        const matchingExpense = payCard.expenses?.find((e: any) => e.categoryName === exp.category);
+        if (!matchingExpense) return false;
+        
+        const currentRate = matchingExpense.rate || matchingExpense.subcontractorRate || 0;
+        const storedRate = exp.unitRate || 0;
+        return Math.abs(currentRate - storedRate) > 0.01;
+      });
 
       const previewItems: any[] = [];
       const batch = writeBatch(db);
@@ -1449,7 +1475,8 @@ export default function ProjectDetailPage() {
                         <tbody>
                           {timeLogs
                             .filter((log: any) => {
-                              if (log.status !== 'DRAFT') return false;
+                              // Include both DRAFT and REJECTED items (rejected items can be edited after canceling)
+                              if (log.status !== 'DRAFT' && log.status !== 'REJECTED') return false;
                               
                               // Calculate current rate from rate card
                               const matchingRates = payCard?.rates?.filter((r: any) => r.roleName === log.roleName) || [];
@@ -1507,7 +1534,8 @@ export default function ProjectDetailPage() {
                             })}
                           {expenses
                             .filter((exp: any) => {
-                              if (exp.status !== 'DRAFT') return false;
+                              // Include both DRAFT and REJECTED items
+                              if (exp.status !== 'DRAFT' && exp.status !== 'REJECTED') return false;
                               
                               // Calculate current rate from rate card
                               const matchingExpense = payCard?.expenses?.find((e: any) => e.categoryName === exp.category);
