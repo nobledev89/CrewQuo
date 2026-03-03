@@ -329,13 +329,24 @@ export default function ProjectDetailPage() {
           const draftLogs = logs.filter((log: any) => log.status === 'DRAFT');
           const draftExps = exps.filter((exp: any) => exp.status === 'DRAFT');
           
+          console.log('🔍 [RATE DETECTION] Current Pay Card ID:', currentPayCardId);
+          console.log('🔍 [RATE DETECTION] Draft Logs Count:', draftLogs.length);
+          console.log('🔍 [RATE DETECTION] Draft Logs:', draftLogs.map((log: any) => ({
+            id: log.id,
+            status: log.status,
+            payRateCardId: log.payRateCardId,
+            roleName: log.roleName,
+          })));
+          
           let outdatedCount = 0;
           
           draftLogs.forEach((log: any) => {
             // Item is outdated if:
             // 1. It has a payRateCardId that doesn't match current
             // 2. It doesn't have a payRateCardId at all (old items before field was added)
-            if (!log.payRateCardId || log.payRateCardId !== currentPayCardId) {
+            const isOutdated = !log.payRateCardId || log.payRateCardId !== currentPayCardId;
+            console.log('🔍 [RATE DETECTION] Checking log:', log.id, 'payRateCardId:', log.payRateCardId, 'isOutdated:', isOutdated);
+            if (isOutdated) {
               outdatedCount++;
             }
           });
@@ -347,10 +358,14 @@ export default function ProjectDetailPage() {
             }
           });
           
+          console.log('🔍 [RATE DETECTION] Total Outdated Count:', outdatedCount);
+          
           if (outdatedCount > 0) {
+            console.log('✅ [RATE DETECTION] Setting banner to TRUE with', outdatedCount, 'items');
             setShowRateUpdateBanner(true);
             setOutdatedItemsCount(outdatedCount);
           } else {
+            console.log('❌ [RATE DETECTION] No outdated items, banner stays hidden');
             setShowRateUpdateBanner(false);
             setOutdatedItemsCount(0);
           }
