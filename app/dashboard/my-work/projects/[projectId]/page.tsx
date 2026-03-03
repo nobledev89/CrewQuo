@@ -1462,21 +1462,45 @@ export default function ProjectDetailPage() {
                               // SIMPLE RATE LOOKUP - just find the matching rate from the rate card
                               const matchingRates = payCard?.rates?.filter((r: any) => r.roleName === log.roleName) || [];
                               let newRate = 0;
+                              let matchedEntry: any = null;
                               
                               const hours = log.hoursRegular || 0;
                               const quantity = log.quantity || 1;
                               
+                              console.log(`[PreviewCalc] Log ${log.id}:`, {
+                                roleName: log.roleName,
+                                timeframeName: log.timeframeName,
+                                shiftType: log.shiftType,
+                                timeframeId: log.timeframeId,
+                                matchingRatesCount: matchingRates.length,
+                                matchingRates: matchingRates.map((r: any) => ({
+                                  timeframeName: r.timeframeName,
+                                  timeframeId: r.timeframeId,
+                                  shiftType: r.shiftType,
+                                  rate: r.subcontractorRate ?? r.hourlyRate ?? r.baseRate,
+                                }))
+                              });
+                              
                               // Match by timeframeId or shiftType to get the specific rate
                               if (log.timeframeId) {
-                                const entry = matchingRates.find((r: any) => r.timeframeId === log.timeframeId);
-                                newRate = entry?.subcontractorRate ?? entry?.hourlyRate ?? entry?.baseRate ?? 0;
+                                matchedEntry = matchingRates.find((r: any) => r.timeframeId === log.timeframeId);
+                                console.log(`[PreviewCalc] Matched by timeframeId:`, matchedEntry);
                               } else if (log.shiftType) {
-                                const entry = matchingRates.find((r: any) => r.shiftType === log.shiftType);
-                                newRate = entry?.subcontractorRate ?? entry?.hourlyRate ?? entry?.baseRate ?? 0;
-                              } else if (matchingRates.length > 0) {
-                                // Fallback to first matching rate for this role
-                                newRate = matchingRates[0]?.subcontractorRate ?? matchingRates[0]?.hourlyRate ?? matchingRates[0]?.baseRate ?? 0;
+                                matchedEntry = matchingRates.find((r: any) => r.shiftType === log.shiftType);
+                                console.log(`[PreviewCalc] Matched by shiftType:`, matchedEntry);
                               }
+                              
+                              // If no specific match, use first matching rate for this role
+                              if (!matchedEntry && matchingRates.length > 0) {
+                                matchedEntry = matchingRates[0];
+                                console.log(`[PreviewCalc] Using fallback (first rate):`, matchedEntry);
+                              }
+                              
+                              if (matchedEntry) {
+                                newRate = matchedEntry.subcontractorRate ?? matchedEntry.hourlyRate ?? matchedEntry.baseRate ?? 0;
+                              }
+                              
+                              console.log(`[PreviewCalc] Final newRate:`, newRate);
 
                               const oldRate = log.unitSubCost || 0;
                               const oldCost = log.subCost || 0;
