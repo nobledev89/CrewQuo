@@ -56,6 +56,8 @@ export default function ProjectDetailPage() {
   const [recalculating, setRecalculating] = useState(false);
   const [showRateUpdateBanner, setShowRateUpdateBanner] = useState(false);
   const [outdatedItemsCount, setOutdatedItemsCount] = useState(0);
+  const [showRateDetails, setShowRateDetails] = useState(false);
+  const [rateChangePreview, setRateChangePreview] = useState<any[]>([]);
 
   // Form state - Always use time picker for subcontractors
   const [useTimePicker, setUseTimePicker] = useState(true);
@@ -330,13 +332,17 @@ export default function ProjectDetailPage() {
           let outdatedCount = 0;
           
           draftLogs.forEach((log: any) => {
-            if (log.payRateCardId && log.payRateCardId !== currentPayCardId) {
+            // Item is outdated if:
+            // 1. It has a payRateCardId that doesn't match current
+            // 2. It doesn't have a payRateCardId at all (old items before field was added)
+            if (!log.payRateCardId || log.payRateCardId !== currentPayCardId) {
               outdatedCount++;
             }
           });
           
           draftExps.forEach((exp: any) => {
-            if (exp.payRateCardId && exp.payRateCardId !== currentPayCardId) {
+            // Same logic for expenses
+            if (!exp.payRateCardId || exp.payRateCardId !== currentPayCardId) {
               outdatedCount++;
             }
           });
@@ -833,6 +839,229 @@ export default function ProjectDetailPage() {
     approvedCount: timeLogs.filter((l) => l.status === 'APPROVED').length + expenses.filter((e) => e.status === 'APPROVED').length,
   };
 
+  const recalculateRates = async () => {
+    if (!payCard || !rateAssignment) {
+      setError('Rate card not found');
+      return;
+    }
+
+    setRecalculating(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        setError('No user logged in');
+        return;
+      }
+
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      const userData = userDoc.data();
+      const activeCompanyId = userData?.activeCompanyId || userData?.companyId;
+
+      const currentPayCardId = rateAssignment.payRateCardId;
+      const currentBillCardId = rateAssignment.billRateCardId;
+
+      // Filter draft items with outdated rate cards (including items without payRateCardId)
+      const outdatedLogs = timeLogs.filter(
+        (log: any) => log.status === 'DRAFT' && (!log.payRateCardId || log.payRateCardId !== currentPayCardId)
+      );
+      const outdatedExpenses = expenses.filter(
+        (exp: any) => exp.status === 'DRAFT' && (!exp.payRateCardId || exp.payRateCardId !== currentPayCardId)
+      );
+
+      const previewItems: any[] = [];
+      const batch = writeBatch(db);
+
+      // Recalculate time logs
+      for (const log of outdatedLogs) {
+        // Find the matching rate for this role
+        const matchingRates = payCard.rates?.filter((r: any) => r.roleName === log.roleName) || [];
+        
+        let newPayRate = 0;
+        let newBillRate = 0;
+        let rateEntry: any = null;
+
+        // If we have start/end time and timeframe, try to match by timeframe
+        if (log.startTime && log.endTime && log.timeframeId) {
+          rateEntry = matchingRates.find((r: any) => r.timeframeId === log.timeframeId);
+        } else if (log.shiftType) {
+          rateEntry = matchingRates.find((r: any) => r.shiftType === log.shiftType);
+        }
+
+        // Fallback to first matching role if no specific timeframe match
+        if (!rateEntry && matchingRates.length > 0) {
+          rateEntry = matchingRates[0];
+        }
+
+        if (rateEntry) {
+          newPayRate = rateEntry.subcontractorRate ?? rateEntry.hourlyRate ?? rateEntry.baseRate ?? 0;
+          
+          // Find matching bill rate
+          const matchingBillEntry = billCard?.rates?.find((r: any) => {
+            const roleMatch = r.roleName === rateEntry.roleName;
+            const timeframeMatch = rateEntry.timeframeId
+              ? r.timeframeId === rateEntry.timeframeId
+              : r.shiftType === rateEntry.shiftType;
+            return roleMatch && timeframeMatch;
+          });
+          
+          newBillRate = matchingBillEntry
+            ? (matchingBillEntry.clientRate ?? matchingBillEntry.hourlyRate ?? matchingBillEntry.baseRate ?? newPayRate)
+            : (rateEntry.clientRate ?? newPayRate);
+        }
+
+        const oldRate = log.unitSubCost || 0;
+        const hours = log.hoursRegular || 0;
+        const quantity = log.quantity || 1;
+
+        // Recalculate costs
+        let newSubCost = 0;
+        let newClientBill = 0;
+
+        // Use time-based calculation if we have start/end time
+        if (log.startTime && log.endTime && matchingRates.length > 0) {
+          // Build timeBasedRates array
+          const timeBasedRates: any[] = [];
+          matchingRates.forEach((rateEntry: any) => {
+            if (rateEntry.timeframeId && rateCardTemplate?.timeframeDefinitions) {
+              const timeframeDef = rateCardTemplate.timeframeDefinitions.find(
+                (tf: any) => tf.id === rateEntry.timeframeId
+              );
+              
+              if (timeframeDef) {
+                timeBasedRates.push({
+                  id: rateEntry.timeframeId,
+                  startTime: timeframeDef.startTime,
+                  endTime: timeframeDef.endTime,
+                  applicableDays: timeframeDef.applicableDays || [],
+                  subcontractorRate: rateEntry.subcontractorRate || 0,
+                  clientRate: rateEntry.clientRate || 0,
+                  description: rateEntry.timeframeName || timeframeDef.name || 'Standard'
+                });
+              }
+            }
+          });
+
+          if (timeBasedRates.length > 0) {
+            const result = calculateTimeBasedCost(
+              log.startTime,
+              log.endTime,
+              timeBasedRates,
+              newPayRate,
+              newBillRate,
+              log.date?.toDate ? log.date.toDate() : log.date
+            );
+            newSubCost = result.subcontractorCost * quantity;
+            newClientBill = result.clientBill * quantity;
+          } else {
+            newSubCost = newPayRate * hours * quantity;
+            newClientBill = newBillRate * hours * quantity;
+          }
+        } else {
+          newSubCost = newPayRate * hours * quantity;
+          newClientBill = newBillRate * hours * quantity;
+        }
+
+        const oldCost = log.subCost || 0;
+
+        // Add to preview
+        previewItems.push({
+          type: 'Time Log',
+          date: log.date,
+          description: `${log.roleName} - ${log.timeframeName || log.shiftType || 'Standard'}`,
+          hours: hours,
+          quantity: quantity,
+          oldRate,
+          newRate: newPayRate,
+          oldCost,
+          newCost: newSubCost,
+        });
+
+        // Update the document
+        batch.update(doc(db, 'timeLogs', log.id), {
+          subCost: newSubCost,
+          clientBill: newClientBill,
+          unitSubCost: newPayRate,
+          unitClientBill: newBillRate,
+          marginValue: newClientBill - newSubCost,
+          marginPct: newClientBill > 0 ? ((newClientBill - newSubCost) / newClientBill) * 100 : 0,
+          payRateCardId: currentPayCardId,
+          billRateCardId: currentBillCardId,
+          updatedAt: serverTimestamp(),
+        });
+      }
+
+      // Recalculate expenses
+      for (const exp of outdatedExpenses) {
+        const matchingExpense = payCard.expenses?.find((e: any) => e.categoryName === exp.category);
+        
+        if (matchingExpense) {
+          const newRate = matchingExpense.rate || matchingExpense.subcontractorRate || 0;
+          const oldRate = exp.unitRate || 0;
+          const quantity = exp.quantity || 1;
+          
+          let newAmount = 0;
+          const rateType = matchingExpense.rateType || 'CAPPED';
+          
+          if (rateType === 'FIXED') {
+            newAmount = newRate * quantity;
+          } else {
+            // For CAPPED, keep the original amount if it's less than the new cap
+            const newCap = newRate * quantity;
+            newAmount = Math.min(exp.amount || 0, newCap);
+          }
+
+          // Add to preview
+          previewItems.push({
+            type: 'Expense',
+            date: exp.date,
+            description: exp.category,
+            hours: null,
+            quantity: quantity,
+            oldRate,
+            newRate,
+            oldCost: exp.amount || 0,
+            newCost: newAmount,
+          });
+
+          // Update the document
+          batch.update(doc(db, 'expenses', exp.id), {
+            amount: newAmount,
+            unitRate: rateType === 'FIXED' ? newRate : (newAmount / quantity),
+            payRateCardId: currentPayCardId,
+            billRateCardId: currentBillCardId,
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+
+      // Store preview for display
+      setRateChangePreview(previewItems);
+
+      // Commit all updates
+      await batch.commit();
+
+      setSuccess(`Successfully recalculated ${previewItems.length} items with updated rates`);
+      
+      // Refresh data
+      if (auth.currentUser) {
+        await fetchProjectData(auth.currentUser);
+      }
+
+      setTimeout(() => {
+        setSuccess('');
+        setShowRateDetails(false);
+      }, 5000);
+    } catch (error) {
+      console.error('Error recalculating rates:', error);
+      setError(`Failed to recalculate rates: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setRecalculating(false);
+    }
+  };
+
   const submitTimesheet = async () => {
     setSubmittingTimesheet(true);
     try {
@@ -1119,6 +1348,146 @@ export default function ProjectDetailPage() {
   return (
     <DashboardLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        {/* Rate Update Banner */}
+        {showRateUpdateBanner && outdatedItemsCount > 0 && (
+          <div className="bg-yellow-50 border-2 border-yellow-400 rounded-lg p-4 shadow-md">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-yellow-900 text-lg mb-1">⚠️ Rate Update Detected</h3>
+                <p className="text-yellow-800 mb-3">
+                  {outdatedItemsCount} draft {outdatedItemsCount === 1 ? 'item needs' : 'items need'} to be recalculated with the latest rates.
+                </p>
+                
+                <div className="flex flex-wrap gap-3 mb-3">
+                  <button
+                    onClick={() => setShowRateDetails(!showRateDetails)}
+                    className="px-4 py-2 bg-yellow-100 text-yellow-900 rounded-lg hover:bg-yellow-200 transition font-medium text-sm border border-yellow-300"
+                  >
+                    {showRateDetails ? '▲ Hide Details' : '▼ View Details'}
+                  </button>
+                  <button
+                    onClick={recalculateRates}
+                    disabled={recalculating}
+                    className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed transition font-medium text-sm flex items-center gap-2"
+                  >
+                    {recalculating ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        Recalculating...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4" />
+                        Recompute All Rates
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Details Section */}
+                {showRateDetails && (
+                  <div className="bg-white border border-yellow-300 rounded-lg p-4 mt-3">
+                    <h4 className="font-semibold text-gray-900 mb-3">Items to be Updated:</h4>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-100 border-b border-gray-300">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-semibold text-gray-900">Date</th>
+                            <th className="px-3 py-2 text-left font-semibold text-gray-900">Description</th>
+                            <th className="px-3 py-2 text-center font-semibold text-gray-900">Hours/Qty</th>
+                            <th className="px-3 py-2 text-right font-semibold text-gray-900">Old Rate</th>
+                            <th className="px-3 py-2 text-center font-semibold text-gray-900">→</th>
+                            <th className="px-3 py-2 text-right font-semibold text-gray-900">New Rate</th>
+                            <th className="px-3 py-2 text-right font-semibold text-gray-900">Old Cost</th>
+                            <th className="px-3 py-2 text-center font-semibold text-gray-900">→</th>
+                            <th className="px-3 py-2 text-right font-semibold text-gray-900">New Cost</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {timeLogs
+                            .filter((log: any) => log.status === 'DRAFT' && (!log.payRateCardId || log.payRateCardId !== rateAssignment?.payRateCardId))
+                            .map((log: any) => {
+                              // Calculate what the new rate would be
+                              const matchingRates = payCard?.rates?.filter((r: any) => r.roleName === log.roleName) || [];
+                              let newRate = 0;
+                              
+                              if (log.timeframeId) {
+                                const rateEntry = matchingRates.find((r: any) => r.timeframeId === log.timeframeId);
+                                newRate = rateEntry?.subcontractorRate ?? rateEntry?.hourlyRate ?? rateEntry?.baseRate ?? 0;
+                              } else if (log.shiftType) {
+                                const rateEntry = matchingRates.find((r: any) => r.shiftType === log.shiftType);
+                                newRate = rateEntry?.subcontractorRate ?? rateEntry?.hourlyRate ?? rateEntry?.baseRate ?? 0;
+                              } else if (matchingRates.length > 0) {
+                                const rateEntry = matchingRates[0];
+                                newRate = rateEntry?.subcontractorRate ?? rateEntry?.hourlyRate ?? rateEntry?.baseRate ?? 0;
+                              }
+
+                              const oldRate = log.unitSubCost || 0;
+                              const hours = log.hoursRegular || 0;
+                              const quantity = log.quantity || 1;
+                              const oldCost = log.subCost || 0;
+                              const newCost = newRate * hours * quantity;
+
+                              return (
+                                <tr key={log.id} className="border-b border-gray-200 hover:bg-gray-50">
+                                  <td className="px-3 py-2 text-gray-900">{formatDate(log.date)}</td>
+                                  <td className="px-3 py-2 text-gray-900">{log.roleName} - {log.timeframeName || log.shiftType || 'Standard'}</td>
+                                  <td className="px-3 py-2 text-center text-gray-700">{hours.toFixed(1)}h × {quantity}</td>
+                                  <td className="px-3 py-2 text-right text-red-600 font-medium">£{oldRate.toFixed(2)}/hr</td>
+                                  <td className="px-3 py-2 text-center text-gray-500">→</td>
+                                  <td className="px-3 py-2 text-right text-green-600 font-medium">£{newRate.toFixed(2)}/hr</td>
+                                  <td className="px-3 py-2 text-right text-red-600 font-semibold">£{oldCost.toFixed(2)}</td>
+                                  <td className="px-3 py-2 text-center text-gray-500">→</td>
+                                  <td className="px-3 py-2 text-right text-green-600 font-semibold">£{newCost.toFixed(2)}</td>
+                                </tr>
+                              );
+                            })}
+                          {expenses
+                            .filter((exp: any) => exp.status === 'DRAFT' && (!exp.payRateCardId || exp.payRateCardId !== rateAssignment?.payRateCardId))
+                            .map((exp: any) => {
+                              const matchingExpense = payCard?.expenses?.find((e: any) => e.categoryName === exp.category);
+                              const newRate = matchingExpense?.rate || matchingExpense?.subcontractorRate || 0;
+                              const oldRate = exp.unitRate || 0;
+                              const quantity = exp.quantity || 1;
+                              const oldCost = exp.amount || 0;
+                              
+                              // Calculate new cost based on rate type
+                              const rateType = matchingExpense?.rateType || 'CAPPED';
+                              let newCost = 0;
+                              if (rateType === 'FIXED') {
+                                newCost = newRate * quantity;
+                              } else {
+                                newCost = Math.min(oldCost, newRate * quantity);
+                              }
+
+                              return (
+                                <tr key={exp.id} className="border-b border-gray-200 hover:bg-gray-50">
+                                  <td className="px-3 py-2 text-gray-900">{formatDate(exp.date)}</td>
+                                  <td className="px-3 py-2 text-gray-900">{exp.category}</td>
+                                  <td className="px-3 py-2 text-center text-gray-700">{quantity.toFixed(1)}</td>
+                                  <td className="px-3 py-2 text-right text-red-600 font-medium">£{oldRate.toFixed(2)}</td>
+                                  <td className="px-3 py-2 text-center text-gray-500">→</td>
+                                  <td className="px-3 py-2 text-right text-green-600 font-medium">£{newRate.toFixed(2)}</td>
+                                  <td className="px-3 py-2 text-right text-red-600 font-semibold">£{oldCost.toFixed(2)}</td>
+                                  <td className="px-3 py-2 text-center text-gray-500">→</td>
+                                  <td className="px-3 py-2 text-right text-green-600 font-semibold">£{newCost.toFixed(2)}</td>
+                                </tr>
+                              );
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="text-xs text-gray-600 mt-3">
+                      💡 Clicking "Recompute All Rates" will update all draft items with the current rates from your rate card.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Success/Error Messages */}
         {success && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-2">
