@@ -1523,26 +1523,74 @@ export default function ProjectDetailPage() {
                               return Math.abs(currentRate - storedRate) > 0.01;
                             })
                             .map((log: any) => {
-                              // Calculate what the new rate would be
+                              // Calculate what the new rate would be using the same logic as recalculation
                               const matchingRates = payCard?.rates?.filter((r: any) => r.roleName === log.roleName) || [];
                               let newRate = 0;
+                              let newCost = 0;
                               
-                              if (log.timeframeId) {
-                                const rateEntry = matchingRates.find((r: any) => r.timeframeId === log.timeframeId);
-                                newRate = rateEntry?.subcontractorRate ?? rateEntry?.hourlyRate ?? rateEntry?.baseRate ?? 0;
-                              } else if (log.shiftType) {
-                                const rateEntry = matchingRates.find((r: any) => r.shiftType === log.shiftType);
-                                newRate = rateEntry?.subcontractorRate ?? rateEntry?.hourlyRate ?? rateEntry?.baseRate ?? 0;
-                              } else if (matchingRates.length > 0) {
-                                const rateEntry = matchingRates[0];
-                                newRate = rateEntry?.subcontractorRate ?? rateEntry?.hourlyRate ?? rateEntry?.baseRate ?? 0;
+                              const hours = log.hoursRegular || 0;
+                              const quantity = log.quantity || 1;
+                              
+                              if (matchingRates.length > 0) {
+                                // Use time-based calculation if we have time data and template
+                                if (log.startTime && log.endTime && rateCardTemplate?.timeframeDefinitions) {
+                                  const timeBasedRates: any[] = [];
+                                  
+                                  matchingRates.forEach((rateEntry: any) => {
+                                    if (rateEntry.timeframeId) {
+                                      const timeframeDef = rateCardTemplate.timeframeDefinitions.find(
+                                        (tf: any) => tf.id === rateEntry.timeframeId
+                                      );
+                                      
+                                      if (timeframeDef) {
+                                        timeBasedRates.push({
+                                          id: rateEntry.timeframeId,
+                                          startTime: timeframeDef.startTime,
+                                          endTime: timeframeDef.endTime,
+                                          applicableDays: timeframeDef.applicableDays || [],
+                                          subcontractorRate: rateEntry.subcontractorRate || rateEntry.hourlyRate || rateEntry.baseRate || 0,
+                                          clientRate: rateEntry.clientRate || 0,
+                                          description: rateEntry.timeframeName || timeframeDef.name || 'Standard'
+                                        });
+                                      }
+                                    }
+                                  });
+                                  
+                                  if (timeBasedRates.length > 0) {
+                                    const fallbackRate = matchingRates[0].subcontractorRate || matchingRates[0].hourlyRate || matchingRates[0].baseRate || 0;
+                                    const result = calculateTimeBasedCost(
+                                      log.startTime,
+                                      log.endTime,
+                                      timeBasedRates,
+                                      fallbackRate,
+                                      fallbackRate,
+                                      log.date?.toDate ? log.date.toDate() : log.date
+                                    );
+                                    newCost = result.subcontractorCost * quantity;
+                                    newRate = hours > 0 ? (newCost / quantity) / hours : fallbackRate;
+                                  } else {
+                                    // Fallback to first rate
+                                    newRate = matchingRates[0]?.subcontractorRate ?? matchingRates[0]?.hourlyRate ?? matchingRates[0]?.baseRate ?? 0;
+                                    newCost = newRate * hours * quantity;
+                                  }
+                                } else {
+                                  // No time data - try exact match then fallback
+                                  let rateEntry: any = null;
+                                  if (log.timeframeId) {
+                                    rateEntry = matchingRates.find((r: any) => r.timeframeId === log.timeframeId);
+                                  } else if (log.shiftType) {
+                                    rateEntry = matchingRates.find((r: any) => r.shiftType === log.shiftType);
+                                  }
+                                  if (!rateEntry) {
+                                    rateEntry = matchingRates[0];
+                                  }
+                                  newRate = rateEntry?.subcontractorRate ?? rateEntry?.hourlyRate ?? rateEntry?.baseRate ?? 0;
+                                  newCost = newRate * hours * quantity;
+                                }
                               }
 
                               const oldRate = log.unitSubCost || 0;
-                              const hours = log.hoursRegular || 0;
-                              const quantity = log.quantity || 1;
                               const oldCost = log.subCost || 0;
-                              const newCost = newRate * hours * quantity;
 
                               return (
                                 <tr key={log.id} className="border-b border-gray-200 hover:bg-gray-50">
