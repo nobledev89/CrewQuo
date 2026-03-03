@@ -339,18 +339,44 @@ export default function ProjectDetailPage() {
               const matchingRates = currentPayCard.rates?.filter((r: any) => r.roleName === log.roleName) || [];
               let currentRate = 0;
               
+              console.log(`[RateCheck] Log ${log.id}:`, {
+                roleName: log.roleName,
+                timeframeId: log.timeframeId,
+                shiftType: log.shiftType,
+                storedRate: log.unitSubCost,
+                matchingRatesCount: matchingRates.length,
+                matchingRates: matchingRates.map((r: any) => ({
+                  timeframeId: r.timeframeId,
+                  shiftType: r.shiftType,
+                  subcontractorRate: r.subcontractorRate,
+                  hourlyRate: r.hourlyRate,
+                  baseRate: r.baseRate,
+                }))
+              });
+              
               if (log.timeframeId) {
                 const entry = matchingRates.find((r: any) => r.timeframeId === log.timeframeId);
                 currentRate = entry?.subcontractorRate ?? entry?.hourlyRate ?? entry?.baseRate ?? 0;
+                console.log(`[RateCheck] Matched by timeframeId:`, { entry, currentRate });
               } else if (log.shiftType) {
                 const entry = matchingRates.find((r: any) => r.shiftType === log.shiftType);
                 currentRate = entry?.subcontractorRate ?? entry?.hourlyRate ?? entry?.baseRate ?? 0;
+                console.log(`[RateCheck] Matched by shiftType:`, { entry, currentRate });
               } else if (matchingRates.length > 0) {
                 currentRate = matchingRates[0]?.subcontractorRate ?? matchingRates[0]?.hourlyRate ?? matchingRates[0]?.baseRate ?? 0;
+                console.log(`[RateCheck] Matched by first entry:`, { currentRate });
               }
               
               const storedRate = log.unitSubCost || 0;
-              if (Math.abs(currentRate - storedRate) > 0.01) {
+              const rateDiff = Math.abs(currentRate - storedRate);
+              console.log(`[RateCheck] Comparison:`, {
+                currentRate,
+                storedRate,
+                difference: rateDiff,
+                isOutdated: rateDiff > 0.01
+              });
+              
+              if (rateDiff > 0.01) {
                 outdatedCount++;
               }
             });
