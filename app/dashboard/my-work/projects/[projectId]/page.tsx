@@ -321,54 +321,52 @@ export default function ProjectDetailPage() {
       });
         setExpenses(exps);
         
-        // Check for rate card updates in DRAFT items
+        // NOW check for rate mismatches after we have both logs/expenses AND rate cards
         if (!rateAssignmentsSnap.empty) {
           const rateData = rateAssignmentsSnap.docs[0].data();
-          const currentPayCardId = rateData.payRateCardId || rateData.rateCardId;
+          const currentPayCard = rateCards.get(rateData.payRateCardId || rateData.rateCardId);
           
-          const draftLogs = logs.filter((log: any) => log.status === 'DRAFT');
-          const draftExps = exps.filter((exp: any) => exp.status === 'DRAFT');
-          
-          console.log('🔍 [RATE DETECTION] Current Pay Card ID:', currentPayCardId);
-          console.log('🔍 [RATE DETECTION] Draft Logs Count:', draftLogs.length);
-          console.log('🔍 [RATE DETECTION] Draft Logs:', draftLogs.map((log: any) => ({
-            id: log.id,
-            status: log.status,
-            payRateCardId: log.payRateCardId,
-            roleName: log.roleName,
-          })));
-          
-          let outdatedCount = 0;
-          
-          draftLogs.forEach((log: any) => {
-            // Item is outdated if it's missing payRateCardId or doesn't match current
-            const isOutdated = !log.payRateCardId || log.payRateCardId !== currentPayCardId;
+          if (currentPayCard) {
+            const draftLogs = logs.filter((log: any) => log.status === 'DRAFT');
+            const draftExps = exps.filter((exp: any) => exp.status === 'DRAFT');
             
-            console.log('🔍 [RATE DETECTION] Checking log:', log.id, 'payRateCardId:', log.payRateCardId, 'logRate:', log.unitSubCost, 'isOutdated:', isOutdated);
-            if (isOutdated) {
-              outdatedCount++;
-            }
-          });
-          
-          draftExps.forEach((exp: any) => {
-            // Item is outdated if it's missing payRateCardId or doesn't match current
-            const isOutdated = !exp.payRateCardId || exp.payRateCardId !== currentPayCardId;
+            let outdatedCount = 0;
             
-            if (isOutdated) {
-              outdatedCount++;
-            }
-          });
-          
-          console.log('🔍 [RATE DETECTION] Total Outdated Count:', outdatedCount);
-          
-          if (outdatedCount > 0) {
-            console.log('✅ [RATE DETECTION] Setting banner to TRUE with', outdatedCount, 'items');
-            setShowRateUpdateBanner(true);
+            // Check each draft log's rate against current rate card
+            draftLogs.forEach((log: any) => {
+              const matchingRates = currentPayCard.rates?.filter((r: any) => r.roleName === log.roleName) || [];
+              let currentRate = 0;
+              
+              if (log.timeframeId) {
+                const entry = matchingRates.find((r: any) => r.timeframeId === log.timeframeId);
+                currentRate = entry?.subcontractorRate ?? entry?.hourlyRate ?? entry?.baseRate ?? 0;
+              } else if (log.shiftType) {
+                const entry = matchingRates.find((r: any) => r.shiftType === log.shiftType);
+                currentRate = entry?.subcontractorRate ?? entry?.hourlyRate ?? entry?.baseRate ?? 0;
+              } else if (matchingRates.length > 0) {
+                currentRate = matchingRates[0]?.subcontractorRate ?? matchingRates[0]?.hourlyRate ?? matchingRates[0]?.baseRate ?? 0;
+              }
+              
+              const storedRate = log.unitSubCost || 0;
+              if (Math.abs(currentRate - storedRate) > 0.01) {
+                outdatedCount++;
+              }
+            });
+            
+            // Check each draft expense's rate
+            draftExps.forEach((exp: any) => {
+              const matchingExpense = currentPayCard.expenses?.find((e: any) => e.categoryName === exp.category);
+              if (matchingExpense) {
+                const currentRate = matchingExpense.rate || matchingExpense.subcontractorRate || 0;
+                const storedRate = exp.unitRate || 0;
+                if (Math.abs(currentRate - storedRate) > 0.01) {
+                  outdatedCount++;
+                }
+              }
+            });
+            
+            setShowRateUpdateBanner(outdatedCount > 0);
             setOutdatedItemsCount(outdatedCount);
-          } else {
-            console.log('❌ [RATE DETECTION] No outdated items, banner stays hidden');
-            setShowRateUpdateBanner(false);
-            setOutdatedItemsCount(0);
           }
         }
       }, 2); // Retry up to 2 times if permission errors occur
