@@ -947,65 +947,43 @@ export default function ProjectDetailPage() {
         // Find the matching rate for this role
         const matchingRates = payCard.rates?.filter((r: any) => r.roleName === log.roleName) || [];
         
+        if (matchingRates.length === 0) {
+          console.warn(`[Recalculate] No matching rates found for role: ${log.roleName}`);
+          continue; // Skip this log if no rates found
+        }
+
         let newPayRate = 0;
         let newBillRate = 0;
-        let rateEntry: any = null;
-
-        // If we have start/end time and timeframe, try to match by timeframe
-        if (log.startTime && log.endTime && log.timeframeId) {
-          rateEntry = matchingRates.find((r: any) => r.timeframeId === log.timeframeId);
-        } else if (log.shiftType) {
-          rateEntry = matchingRates.find((r: any) => r.shiftType === log.shiftType);
-        }
-
-        // Fallback to first matching role if no specific timeframe match
-        if (!rateEntry && matchingRates.length > 0) {
-          rateEntry = matchingRates[0];
-        }
-
-        if (rateEntry) {
-          newPayRate = rateEntry.subcontractorRate ?? rateEntry.hourlyRate ?? rateEntry.baseRate ?? 0;
-          
-          // Find matching bill rate
-          const matchingBillEntry = billCard?.rates?.find((r: any) => {
-            const roleMatch = r.roleName === rateEntry.roleName;
-            const timeframeMatch = rateEntry.timeframeId
-              ? r.timeframeId === rateEntry.timeframeId
-              : r.shiftType === rateEntry.shiftType;
-            return roleMatch && timeframeMatch;
-          });
-          
-          newBillRate = matchingBillEntry
-            ? (matchingBillEntry.clientRate ?? matchingBillEntry.hourlyRate ?? matchingBillEntry.baseRate ?? newPayRate)
-            : (rateEntry.clientRate ?? newPayRate);
-        }
-
-        const oldRate = log.unitSubCost || 0;
-        const hours = log.hoursRegular || 0;
-        const quantity = log.quantity || 1;
-
-        // Recalculate costs
         let newSubCost = 0;
         let newClientBill = 0;
 
-        // Use time-based calculation if we have start/end time
-        if (log.startTime && log.endTime && matchingRates.length > 0) {
-          // Build timeBasedRates array
+        const hours = log.hoursRegular || 0;
+        const quantity = log.quantity || 1;
+
+        // STRATEGY: Use time-based calculation if we have time data, otherwise use direct rate matching
+        if (log.startTime && log.endTime && rateCardTemplate?.timeframeDefinitions) {
+          // Build timeBasedRates array for ALL rates of this role
           const timeBasedRates: any[] = [];
+          
           matchingRates.forEach((rateEntry: any) => {
-            if (rateEntry.timeframeId && rateCardTemplate?.timeframeDefinitions) {
+            if (rateEntry.timeframeId) {
               const timeframeDef = rateCardTemplate.timeframeDefinitions.find(
                 (tf: any) => tf.id === rateEntry.timeframeId
               );
               
               if (timeframeDef) {
+                // Find matching bill rate for this timeframe
+                const matchingBillEntry = billCard?.rates?.find((r: any) => 
+                  r.roleName === rateEntry.roleName && r.timeframeId === rateEntry.timeframeId
+                );
+
                 timeBasedRates.push({
                   id: rateEntry.timeframeId,
                   startTime: timeframeDef.startTime,
                   endTime: timeframeDef.endTime,
                   applicableDays: timeframeDef.applicableDays || [],
-                  subcontractorRate: rateEntry.subcontractorRate || 0,
-                  clientRate: rateEntry.clientRate || 0,
+                  subcontractorRate: rateEntry.subcontractorRate || rateEntry.hourlyRate || rateEntry.baseRate || 0,
+                  clientRate: matchingBillEntry?.clientRate || matchingBillEntry?.hourlyRate || matchingBillEntry?.baseRate || rateEntry.clientRate || rateEntry.subcontractorRate || 0,
                   description: rateEntry.timeframeName || timeframeDef.name || 'Standard'
                 });
               }
@@ -1013,25 +991,73 @@ export default function ProjectDetailPage() {
           });
 
           if (timeBasedRates.length > 0) {
+            // Use time-based calculation - this will automatically pick the right rate based on time
+            const fallbackPayRate = matchingRates[0].subcontractorRate || matchingRates[0].hourlyRate || matchingRates[0].baseRate || 0;
+            const fallbackBillRate = matchingRates[0].clientRate || fallbackPayRate;
+            
             const result = calculateTimeBasedCost(
               log.startTime,
               log.endTime,
               timeBasedRates,
-              newPayRate,
-              newBillRate,
+              fallbackPayRate,
+              fallbackBillRate,
               log.date?.toDate ? log.date.toDate() : log.date
             );
+            
             newSubCost = result.subcontractorCost * quantity;
             newClientBill = result.clientBill * quantity;
+            
+            // Calculate average rate for display purposes
+            newPayRate = hours > 0 ? (newSubCost / quantity) / hours : fallbackPayRate;
+            newBillRate = hours > 0 ? (newClientBill / quantity) / hours : fallbackBillRate;
           } else {
+            // No timeframe definitions, fall back to first matching rate
+            const rateEntry = matchingRates[0];
+            newPayRate = rateEntry.subcontractorRate ?? rateEntry.hourlyRate ?? rateEntry.baseRate ?? 0;
+            
+            const matchingBillEntry = billCard?.rates?.find((r: any) => 
+              r.roleName === rateEntry.roleName
+            );
+            newBillRate = matchingBillEntry?.clientRate ?? matchingBillEntry?.hourlyRate ?? matchingBillEntry?.baseRate ?? rateEntry.clientRate ?? newPayRate;
+            
             newSubCost = newPayRate * hours * quantity;
             newClientBill = newBillRate * hours * quantity;
           }
         } else {
+          // No time data - try to match by timeframeId or shiftType, or use first rate
+          let rateEntry: any = null;
+          
+          if (log.timeframeId) {
+            rateEntry = matchingRates.find((r: any) => r.timeframeId === log.timeframeId);
+          } else if (log.shiftType) {
+            rateEntry = matchingRates.find((r: any) => r.shiftType === log.shiftType);
+          }
+          
+          // Fallback to first matching role if no specific match
+          if (!rateEntry) {
+            rateEntry = matchingRates[0];
+          }
+
+          newPayRate = rateEntry.subcontractorRate ?? rateEntry.hourlyRate ?? rateEntry.baseRate ?? 0;
+          
+          // Find matching bill rate
+          const matchingBillEntry = billCard?.rates?.find((r: any) => {
+            const roleMatch = r.roleName === rateEntry.roleName;
+            const timeframeMatch = rateEntry.timeframeId
+              ? r.timeframeId === rateEntry.timeframeId
+              : (rateEntry.shiftType ? r.shiftType === rateEntry.shiftType : true);
+            return roleMatch && timeframeMatch;
+          });
+          
+          newBillRate = matchingBillEntry
+            ? (matchingBillEntry.clientRate ?? matchingBillEntry.hourlyRate ?? matchingBillEntry.baseRate ?? newPayRate)
+            : (rateEntry.clientRate ?? newPayRate);
+          
           newSubCost = newPayRate * hours * quantity;
           newClientBill = newBillRate * hours * quantity;
         }
 
+        const oldRate = log.unitSubCost || 0;
         const oldCost = log.subCost || 0;
 
         // Add to preview
