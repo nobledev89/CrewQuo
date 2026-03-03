@@ -1422,7 +1422,27 @@ export default function ProjectDetailPage() {
                         </thead>
                         <tbody>
                           {timeLogs
-                            .filter((log: any) => log.status === 'DRAFT' && (!log.payRateCardId || log.payRateCardId !== rateAssignment?.payRateCardId))
+                            .filter((log: any) => {
+                              if (log.status !== 'DRAFT') return false;
+                              
+                              // Calculate current rate from rate card
+                              const matchingRates = payCard?.rates?.filter((r: any) => r.roleName === log.roleName) || [];
+                              let currentRate = 0;
+                              
+                              if (log.timeframeId) {
+                                const entry = matchingRates.find((r: any) => r.timeframeId === log.timeframeId);
+                                currentRate = entry?.subcontractorRate ?? entry?.hourlyRate ?? entry?.baseRate ?? 0;
+                              } else if (log.shiftType) {
+                                const entry = matchingRates.find((r: any) => r.shiftType === log.shiftType);
+                                currentRate = entry?.subcontractorRate ?? entry?.hourlyRate ?? entry?.baseRate ?? 0;
+                              } else if (matchingRates.length > 0) {
+                                currentRate = matchingRates[0]?.subcontractorRate ?? matchingRates[0]?.hourlyRate ?? matchingRates[0]?.baseRate ?? 0;
+                              }
+                              
+                              const storedRate = log.unitSubCost || 0;
+                              // Return true if rates differ by more than 0.01
+                              return Math.abs(currentRate - storedRate) > 0.01;
+                            })
                             .map((log: any) => {
                               // Calculate what the new rate would be
                               const matchingRates = payCard?.rates?.filter((r: any) => r.roleName === log.roleName) || [];
@@ -1460,7 +1480,19 @@ export default function ProjectDetailPage() {
                               );
                             })}
                           {expenses
-                            .filter((exp: any) => exp.status === 'DRAFT' && (!exp.payRateCardId || exp.payRateCardId !== rateAssignment?.payRateCardId))
+                            .filter((exp: any) => {
+                              if (exp.status !== 'DRAFT') return false;
+                              
+                              // Calculate current rate from rate card
+                              const matchingExpense = payCard?.expenses?.find((e: any) => e.categoryName === exp.category);
+                              if (!matchingExpense) return false;
+                              
+                              const currentRate = matchingExpense.rate || matchingExpense.subcontractorRate || 0;
+                              const storedRate = exp.unitRate || 0;
+                              
+                              // Return true if rates differ by more than 0.01
+                              return Math.abs(currentRate - storedRate) > 0.01;
+                            })
                             .map((exp: any) => {
                               const matchingExpense = payCard?.expenses?.find((e: any) => e.categoryName === exp.category);
                               const newRate = matchingExpense?.rate || matchingExpense?.subcontractorRate || 0;
