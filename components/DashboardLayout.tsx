@@ -110,7 +110,7 @@ function DashboardContent({ children }: DashboardLayoutProps) {
     // CLIENT role - simplified navigation
     if (userData?.role === 'CLIENT') {
       return [
-        { name: 'My Projects', href: '/dashboard/client-portal', icon: Briefcase },
+        { name: 'Projects', href: '/dashboard/client-portal', icon: Briefcase },
       ];
     }
 
@@ -235,8 +235,8 @@ function DashboardContent({ children }: DashboardLayoutProps) {
           </div>
         </div>
 
-        {/* Workspace Selector - Only show for non-subcontractors */}
-        {!isActingAsSubcontractor() && (
+        {/* Workspace Selector - Only show for ADMIN/MANAGER, not subcontractors or clients */}
+        {!isActingAsSubcontractor() && userData?.role !== 'CLIENT' && (
         <div className="px-4 py-4 border-b border-gray-200 bg-gradient-to-br from-gray-50 to-white">
           <div className="mb-2">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Workspace</p>
