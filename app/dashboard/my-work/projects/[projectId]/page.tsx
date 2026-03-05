@@ -342,11 +342,13 @@ export default function ProjectDetailPage() {
               
               console.log(`[RateCheck] Log ${log.id}:`, {
                 roleName: log.roleName,
+                timeframeName: log.timeframeName,
                 timeframeId: log.timeframeId,
                 shiftType: log.shiftType,
                 storedRate: log.unitSubCost,
                 matchingRatesCount: matchingRates.length,
                 matchingRates: matchingRates.map((r: any) => ({
+                  timeframeName: r.timeframeName,
                   timeframeId: r.timeframeId,
                   shiftType: r.shiftType,
                   subcontractorRate: r.subcontractorRate,
@@ -359,6 +361,10 @@ export default function ProjectDetailPage() {
                 const entry = matchingRates.find((r: any) => r.timeframeId === log.timeframeId);
                 currentRate = entry?.subcontractorRate ?? entry?.hourlyRate ?? entry?.baseRate ?? 0;
                 console.log(`[RateCheck] Matched by timeframeId:`, { entry, currentRate });
+              } else if (log.timeframeName) {
+                const entry = matchingRates.find((r: any) => r.timeframeName === log.timeframeName);
+                currentRate = entry?.subcontractorRate ?? entry?.hourlyRate ?? entry?.baseRate ?? 0;
+                console.log(`[RateCheck] Matched by timeframeName:`, { entry, currentRate });
               } else if (log.shiftType) {
                 const entry = matchingRates.find((r: any) => r.shiftType === log.shiftType);
                 currentRate = entry?.subcontractorRate ?? entry?.hourlyRate ?? entry?.baseRate ?? 0;
@@ -947,15 +953,18 @@ export default function ProjectDetailPage() {
         const matchingRates = payCard.rates?.filter((r: any) => r.roleName === log.roleName) || [];
         let currentRate = 0;
         
-        if (log.timeframeId) {
-          const entry = matchingRates.find((r: any) => r.timeframeId === log.timeframeId);
-          currentRate = entry?.subcontractorRate ?? entry?.hourlyRate ?? entry?.baseRate ?? 0;
-        } else if (log.shiftType) {
-          const entry = matchingRates.find((r: any) => r.shiftType === log.shiftType);
-          currentRate = entry?.subcontractorRate ?? entry?.hourlyRate ?? entry?.baseRate ?? 0;
-        } else if (matchingRates.length > 0) {
-          currentRate = matchingRates[0]?.subcontractorRate ?? matchingRates[0]?.hourlyRate ?? matchingRates[0]?.baseRate ?? 0;
-        }
+                              if (log.timeframeId) {
+                                const entry = matchingRates.find((r: any) => r.timeframeId === log.timeframeId);
+                                currentRate = entry?.subcontractorRate ?? entry?.hourlyRate ?? entry?.baseRate ?? 0;
+                              } else if (log.timeframeName) {
+                                const entry = matchingRates.find((r: any) => r.timeframeName === log.timeframeName);
+                                currentRate = entry?.subcontractorRate ?? entry?.hourlyRate ?? entry?.baseRate ?? 0;
+                              } else if (log.shiftType) {
+                                const entry = matchingRates.find((r: any) => r.shiftType === log.shiftType);
+                                currentRate = entry?.subcontractorRate ?? entry?.hourlyRate ?? entry?.baseRate ?? 0;
+                              } else if (matchingRates.length > 0) {
+                                currentRate = matchingRates[0]?.subcontractorRate ?? matchingRates[0]?.hourlyRate ?? matchingRates[0]?.baseRate ?? 0;
+                              }
         
         const storedRate = log.unitSubCost || 0;
         return Math.abs(currentRate - storedRate) > 0.01;
@@ -994,6 +1003,11 @@ export default function ProjectDetailPage() {
         // Try to match by timeframeId first
         if (log.timeframeId) {
           rateEntry = matchingRates.find((r: any) => r.timeframeId === log.timeframeId);
+        }
+        
+        // Then try timeframeName
+        if (!rateEntry && log.timeframeName) {
+          rateEntry = matchingRates.find((r: any) => r.timeframeName === log.timeframeName);
         }
         
         // Then try shiftType
@@ -1137,6 +1151,11 @@ export default function ProjectDetailPage() {
       // Commit all updates
       await batch.commit();
 
+      // Hide the banner immediately after successful update
+      setShowRateUpdateBanner(false);
+      setOutdatedItemsCount(0);
+      setShowRateDetails(false);
+
       setSuccess(`Successfully recalculated ${previewItems.length} items with updated rates`);
       
       // Refresh data
@@ -1146,7 +1165,6 @@ export default function ProjectDetailPage() {
 
       setTimeout(() => {
         setSuccess('');
-        setShowRateDetails(false);
       }, 5000);
       }, 2); // Retry up to 2 times if permission errors occur
 
@@ -1547,10 +1565,13 @@ export default function ProjectDetailPage() {
                                 }))
                               });
                               
-                              // Match by timeframeId or shiftType to get the specific rate
+                              // Match by timeframeId, timeframeName, or shiftType to get the specific rate
                               if (log.timeframeId) {
                                 matchedEntry = matchingRates.find((r: any) => r.timeframeId === log.timeframeId);
                                 console.log(`[PreviewCalc] Matched by timeframeId:`, matchedEntry);
+                              } else if (log.timeframeName) {
+                                matchedEntry = matchingRates.find((r: any) => r.timeframeName === log.timeframeName);
+                                console.log(`[PreviewCalc] Matched by timeframeName:`, matchedEntry);
                               } else if (log.shiftType) {
                                 matchedEntry = matchingRates.find((r: any) => r.shiftType === log.shiftType);
                                 console.log(`[PreviewCalc] Matched by shiftType:`, matchedEntry);
