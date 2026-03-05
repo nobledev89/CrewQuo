@@ -11,6 +11,7 @@ import {
   where, 
   addDoc, 
   updateDoc, 
+  setDoc,
   serverTimestamp,
   Timestamp 
 } from 'firebase/firestore';
@@ -124,7 +125,7 @@ export async function createContractorClientRelationship(
     });
   } else {
     // Create new
-    await updateDoc(relationshipRef, relationshipData);
+    await setDoc(relationshipRef, relationshipData);
   }
   
   return relationshipId;
@@ -176,7 +177,7 @@ export async function grantProjectAccess(
     active: true,
   };
   
-  await updateDoc(accessRef, accessData);
+  await setDoc(accessRef, accessData, { merge: true });
   return accessId;
 }
 
