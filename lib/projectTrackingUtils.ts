@@ -54,6 +54,7 @@ export interface SubcontractorTracking {
     draft: StatusBreakdown;
     submitted: StatusBreakdown;
     approved: StatusBreakdown;
+    rejected: StatusBreakdown;
   };
   timeLogs: TimeLogData[];
   expenses: ExpenseData[];
@@ -71,6 +72,7 @@ export interface ProjectTracking {
     draft: StatusBreakdown;
     submitted: StatusBreakdown;
     approved: StatusBreakdown;
+    rejected: StatusBreakdown;
   };
   subcontractors: SubcontractorTracking[];
 }
@@ -96,6 +98,7 @@ export function aggregateProjectCosts(
     draft: { hours: 0, cost: 0, billing: 0, margin: 0, count: 0 },
     submitted: { hours: 0, cost: 0, billing: 0, margin: 0, count: 0 },
     approved: { hours: 0, cost: 0, billing: 0, margin: 0, count: 0 },
+    rejected: { hours: 0, cost: 0, billing: 0, margin: 0, count: 0 },
   };
 
   // Group by subcontractor
@@ -107,7 +110,7 @@ export function aggregateProjectCosts(
     const cost = log.subCost || 0;
     const billing = log.clientBill || 0;
     const margin = billing - cost;
-    const status = (log.status || 'DRAFT').toLowerCase() as 'draft' | 'submitted' | 'approved';
+    const status = (log.status || 'DRAFT').toLowerCase() as 'draft' | 'submitted' | 'approved' | 'rejected';
 
     // Update totals
     totals.hours += hours;
@@ -139,6 +142,7 @@ export function aggregateProjectCosts(
           draft: { hours: 0, cost: 0, billing: 0, margin: 0, count: 0 },
           submitted: { hours: 0, cost: 0, billing: 0, margin: 0, count: 0 },
           approved: { hours: 0, cost: 0, billing: 0, margin: 0, count: 0 },
+          rejected: { hours: 0, cost: 0, billing: 0, margin: 0, count: 0 },
         },
         timeLogs: [],
         expenses: [],
@@ -163,7 +167,7 @@ export function aggregateProjectCosts(
     const cost = exp.amount || 0;
     const billing = cost; // Expenses are pass-through (no markup)
     const margin = 0; // No margin on expenses
-    const status = (exp.status || 'DRAFT').toLowerCase() as 'draft' | 'submitted' | 'approved';
+    const status = (exp.status || 'DRAFT').toLowerCase() as 'draft' | 'submitted' | 'approved' | 'rejected';
 
     // Update totals
     totals.cost += cost;
@@ -193,6 +197,7 @@ export function aggregateProjectCosts(
           draft: { hours: 0, cost: 0, billing: 0, margin: 0, count: 0 },
           submitted: { hours: 0, cost: 0, billing: 0, margin: 0, count: 0 },
           approved: { hours: 0, cost: 0, billing: 0, margin: 0, count: 0 },
+          rejected: { hours: 0, cost: 0, billing: 0, margin: 0, count: 0 },
         },
         timeLogs: [],
         expenses: [],

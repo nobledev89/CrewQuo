@@ -75,7 +75,7 @@ export default function SubcontractorCostBreakdown({
       {isExpanded && (
         <div className="p-4 space-y-4">
           {/* Status Breakdown */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Draft */}
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
               <div className="flex items-center justify-between mb-2">
@@ -144,6 +144,30 @@ export default function SubcontractorCostBreakdown({
                 <div className="flex justify-between text-sm">
                   <span className="text-green-700">Bill:</span>
                   <span className="font-semibold text-green-900">{formatCurrency(subcontractor.byStatus.approved.billing, currency)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Rejected */}
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-red-700 uppercase">Rejected</span>
+                <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor('REJECTED')}`}>
+                  {subcontractor.byStatus.rejected.count}
+                </span>
+              </div>
+              <div className="space-y-1">
+                <div className="flex justify-between text-sm">
+                  <span className="text-red-700">Hours:</span>
+                  <span className="font-semibold text-red-900">{subcontractor.byStatus.rejected.hours.toFixed(1)}h</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-red-700">Cost:</span>
+                  <span className="font-semibold text-red-900">{formatCurrency(subcontractor.byStatus.rejected.cost, currency)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-red-700">Bill:</span>
+                  <span className="font-semibold text-red-900">{formatCurrency(subcontractor.byStatus.rejected.billing, currency)}</span>
                 </div>
               </div>
             </div>
