@@ -75,7 +75,13 @@ service cloud.firestore {
     
     // Companies collection
     match /companies/{compId} {
-      allow read: if isSuperAdmin() || (authed() && hasAccessToCompany(compId));
+      allow read: if isSuperAdmin() || (authed() && (
+        hasAccessToCompany(compId) ||
+        // CLIENT users can read contractor companies they have access to
+        (userRole() == 'CLIENT' && 
+         request.auth.token.contractorCompanyIds != null &&
+         compId in request.auth.token.contractorCompanyIds)
+      ));
       allow create: if authed(); // Signup creates company
       allow update: if isSuperAdmin() || (authed() && compId == ownCompanyId() && isAdmin());
       allow delete: if isSuperAdmin();
@@ -442,12 +448,15 @@ service cloud.firestore {
         // Contractors can read client users for their clients
         (request.auth.token.role != null && request.auth.token.role in ['ADMIN', 'MANAGER', 'SUPER_ADMIN']) ||
         // Client users can read users from their same org
-        (request.auth.token.role == 'CLIENT' && resource.data.clientOrgId == request.auth.token.clientOrgId)
+        (request.auth.token.role == 'CLIENT' && resource.data.clientOrgId == request.auth.token.clientOrgId) ||
+        // Client can read their own document
+        (request.auth.token.role == 'CLIENT' && resource.data.userId == request.auth.uid)
       );
-      // Allow queries during signup (before custom claims are set) - user can query by their own userId
+      // Allow queries - more permissive for CLIENT role to query their own docs
       allow list: if authed() && (
         (request.auth.token.role != null && request.auth.token.role in ['ADMIN', 'MANAGER', 'SUPER_ADMIN']) ||
-        (request.auth.token.role == 'CLIENT' && resource.data.clientOrgId == request.auth.token.clientOrgId) ||
+        // Client users - allow querying (the query will filter by userId)
+        request.auth.token.role == 'CLIENT' ||
         // During signup: allow user to query by their own userId (before claims are set)
         resource.data.userId == request.auth.uid
       );
