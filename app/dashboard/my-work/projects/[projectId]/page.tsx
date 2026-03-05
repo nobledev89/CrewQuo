@@ -924,18 +924,20 @@ export default function ProjectDetailPage() {
     setSuccess('');
 
     try {
-      const user = auth.currentUser;
-      if (!user) {
-        setError('No user logged in');
-        return;
-      }
+      // Wrap in retry mechanism for permission errors
+      await retryWithTokenRefresh(async () => {
+        const user = auth.currentUser;
+        if (!user) {
+          setError('No user logged in');
+          return;
+        }
 
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      const userData = userDoc.data();
-      const activeCompanyId = userData?.activeCompanyId || userData?.companyId;
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        const userData = userDoc.data();
+        const activeCompanyId = userData?.activeCompanyId || userData?.companyId;
 
-      const currentPayCardId = rateAssignment.payRateCardId;
-      const currentBillCardId = rateAssignment.billRateCardId;
+        const currentPayCardId = rateAssignment.payRateCardId;
+        const currentBillCardId = rateAssignment.billRateCardId;
 
       // Filter draft/rejected items where actual rate values don't match current rate card
       const outdatedLogs = timeLogs.filter((log: any) => {
@@ -1056,15 +1058,15 @@ export default function ProjectDetailPage() {
 
       // Recalculate expenses
       for (const exp of outdatedExpenses) {
-        const matchingExpense = payCard.expenses?.find((e: any) => e.categoryName === exp.category);
+        const matchingPayExpense = payCard.expenses?.find((e: any) => e.categoryName === exp.category);
         
-        if (matchingExpense) {
-          const newRate = matchingExpense.rate || matchingExpense.subcontractorRate || 0;
+        if (matchingPayExpense) {
+          const newRate = matchingPayExpense.rate || matchingPayExpense.subcontractorRate || 0;
           const oldRate = exp.unitRate || 0;
           const quantity = exp.quantity || 1;
           
           let newAmount = 0;
-          const rateType = matchingExpense.rateType || 'CAPPED';
+          const rateType = matchingPayExpense.rateType || 'CAPPED';
           
           if (rateType === 'FIXED') {
             newAmount = newRate * quantity;
@@ -1073,6 +1075,34 @@ export default function ProjectDetailPage() {
             const newCap = newRate * quantity;
             newAmount = Math.min(exp.amount || 0, newCap);
           }
+
+          // Calculate client billing amount
+          let clientBillAmount = newAmount; // Default to pass-through
+          let marginValue = 0;
+          let marginPercentage = 0;
+
+          // Find matching expense in bill card to get markup/client rate
+          if (billCard?.expenses) {
+            const matchingBillExpense = billCard.expenses.find(
+              (e: any) => e.categoryName === exp.category
+            );
+
+            if (matchingBillExpense) {
+              if (rateType === 'CAPPED') {
+                // For CAPPED expenses: apply markup percentage to actual amount
+                const markupPct = matchingBillExpense.marginPercentage || 0;
+                clientBillAmount = newAmount * (1 + markupPct / 100);
+              } else {
+                // For FIXED expenses: use client rate
+                const clientRate = matchingBillExpense.clientRate || matchingBillExpense.rate || newAmount / quantity;
+                clientBillAmount = clientRate * quantity;
+              }
+            }
+          }
+
+          // Calculate margin
+          marginValue = clientBillAmount - newAmount;
+          marginPercentage = clientBillAmount > 0 ? (marginValue / clientBillAmount) * 100 : 0;
 
           // Add to preview
           previewItems.push({
@@ -1087,9 +1117,12 @@ export default function ProjectDetailPage() {
             newCost: newAmount,
           });
 
-          // Update the document
+          // Update the document with all new fields
           batch.update(doc(db, 'expenses', exp.id), {
             amount: newAmount,
+            clientBillAmount: clientBillAmount,
+            marginValue: marginValue,
+            marginPercentage: marginPercentage,
             unitRate: rateType === 'FIXED' ? newRate : (newAmount / quantity),
             payRateCardId: currentPayCardId,
             billRateCardId: currentBillCardId,
@@ -1115,6 +1148,8 @@ export default function ProjectDetailPage() {
         setSuccess('');
         setShowRateDetails(false);
       }, 5000);
+      }, 2); // Retry up to 2 times if permission errors occur
+
     } catch (error) {
       console.error('Error recalculating rates:', error);
       setError(`Failed to recalculate rates: ${error instanceof Error ? error.message : 'Unknown error'}`);
