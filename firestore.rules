@@ -317,12 +317,12 @@ service cloud.firestore {
           // In own company: admins/managers can update and approve/reject
           (isOwnCompany() && isAdminOrManager())
           ||
-          // In subcontractor context: can edit own DRAFT logs or change them to SUBMITTED for timesheet submission
+          // In subcontractor context: can edit own DRAFT or REJECTED logs
           (!isOwnCompany() 
             && resource.data.createdByUserId == request.auth.uid
             && resource.data.subcontractorId == subcontractorIdForActiveCompany()
-            && resource.data.status == 'DRAFT'
-            && request.resource.data.status in ['DRAFT', 'SUBMITTED'])
+            && resource.data.status in ['DRAFT', 'REJECTED']
+            && request.resource.data.status in ['DRAFT', 'SUBMITTED', 'REJECTED'])
         );
       
       allow delete: if authed() 
@@ -369,12 +369,12 @@ service cloud.firestore {
           // In own company: admins/managers can update and approve/reject
           (isOwnCompany() && isAdminOrManager())
           ||
-          // In subcontractor context: can edit own DRAFT expenses or change them to SUBMITTED for timesheet submission
+          // In subcontractor context: can edit own DRAFT or REJECTED expenses
           (!isOwnCompany() 
             && resource.data.createdByUserId == request.auth.uid
             && resource.data.subcontractorId == subcontractorIdForActiveCompany()
-            && resource.data.status == 'DRAFT'
-            && request.resource.data.status in ['DRAFT', 'SUBMITTED'])
+            && resource.data.status in ['DRAFT', 'REJECTED']
+            && request.resource.data.status in ['DRAFT', 'SUBMITTED', 'REJECTED'])
         );
       
       allow delete: if authed() 
