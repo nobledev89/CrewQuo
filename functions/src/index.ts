@@ -42,6 +42,59 @@ export const onUserCreated = functions.firestore
   });
 
 /**
+ * Automatically refresh CLIENT user custom claims when clientUsers document changes
+ * This ensures CLIENT users get updated contractorCompanyIds in their claims
+ */
+export const onClientUserUpdate = functions.firestore
+  .document('clientUsers/{clientUserId}')
+  .onWrite(async (change, context) => {
+    const clientUserData = change.after.exists ? change.after.data() : null;
+    
+    if (!clientUserData) {
+      console.log('Client user deleted, skipping claims refresh');
+      return;
+    }
+    
+    const userId = clientUserData.userId;
+    
+    if (!userId) {
+      console.error('Client user document missing userId');
+      return;
+    }
+    
+    try {
+      // Get the main user document
+      const userDoc = await db.collection('users').doc(userId).get();
+      
+      if (!userDoc.exists) {
+        console.error(`User document not found for userId: ${userId}`);
+        return;
+      }
+      
+      const userData = userDoc.data()!;
+      
+      // Only refresh if this is a CLIENT user
+      if (userData.role !== 'CLIENT') {
+        console.log(`User ${userId} is not a CLIENT, skipping claims refresh`);
+        return;
+      }
+      
+      // Build claims with CLIENT-specific data from clientUsers collection
+      const claims = {
+        role: 'CLIENT' as const,
+        clientOrgId: clientUserData.clientOrgId,
+        contractorCompanyIds: clientUserData.contractorCompanyIds || [],
+      };
+      
+      await setCustomUserClaims(userId, claims);
+      
+      console.log(`Custom claims refreshed for CLIENT user: ${userId}`, claims);
+    } catch (error) {
+      console.error(`Error refreshing claims for CLIENT user ${userId}:`, error);
+    }
+  });
+
+/**
  * Complete user signup - creates company and user documents with proper setup
  * This bypasses security rules by using Admin SDK
  * 
