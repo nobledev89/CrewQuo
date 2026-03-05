@@ -15,7 +15,7 @@ import {
   updateDoc,
   serverTimestamp,
 } from 'firebase/firestore';
-import { UserPlus, Mail, CheckCircle, Clock, X, ArrowLeft, XCircle } from 'lucide-react';
+import { UserPlus, Mail, CheckCircle, Clock, X, ArrowLeft, XCircle, Copy } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import {
   getOrCreateClientOrganization,
@@ -72,6 +72,9 @@ export default function ClientUsersPage() {
     lastName: '',
   });
   const [saving, setSaving] = useState(false);
+  const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  const [showInviteLinkModal, setShowInviteLinkModal] = useState(false);
+  const [generatedInviteLink, setGeneratedInviteLink] = useState('');
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -200,8 +203,8 @@ export default function ClientUsersPage() {
         setClient({ ...client, clientOrgId, clientOrgName });
       }
 
-      // Step 2: Create invite
-      await createClientUserInvite(
+      // Step 2: Create invite and get the invite token
+      const inviteToken = await createClientUserInvite(
         inviteForm.email,
         companyId,
         companyName,
@@ -210,19 +213,36 @@ export default function ClientUsersPage() {
         userId
       );
 
-      // Step 3: TODO - Send email (would integrate with email service)
-      alert(`Invitation sent to ${inviteForm.email}!\n\nNote: Email integration pending. Share the signup link manually.`);
+      // Step 3: Generate and show invite link
+      const inviteLink = `${window.location.origin}/signup/client?token=${inviteToken}`;
+      setGeneratedInviteLink(inviteLink);
 
       // Refresh data
       await fetchInvites(companyId, clientId);
       setShowInviteModal(false);
       setInviteForm({ email: '', firstName: '', lastName: '' });
+      setShowInviteLinkModal(true);
     } catch (error) {
       console.error('Error sending invite:', error);
       alert('Failed to send invitation. Please try again.');
     } finally {
       setSaving(false);
     }
+  };
+
+  const copyInviteLink = (token: string) => {
+    const inviteLink = `${window.location.origin}/signup/client?token=${token}`;
+    navigator.clipboard.writeText(inviteLink);
+    setCopiedToken(token);
+    setTimeout(() => setCopiedToken(null), 2000);
+  };
+
+  const copyGeneratedLink = () => {
+    navigator.clipboard.writeText(generatedInviteLink);
+    setTimeout(() => {
+      setShowInviteLinkModal(false);
+      setGeneratedInviteLink('');
+    }, 1500);
   };
 
   const formatDate = (timestamp: any) => {
@@ -398,20 +418,35 @@ export default function ClientUsersPage() {
               {invites.map(invite => (
                 <div
                   key={invite.id}
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200"
+                  className="p-4 bg-gray-50 rounded-lg border border-gray-200"
                 >
-                  <div className="flex items-center space-x-3">
-                    {getStatusIcon(invite.status)}
-                    <div>
-                      <p className="font-semibold text-gray-900">{invite.email}</p>
-                      <p className="text-xs text-gray-500">
-                        Sent {formatDate(invite.sentAt)}
-                      </p>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center space-x-3">
+                      {getStatusIcon(invite.status)}
+                      <div>
+                        <p className="font-semibold text-gray-900">{invite.email}</p>
+                        <p className="text-xs text-gray-500">
+                          Sent {formatDate(invite.sentAt)}
+                        </p>
+                      </div>
                     </div>
+                    <span className={`px-3 py-1 text-xs font-semibold rounded-full border ${getStatusColor(invite.status)}`}>
+                      {invite.status}
+                    </span>
                   </div>
-                  <span className={`px-3 py-1 text-xs font-semibold rounded-full border ${getStatusColor(invite.status)}`}>
-                    {invite.status}
-                  </span>
+                  
+                  {invite.status === 'pending' && (invite as any).inviteToken && canEdit && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <p className="text-xs text-gray-600 mb-2">Invite Link:</p>
+                      <button
+                        onClick={() => copyInviteLink((invite as any).inviteToken)}
+                        className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 transition text-sm"
+                      >
+                        <Copy className="w-4 h-4" />
+                        <span>{copiedToken === (invite as any).inviteToken ? 'Copied!' : 'Copy Invite Link'}</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -479,7 +514,7 @@ export default function ClientUsersPage() {
 
                 <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
                   <p className="text-sm text-blue-800">
-                    📧 The user will receive an email invitation to join the client portal. They'll be able to view projects and track progress in real-time.
+                    🔗 An invite link will be generated that you can share with the user. They'll use it to create their account and access the client portal.
                   </p>
                 </div>
               </div>
@@ -497,10 +532,45 @@ export default function ClientUsersPage() {
                   disabled={saving}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400"
                 >
-                  {saving ? 'Sending...' : 'Send Invitation'}
+                  {saving ? 'Creating...' : 'Create Invitation'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Invite Link Modal */}
+      {showInviteLinkModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full">
+            <div className="p-6">
+              <div className="text-center mb-6">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle className="w-10 h-10 text-green-600" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Invitation Created!</h3>
+                <p className="text-gray-600">Share this link with the client user to complete their signup.</p>
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 mb-6">
+                <p className="text-xs text-gray-600 mb-2">Invite Link:</p>
+                <div className="bg-white rounded p-3 border border-gray-300 mb-3">
+                  <p className="text-sm text-gray-800 break-all font-mono">{generatedInviteLink}</p>
+                </div>
+                <button
+                  onClick={copyGeneratedLink}
+                  className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                >
+                  <Copy className="w-5 h-5" />
+                  <span>Copy Link</span>
+                </button>
+              </div>
+
+              <p className="text-xs text-gray-500 text-center">
+                You can also copy this link later from the invitations list below.
+              </p>
+            </div>
           </div>
         </div>
       )}
