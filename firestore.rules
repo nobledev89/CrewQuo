@@ -466,13 +466,19 @@ service cloud.firestore {
     // Contractor-Client Relationships
     match /contractorClientRelationships/{relationshipId} {
       allow read: if authed() && (
+        // Allow reading non-existent documents (will return null anyway)
+        !exists(/databases/$(database)/documents/contractorClientRelationships/$(relationshipId)) ||
         // Contractor can read their own relationships
         resource.data.contractorCompanyId == ownCompanyId() ||
         // Client can read relationships for their org
         (userRole() == 'CLIENT' && resource.data.clientOrgId == request.auth.token.clientOrgId)
       );
-      allow write: if authed() && 
+      allow create: if authed() && 
         userRole() in ['ADMIN', 'MANAGER'] &&
+        request.resource.data.contractorCompanyId == ownCompanyId();
+      allow update: if authed() && 
+        userRole() in ['ADMIN', 'MANAGER'] &&
+        resource.data.contractorCompanyId == ownCompanyId() &&
         request.resource.data.contractorCompanyId == ownCompanyId();
     }
     
