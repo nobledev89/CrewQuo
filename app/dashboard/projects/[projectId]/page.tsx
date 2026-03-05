@@ -342,6 +342,9 @@ export default function ProjectDetailPage() {
           amount: data.amount || 0,
           quantity: data.quantity || 1,
           unitRate: data.unitRate,
+          clientBillAmount: data.clientBillAmount,
+          marginValue: data.marginValue,
+          marginPercentage: data.marginPercentage,
           status: data.status || 'DRAFT',
           subcontractorId: data.subcontractorId,
         };

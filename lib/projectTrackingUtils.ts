@@ -30,6 +30,9 @@ export interface ExpenseData {
   amount: number;
   quantity?: number;
   unitRate?: number;
+  clientBillAmount?: number;    // What we charge the client
+  marginValue?: number;         // clientBillAmount - amount
+  marginPercentage?: number;    // (marginValue / clientBillAmount) * 100
   status: string;
   subcontractorId: string;
 }
@@ -165,8 +168,9 @@ export function aggregateProjectCosts(
   // Process expenses
   expenses.forEach((exp) => {
     const cost = exp.amount || 0;
-    const billing = cost; // Expenses are pass-through (no markup)
-    const margin = 0; // No margin on expenses
+    // Use clientBillAmount if available, otherwise fall back to cost (for backward compatibility)
+    const billing = exp.clientBillAmount ?? cost;
+    const margin = billing - cost;
     const status = (exp.status || 'DRAFT').toLowerCase() as 'draft' | 'submitted' | 'approved' | 'rejected';
 
     // Update totals

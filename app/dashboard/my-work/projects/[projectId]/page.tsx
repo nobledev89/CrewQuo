@@ -791,6 +791,34 @@ export default function ProjectDetailPage() {
       const activeCompanyId = userData?.activeCompanyId || userData?.companyId;
       const subRole = userData?.subcontractorRoles?.[activeCompanyId];
 
+      // Calculate client billing amount
+      let clientBillAmount = finalAmount; // Default to pass-through (cost = billing)
+      let marginValue = 0;
+      let marginPercentage = 0;
+
+      // Find matching expense in bill card to get markup/client rate
+      if (billCard?.expenses) {
+        const matchingBillExpense = billCard.expenses.find(
+          (e: any) => e.categoryName === selectedExpense.label || e.categoryId === selectedExpense.key
+        );
+
+        if (matchingBillExpense) {
+          if (isCappedExpense) {
+            // For CAPPED expenses: apply markup percentage to actual amount
+            const markupPct = matchingBillExpense.marginPercentage || 0;
+            clientBillAmount = finalAmount * (1 + markupPct / 100);
+          } else {
+            // For FIXED expenses: use client rate
+            const clientRate = matchingBillExpense.clientRate || matchingBillExpense.rate || finalAmount / expenseForm.quantity;
+            clientBillAmount = clientRate * expenseForm.quantity;
+          }
+        }
+      }
+
+      // Calculate margin
+      marginValue = clientBillAmount - finalAmount;
+      marginPercentage = clientBillAmount > 0 ? (marginValue / clientBillAmount) * 100 : 0;
+
       await addDoc(collection(db, 'expenses'), {
         companyId: activeCompanyId,
         projectId: projectId,
@@ -799,6 +827,9 @@ export default function ProjectDetailPage() {
         date: new Date(expenseForm.date),
         category: selectedExpense.label,
         amount: finalAmount,
+        clientBillAmount: clientBillAmount,
+        marginValue: marginValue,
+        marginPercentage: marginPercentage,
         description: expenseForm.description || '',
         quantity: expenseForm.quantity,
         unitRate: isCappedExpense ? (finalAmount / expenseForm.quantity) : selectedExpense.rate,

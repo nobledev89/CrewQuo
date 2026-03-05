@@ -203,11 +203,14 @@ export default function ClientProjectDetailPage() {
         const data = doc.data();
         return {
           id: doc.id,
-          date: data.date?.toDate ? data.date.toDate() : data.date || null,
+          date: data.date?.toDate ? data.date.toDate() : (data.date || null),
           category: data.category || 'Unknown',
           amount: data.amount || 0,
           quantity: data.quantity || 1,
           unitRate: data.unitRate,
+          clientBillAmount: data.clientBillAmount,
+          marginValue: data.marginValue,
+          marginPercentage: data.marginPercentage,
           status: data.status || 'DRAFT',
           subcontractorId: data.subcontractorId,
         };
@@ -612,6 +615,10 @@ export default function ClientProjectDetailPage() {
                           if (status === 'DRAFT' && !visibility.showDraftStatus) return null;
                           if (status === 'REJECTED' && !visibility.showRejectedStatus) return null;
 
+                          const billing = exp.clientBillAmount ?? exp.amount;
+                          const margin = billing - exp.amount;
+                          const marginPct = billing > 0 ? ((margin / billing) * 100) : 0;
+
                           return (
                             <tr key={`exp-${exp.id}`} className="hover:bg-gray-50 bg-gray-50">
                               <td className="px-4 py-3 text-gray-600">{formatDate(exp.date)}</td>
@@ -634,13 +641,17 @@ export default function ClientProjectDetailPage() {
                                 </td>
                               )}
                               <td className="px-4 py-3 text-right font-semibold text-green-700">
-                                {formatCurrency(exp.amount, currency)}
+                                {formatCurrency(billing, currency)}
                               </td>
                               {visibility.showMargins && (
                                 <td className="px-4 py-3 text-right">
                                   <div className="text-right">
-                                    <div className="font-semibold text-gray-700">{formatCurrency(0, currency)}</div>
-                                    <div className="text-xs text-gray-600">0.0%</div>
+                                    <div className={`font-semibold ${margin >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
+                                      {formatCurrency(margin, currency)}
+                                    </div>
+                                    <div className={`text-xs ${margin >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                                      {marginPct.toFixed(1)}%
+                                    </div>
                                   </div>
                                 </td>
                               )}

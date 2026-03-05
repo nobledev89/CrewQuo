@@ -631,7 +631,7 @@ export interface Expense {
   // Expense details
   date: Timestamp;
   category: string;        // Expense category label
-  amount: number;
+  amount: number;          // What we pay the subcontractor (cost)
   description?: string;    // Optional notes/description (e.g., hotel name, details, etc.)
   
   // Quantity support (NEW) - allows flexible expense logging
@@ -639,12 +639,18 @@ export interface Expense {
   unitRate?: number;       // Rate per unit from rate card (e.g., £0.45 per mile, £50 per night)
   unitType?: string;       // Unit type from rate card (per_mile, per_day, per_unit, per_hour, flat)
   
+  // Billing & Margin (NEW) - support for expense markups
+  clientBillAmount?: number;    // What we charge the client
+  marginValue?: number;         // clientBillAmount - amount
+  marginPercentage?: number;    // (marginValue / clientBillAmount) * 100
+  
   // Rate card references
   payRateCardId: string;
   billRateCardId?: string;
   
   // Metadata
   currency: string;        // e.g., 'GBP'
+  status?: string;         // e.g., 'DRAFT', 'SUBMITTED', 'APPROVED'
   
   createdAt: Timestamp;
   updatedAt: Timestamp;

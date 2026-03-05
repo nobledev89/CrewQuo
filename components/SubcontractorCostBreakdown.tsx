@@ -252,6 +252,10 @@ export default function SubcontractorCostBreakdown({
 
                       {/* Expenses */}
                       {subcontractor.expenses.map((exp) => {
+                        const billing = exp.clientBillAmount ?? exp.amount; // Fall back to cost for backward compatibility
+                        const margin = billing - exp.amount;
+                        const marginPct = billing > 0 ? ((margin / billing) * 100) : 0;
+
                         return (
                           <tr key={`exp-${exp.id}`} className="hover:bg-gray-50 bg-gray-50">
                             <td className="px-4 py-3 text-gray-600">{formatDate(exp.date)}</td>
@@ -272,15 +276,15 @@ export default function SubcontractorCostBreakdown({
                               {formatCurrency(exp.amount, currency)}
                             </td>
                             <td className="px-4 py-3 text-right font-semibold text-green-700">
-                              {formatCurrency(exp.amount, currency)}
+                              {formatCurrency(billing, currency)}
                             </td>
                             <td className="px-4 py-3 text-right">
                               <div className="text-right">
-                                <div className="font-semibold text-gray-700">
-                                  {formatCurrency(0, currency)}
+                                <div className={`font-semibold ${margin >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
+                                  {formatCurrency(margin, currency)}
                                 </div>
-                                <div className="text-xs text-gray-600">
-                                  0.0%
+                                <div className={`text-xs ${margin >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                                  {marginPct.toFixed(1)}%
                                 </div>
                               </div>
                             </td>
