@@ -87,6 +87,13 @@ service cloud.firestore {
         request.auth.uid == userId ||
         hasAccessToCompany(resource.data.ownCompanyId)
       ));
+      // Allow queries during signup (before custom claims are set) - user can query by their own email
+      allow list: if authed() && (
+        isSuperAdmin() ||
+        hasAccessToCompany(resource.data.ownCompanyId) ||
+        // During signup: allow user to query by their own email
+        (request.auth.token.email != null && resource.data.email == request.auth.token.email)
+      );
       // Allow user creation during signup
       allow create: if request.auth.uid == userId;
       // Allow user to update their own document, admins in their own company, or super admin
@@ -436,6 +443,13 @@ service cloud.firestore {
         (request.auth.token.role != null && request.auth.token.role in ['ADMIN', 'MANAGER', 'SUPER_ADMIN']) ||
         // Client users can read users from their same org
         (request.auth.token.role == 'CLIENT' && resource.data.clientOrgId == request.auth.token.clientOrgId)
+      );
+      // Allow queries during signup (before custom claims are set) - user can query by their own userId
+      allow list: if authed() && (
+        (request.auth.token.role != null && request.auth.token.role in ['ADMIN', 'MANAGER', 'SUPER_ADMIN']) ||
+        (request.auth.token.role == 'CLIENT' && resource.data.clientOrgId == request.auth.token.clientOrgId) ||
+        // During signup: allow user to query by their own userId (before claims are set)
+        resource.data.userId == request.auth.uid
       );
       // Allow create during signup (before custom claims are set) or by contractors
       allow create: if authed() && (
