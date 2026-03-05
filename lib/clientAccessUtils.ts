@@ -408,3 +408,11 @@ export async function cancelClientUserInvite(inviteId: string): Promise<void> {
     cancelledAt: serverTimestamp(),
   });
 }
+
+/**
+ * Delete a client user invite
+ */
+export async function deleteClientUserInvite(inviteId: string): Promise<void> {
+  const { deleteDoc } = await import('firebase/firestore');
+  await deleteDoc(doc(db, 'clientUserInvites', inviteId));
+}

@@ -433,18 +433,18 @@ service cloud.firestore {
     match /clientUsers/{clientUserId} {
       allow read: if authed() && (
         // Contractors can read client users for their clients
-        userRole() in ['ADMIN', 'MANAGER', 'SUPER_ADMIN'] ||
+        (request.auth.token.role != null && request.auth.token.role in ['ADMIN', 'MANAGER', 'SUPER_ADMIN']) ||
         // Client users can read users from their same org
-        (userRole() == 'CLIENT' && resource.data.clientOrgId == request.auth.token.clientOrgId)
+        (request.auth.token.role == 'CLIENT' && resource.data.clientOrgId == request.auth.token.clientOrgId)
       );
       // Allow create during signup (before custom claims are set) or by contractors
       allow create: if authed() && (
-        userRole() in ['ADMIN', 'MANAGER'] ||
-        // During signup: user creating their own clientUser document
+        (request.auth.token.role != null && request.auth.token.role in ['ADMIN', 'MANAGER']) ||
+        // During signup: user creating their own clientUser document (before claims are set)
         request.resource.data.userId == request.auth.uid
       );
       allow update: if authed() && (
-        userRole() in ['ADMIN', 'MANAGER'] ||
+        (request.auth.token.role != null && request.auth.token.role in ['ADMIN', 'MANAGER']) ||
         resource.data.userId == request.auth.uid
       );
     }

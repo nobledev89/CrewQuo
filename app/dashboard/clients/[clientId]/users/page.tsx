@@ -15,7 +15,7 @@ import {
   updateDoc,
   serverTimestamp,
 } from 'firebase/firestore';
-import { UserPlus, Mail, CheckCircle, Clock, X, ArrowLeft, XCircle, Copy } from 'lucide-react';
+import { UserPlus, Mail, CheckCircle, Clock, X, ArrowLeft, XCircle, Copy, Trash2 } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import {
   getOrCreateClientOrganization,
@@ -23,6 +23,7 @@ import {
   createContractorClientRelationship,
   createClientUserInvite,
   cancelClientUserInvite,
+  deleteClientUserInvite,
 } from '@/lib/clientAccessUtils';
 
 interface Client {
@@ -151,6 +152,14 @@ export default function ClientUsersPage() {
         id: doc.id,
         ...doc.data(),
       } as Invite));
+      
+      // Sort by sentAt, newest first
+      invitesList.sort((a, b) => {
+        const aTime = a.sentAt?.toMillis ? a.sentAt.toMillis() : 0;
+        const bTime = b.sentAt?.toMillis ? b.sentAt.toMillis() : 0;
+        return bTime - aTime;
+      });
+      
       setInvites(invitesList);
     } catch (error) {
       console.error('Error fetching invites:', error);
@@ -257,6 +266,20 @@ export default function ClientUsersPage() {
     } catch (error) {
       console.error('Error cancelling invite:', error);
       alert('Failed to cancel invitation. Please try again.');
+    }
+  };
+
+  const handleDeleteInvite = async (inviteId: string, email: string) => {
+    if (!confirm(`Are you sure you want to permanently delete the invitation for ${email}?`)) {
+      return;
+    }
+
+    try {
+      await deleteClientUserInvite(inviteId);
+      await fetchInvites(companyId, clientId);
+    } catch (error) {
+      console.error('Error deleting invite:', error);
+      alert('Failed to delete invitation. Please try again.');
     }
   };
 
@@ -445,9 +468,20 @@ export default function ClientUsersPage() {
                         </p>
                       </div>
                     </div>
-                    <span className={`px-3 py-1 text-xs font-semibold rounded-full border ${getStatusColor(invite.status)}`}>
-                      {invite.status}
-                    </span>
+                    <div className="flex items-center space-x-2">
+                      <span className={`px-3 py-1 text-xs font-semibold rounded-full border ${getStatusColor(invite.status)}`}>
+                        {invite.status}
+                      </span>
+                      {canEdit && (invite.status === 'cancelled' || invite.status === 'expired') && (
+                        <button
+                          onClick={() => handleDeleteInvite(invite.id, invite.email)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                   
                   {invite.status === 'pending' && (invite as any).inviteToken && canEdit && (
