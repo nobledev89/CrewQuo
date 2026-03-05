@@ -437,7 +437,12 @@ service cloud.firestore {
         // Client users can read users from their same org
         (userRole() == 'CLIENT' && resource.data.clientOrgId == request.auth.token.clientOrgId)
       );
-      allow create: if authed() && userRole() in ['ADMIN', 'MANAGER'];
+      // Allow create during signup (before custom claims are set) or by contractors
+      allow create: if authed() && (
+        userRole() in ['ADMIN', 'MANAGER'] ||
+        // During signup: user creating their own clientUser document
+        request.resource.data.userId == request.auth.uid
+      );
       allow update: if authed() && (
         userRole() in ['ADMIN', 'MANAGER'] ||
         resource.data.userId == request.auth.uid
