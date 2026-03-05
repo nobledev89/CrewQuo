@@ -776,6 +776,71 @@ export const validateInviteToken = functions.https.onCall(async (data, context) 
 });
 
 /**
+ * Validate Client User Invite Token
+ * Callable function that validates a client invite token without requiring authentication
+ * This bypasses Firestore security rules by using Admin SDK
+ */
+export const validateClientInviteToken = functions.https.onCall(async (data, context) => {
+  const { token } = data;
+
+  if (!token || typeof token !== 'string') {
+    throw new functions.https.HttpsError('invalid-argument', 'Token is required');
+  }
+
+  try {
+    // Query for client user invite with this token
+    const invitesSnap = await db
+      .collection('clientUserInvites')
+      .where('inviteToken', '==', token)
+      .where('status', '==', 'pending')
+      .limit(1)
+      .get();
+
+    if (invitesSnap.empty) {
+      return {
+        valid: false,
+        error: 'This invitation is invalid or has expired',
+      };
+    }
+
+    const inviteDoc = invitesSnap.docs[0];
+    const invite = inviteDoc.data();
+
+    // Check if expired
+    const now = new Date();
+    const expiresAt = invite.expiresAt ? invite.expiresAt.toDate() : null;
+    
+    if (expiresAt && expiresAt < now) {
+      // Mark as expired
+      await db.collection('clientUserInvites').doc(inviteDoc.id).update({
+        status: 'expired',
+      });
+      
+      return {
+        valid: false,
+        error: 'This invitation has expired',
+      };
+    }
+
+    // Return the invite data needed for signup
+    return {
+      valid: true,
+      invite: {
+        id: inviteDoc.id,
+        email: invite.email,
+        contractorCompanyId: invite.contractorCompanyId,
+        contractorCompanyName: invite.contractorCompanyName,
+        clientOrgId: invite.clientOrgId,
+        clientOrgName: invite.clientOrgName,
+      },
+    };
+  } catch (error: any) {
+    console.error('Error validating client invite token:', error);
+    throw new functions.https.HttpsError('internal', 'Failed to validate invite token');
+  }
+});
+
+/**
  * Send Subcontractor Invite Email
  * Callable function to send invite email to a subcontractor
  * 

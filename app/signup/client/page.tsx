@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, getDoc, addDoc, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, addDoc, updateDoc, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { getInviteByToken, acceptClientUserInvite } from '@/lib/clientAccessUtils';
 import type { ClientUserInvite } from '@/lib/types';
@@ -33,22 +33,33 @@ function ClientSignupForm() {
       return;
     }
 
-    // Validate token
-    getInviteByToken(token)
-      .then((inviteData) => {
-        if (!inviteData) {
-          setError('This invitation is invalid or has expired. Please contact your contractor for a new invitation.');
-        } else {
-          setInvite(inviteData);
-        }
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error('Error validating invite:', err);
-        setError('Failed to validate invitation. Please try again.');
-        setLoading(false);
-      });
+    // Validate token using Cloud Function (bypasses security rules)
+    validateToken();
   }, [token]);
+
+  const validateToken = async () => {
+    try {
+      const { httpsCallable } = await import('firebase/functions');
+      const { functions } = await import('@/lib/firebase');
+      
+      const validateClientInviteToken = httpsCallable(functions, 'validateClientInviteToken');
+      const result = await validateClientInviteToken({ token });
+      
+      const data = result.data as any;
+      
+      if (!data.valid) {
+        setError(data.error || 'This invitation is invalid or has expired');
+        setInvite(null);
+      } else {
+        setInvite({ id: data.invite.id, ...data.invite } as ClientUserInvite);
+      }
+    } catch (err: any) {
+      console.error('Error validating invite:', err);
+      setError('Failed to validate invitation. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -80,58 +91,13 @@ function ClientSignupForm() {
     setSubmitting(true);
 
     try {
-      // Check if user already exists with this email
-      const existingUserQuery = query(
-        collection(db, 'users'),
-        where('email', '==', invite.email)
-      );
-      const existingUserSnap = await getDocs(existingUserQuery);
-
-      let userId: string;
-      let isExistingUser = false;
-
-      if (!existingUserSnap.empty) {
-        // User already exists - add contractor access
-        userId = existingUserSnap.docs[0].id;
-        isExistingUser = true;
-
-        // Get existing clientUser
-        const clientUserQuery = query(
-          collection(db, 'clientUsers'),
-          where('userId', '==', userId)
-        );
-        const clientUserSnap = await getDocs(clientUserQuery);
-
-        if (!clientUserSnap.empty) {
-          // Update existing clientUser - add contractor
-          const clientUserDoc = clientUserSnap.docs[0];
-          const existingData = clientUserDoc.data();
-          const contractorIds = existingData.contractorCompanyIds || [];
-
-          if (!contractorIds.includes(invite.contractorCompanyId)) {
-            await setDoc(doc(db, 'clientUsers', clientUserDoc.id), {
-              ...existingData,
-              contractorCompanyIds: [...contractorIds, invite.contractorCompanyId],
-              updatedAt: serverTimestamp(),
-            }, { merge: true });
-          }
-        }
-
-        // Accept invite
-        await acceptClientUserInvite(invite.id, userId);
-
-        alert(`Welcome back! Access to ${invite.contractorCompanyName} has been added to your account.`);
-        router.push('/dashboard/client-portal');
-        return;
-      }
-
       // Create new user
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         invite.email,
         formData.password
       );
-      userId = userCredential.user.uid;
+      const userId = userCredential.user.uid;
 
       // Create user document
       await setDoc(doc(db, 'users', userId), {
@@ -162,11 +128,27 @@ function ClientSignupForm() {
         updatedAt: serverTimestamp(),
       });
 
-      // Accept invite
-      await acceptClientUserInvite(invite.id, userId);
+      // Accept invite (update invite status to accepted)
+      await updateDoc(doc(db, 'clientUserInvites', invite.id), {
+        status: 'accepted',
+        acceptedAt: serverTimestamp(),
+      });
 
-      // TODO: Set custom claims via Cloud Function
-      console.log('User created successfully. Custom claims will be set on next login.');
+      // Refresh custom claims via Cloud Function
+      try {
+        const { httpsCallable } = await import('firebase/functions');
+        const { functions } = await import('@/lib/firebase');
+        const refreshClaims = httpsCallable(functions, 'refreshClaims');
+        await refreshClaims();
+        
+        // Force token refresh on the client side
+        await userCredential.user.getIdToken(true);
+        
+        console.log('Custom claims refreshed successfully');
+      } catch (claimsError) {
+        console.error('Error refreshing claims:', claimsError);
+        // Continue anyway - claims will be set by the trigger eventually
+      }
 
       alert('Account created successfully! Welcome to the Client Portal.');
       router.push('/dashboard/client-portal');
