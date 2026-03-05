@@ -459,6 +459,10 @@ service cloud.firestore {
     
     // Client User Invites
     match /clientUserInvites/{inviteId} {
+      // Allow unauthenticated queries for invite validation (similar to subcontractor invites)
+      allow get: if !authed() && resource.data.inviteToken != null && resource.data.status == 'pending';
+      allow list: if !authed(); // Allow queries for invite token validation
+      
       allow read: if authed() && (
         // Contractor can read their sent invites
         resource.data.contractorCompanyId == ownCompanyId() ||
@@ -469,11 +473,14 @@ service cloud.firestore {
         userRole() in ['ADMIN', 'MANAGER'] &&
         request.resource.data.contractorCompanyId == ownCompanyId();
       allow update: if authed() && (
-        // Contractor can update
+        // Contractor can update (cancel invites)
         resource.data.contractorCompanyId == ownCompanyId() ||
         // User accepting invite
         resource.data.email == request.auth.token.email
       );
+      allow delete: if authed() && 
+        resource.data.contractorCompanyId == ownCompanyId() &&
+        userRole() in ['ADMIN', 'MANAGER'];
     }
     
     // Client Project Access

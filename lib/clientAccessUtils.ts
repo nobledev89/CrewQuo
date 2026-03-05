@@ -398,3 +398,13 @@ export async function acceptClientUserInvite(
     acceptedAt: serverTimestamp(),
   });
 }
+
+/**
+ * Cancel a client user invite
+ */
+export async function cancelClientUserInvite(inviteId: string): Promise<void> {
+  await updateDoc(doc(db, 'clientUserInvites', inviteId), {
+    status: 'cancelled',
+    cancelledAt: serverTimestamp(),
+  });
+}

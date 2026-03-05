@@ -22,6 +22,7 @@ import {
   linkClientToOrganization,
   createContractorClientRelationship,
   createClientUserInvite,
+  cancelClientUserInvite,
 } from '@/lib/clientAccessUtils';
 
 interface Client {
@@ -245,6 +246,20 @@ export default function ClientUsersPage() {
     }, 1500);
   };
 
+  const handleCancelInvite = async (inviteId: string, email: string) => {
+    if (!confirm(`Are you sure you want to cancel the invitation for ${email}?`)) {
+      return;
+    }
+
+    try {
+      await cancelClientUserInvite(inviteId);
+      await fetchInvites(companyId, clientId);
+    } catch (error) {
+      console.error('Error cancelling invite:', error);
+      alert('Failed to cancel invitation. Please try again.');
+    }
+  };
+
   const formatDate = (timestamp: any) => {
     if (!timestamp) return 'N/A';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -438,13 +453,22 @@ export default function ClientUsersPage() {
                   {invite.status === 'pending' && (invite as any).inviteToken && canEdit && (
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                       <p className="text-xs text-gray-600 mb-2">Invite Link:</p>
-                      <button
-                        onClick={() => copyInviteLink((invite as any).inviteToken)}
-                        className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 transition text-sm"
-                      >
-                        <Copy className="w-4 h-4" />
-                        <span>{copiedToken === (invite as any).inviteToken ? 'Copied!' : 'Copy Invite Link'}</span>
-                      </button>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => copyInviteLink((invite as any).inviteToken)}
+                          className="flex-1 flex items-center justify-center space-x-2 px-3 py-2 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 transition text-sm"
+                        >
+                          <Copy className="w-4 h-4" />
+                          <span>{copiedToken === (invite as any).inviteToken ? 'Copied!' : 'Copy Link'}</span>
+                        </button>
+                        <button
+                          onClick={() => handleCancelInvite(invite.id, invite.email)}
+                          className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm"
+                          title="Cancel Invitation"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

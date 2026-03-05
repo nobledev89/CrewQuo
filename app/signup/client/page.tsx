@@ -7,7 +7,7 @@ import { doc, setDoc, getDoc, addDoc, collection, query, where, getDocs, serverT
 import { auth, db } from '@/lib/firebase';
 import { getInviteByToken, acceptClientUserInvite } from '@/lib/clientAccessUtils';
 import type { ClientUserInvite } from '@/lib/types';
-import { Building2, Mail, Lock, User, CheckCircle, X } from 'lucide-react';
+import { Building2, Mail, Lock, User, CheckCircle, X, XCircle } from 'lucide-react';
 
 function ClientSignupForm() {
   const router = useRouter();
@@ -197,17 +197,36 @@ function ClientSignupForm() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <X className="w-8 h-8 text-red-600" />
+          <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <XCircle className="w-12 h-12 text-red-600" />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Invalid Invitation</h2>
-          <p className="text-gray-600 mb-6">{error}</p>
-          <button
-            onClick={() => router.push('/login')}
-            className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-          >
-            Go to Login
-          </button>
+          <h2 className="text-2xl font-bold text-gray-900 mb-3">Invitation Link Expired</h2>
+          <p className="text-gray-600 mb-2">Sorry, this invitation link is no longer valid.</p>
+          <p className="text-sm text-gray-500 mb-6">
+            This may have happened because the link has expired, was cancelled, or has already been used.
+          </p>
+          
+          <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 mb-6">
+            <p className="text-sm text-blue-800 font-semibold mb-2">📧 Need a new invitation?</p>
+            <p className="text-xs text-blue-700">
+              Please contact your contractor to send you a new invitation link.
+            </p>
+          </div>
+
+          <div className="flex flex-col space-y-2">
+            <button
+              onClick={() => router.push('/login')}
+              className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
+            >
+              Go to Login
+            </button>
+            <button
+              onClick={() => router.push('/')}
+              className="w-full px-4 py-3 text-gray-700 hover:bg-gray-100 rounded-lg transition"
+            >
+              Back to Home
+            </button>
+          </div>
         </div>
       </div>
     );
