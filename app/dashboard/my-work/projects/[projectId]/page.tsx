@@ -487,12 +487,77 @@ export default function ProjectDetailPage() {
       }
     ) || undefined;
 
-  const payRate = selectedRateEntry
-    ? (selectedRateEntry.subcontractorRate ?? selectedRateEntry.hourlyRate ?? selectedRateEntry.baseRate ?? 0)
-    : 0;
-  const billRate = matchingBillEntry
-    ? (matchingBillEntry.clientRate ?? matchingBillEntry.hourlyRate ?? matchingBillEntry.baseRate ?? payRate)
-    : (selectedRateEntry?.clientRate ?? payRate);
+  // Calculate the rate that applies to the START TIME (not just the first entry)
+  const getApplicableRate = () => {
+    if (!selectedRateEntry) return { pay: 0, bill: 0 };
+    
+    // If there's only one rate entry, use it
+    if (selectedRoleEntries.length === 1) {
+      const pay = selectedRateEntry.subcontractorRate ?? selectedRateEntry.hourlyRate ?? selectedRateEntry.baseRate ?? 0;
+      const bill = matchingBillEntry
+        ? (matchingBillEntry.clientRate ?? matchingBillEntry.hourlyRate ?? matchingBillEntry.baseRate ?? pay)
+        : (selectedRateEntry?.clientRate ?? pay);
+      return { pay, bill };
+    }
+    
+    // If there are multiple time-based rates and we have a start time, find the matching one
+    if (selectedRoleEntries.length > 1 && logForm.startTime && logForm.date && rateCardTemplate?.timeframeDefinitions) {
+      const startMinutes = parseInt(logForm.startTime.split(':')[0]) * 60 + parseInt(logForm.startTime.split(':')[1]);
+      
+      // Get day of week
+      const dateObj = new Date(logForm.date);
+      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      const dayOfWeek = dayNames[dateObj.getDay()];
+      
+      // Find the rate entry that applies to this start time
+      for (const rateEntry of selectedRoleEntries) {
+        if (rateEntry.timeframeId && rateCardTemplate.timeframeDefinitions) {
+          const timeframeDef = rateCardTemplate.timeframeDefinitions.find(
+            (tf: any) => tf.id === rateEntry.timeframeId
+          );
+          
+          if (timeframeDef) {
+            const tfStartMinutes = parseInt(timeframeDef.startTime.split(':')[0]) * 60 + parseInt(timeframeDef.startTime.split(':')[1]);
+            let tfEndMinutes = parseInt(timeframeDef.endTime.split(':')[0]) * 60 + parseInt(timeframeDef.endTime.split(':')[1]);
+            
+            // Handle overnight ranges
+            if (tfEndMinutes <= tfStartMinutes) {
+              tfEndMinutes += 24 * 60;
+            }
+            
+            // Check if start time falls within this timeframe
+            const isInTimeRange = startMinutes >= tfStartMinutes && startMinutes < tfEndMinutes;
+            
+            // Check day restrictions
+            let dayMatches = true;
+            if (timeframeDef.applicableDays && timeframeDef.applicableDays.length > 0) {
+              dayMatches = timeframeDef.applicableDays.includes(dayOfWeek as any);
+            }
+            
+            if (isInTimeRange && dayMatches) {
+              const pay = rateEntry.subcontractorRate ?? rateEntry.hourlyRate ?? rateEntry.baseRate ?? 0;
+              const matchingBill = billCard?.rates?.find(
+                (r: any) => r.roleName === rateEntry.roleName && r.timeframeId === rateEntry.timeframeId
+              );
+              const bill = matchingBill
+                ? (matchingBill.clientRate ?? matchingBill.hourlyRate ?? matchingBill.baseRate ?? pay)
+                : (rateEntry.clientRate ?? pay);
+              return { pay, bill };
+            }
+          }
+        }
+      }
+    }
+    
+    // Fallback to first entry
+    const pay = selectedRateEntry.subcontractorRate ?? selectedRateEntry.hourlyRate ?? selectedRateEntry.baseRate ?? 0;
+    const bill = matchingBillEntry
+      ? (matchingBillEntry.clientRate ?? matchingBillEntry.hourlyRate ?? matchingBillEntry.baseRate ?? pay)
+      : (selectedRateEntry?.clientRate ?? pay);
+    return { pay, bill };
+  };
+  
+  const { pay: payRate, bill: billRate } = getApplicableRate();
 
   // Calculate cost using useMemo to avoid infinite re-renders
   const { calculatedLog, calculationBreakdown } = useMemo(() => {
