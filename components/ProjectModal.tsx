@@ -398,6 +398,48 @@ export default function ProjectModal({
       const activeCompanyId = userData?.activeCompanyId || userData?.companyId;
       const subRole = userData?.subcontractorRoles?.[activeCompanyId];
 
+      // Calculate client billing amount
+      let clientBillAmount = finalAmount; // Default to pass-through (cost = billing)
+      let marginValue = 0;
+      let marginPercentage = 0;
+
+      // Get the actual expense entry from the pay card for fallback
+      const payExpense = payCard?.expenses?.find((e: any) => e.id === selectedExpense.key);
+
+      // Find matching expense in bill card to get markup/client rate (if bill card exists)
+      if (billCard?.expenses) {
+        const matchingBillExpense = billCard.expenses.find(
+          (e: any) => e.categoryName === selectedExpense.label
+        );
+
+        if (matchingBillExpense) {
+          if (isCappedExpense) {
+            // For CAPPED expenses: apply markup percentage to actual amount
+            const markupPct = matchingBillExpense.marginPercentage || 0;
+            clientBillAmount = finalAmount * (1 + markupPct / 100);
+          } else {
+            // For FIXED expenses: use client rate
+            const clientRate = matchingBillExpense.clientRate || matchingBillExpense.rate || finalAmount / expenseForm.quantity;
+            clientBillAmount = clientRate * expenseForm.quantity;
+          }
+        }
+      } else if (payExpense) {
+        // FALLBACK: Use pay card's expense entry (same as labour uses selectedRateEntry.clientRate)
+        if (isCappedExpense) {
+          // For CAPPED expenses: apply markup percentage from pay card to actual amount
+          const markupPct = payExpense.marginPercentage || 0;
+          clientBillAmount = finalAmount * (1 + markupPct / 100);
+        } else {
+          // For FIXED expenses: use client rate from pay card
+          const clientRate = payExpense.clientRate || payExpense.rate || finalAmount / expenseForm.quantity;
+          clientBillAmount = clientRate * expenseForm.quantity;
+        }
+      }
+
+      // Calculate margin
+      marginValue = clientBillAmount - finalAmount;
+      marginPercentage = clientBillAmount > 0 ? (marginValue / clientBillAmount) * 100 : 0;
+
       await addDoc(collection(db, 'expenses'), {
         companyId: activeCompanyId,
         projectId: project.projectId,
@@ -406,6 +448,9 @@ export default function ProjectModal({
         date: new Date(expenseForm.date),
         category: selectedExpense.label,
         amount: finalAmount,
+        clientBillAmount: clientBillAmount,
+        marginValue: marginValue,
+        marginPercentage: marginPercentage,
         description: expenseForm.description || '',
         quantity: expenseForm.quantity,
         unitRate: isCappedExpense ? (finalAmount / expenseForm.quantity) : selectedExpense.rate,

@@ -867,10 +867,13 @@ export default function ProjectDetailPage() {
       let marginValue = 0;
       let marginPercentage = 0;
 
-      // Find matching expense in bill card to get markup/client rate
+      // Get the actual expense entry from the pay card for fallback
+      const payExpense = payCard?.expenses?.find((e: any) => e.id === selectedExpense.key);
+
+      // Find matching expense in bill card to get markup/client rate (if bill card exists)
       if (billCard?.expenses) {
         const matchingBillExpense = billCard.expenses.find(
-          (e: any) => e.categoryName === selectedExpense.label || e.categoryId === selectedExpense.key
+          (e: any) => e.categoryName === selectedExpense.label
         );
 
         if (matchingBillExpense) {
@@ -883,6 +886,17 @@ export default function ProjectDetailPage() {
             const clientRate = matchingBillExpense.clientRate || matchingBillExpense.rate || finalAmount / expenseForm.quantity;
             clientBillAmount = clientRate * expenseForm.quantity;
           }
+        }
+      } else if (payExpense) {
+        // FALLBACK: Use pay card's expense entry (same as labour uses selectedRateEntry.clientRate)
+        if (isCappedExpense) {
+          // For CAPPED expenses: apply markup percentage from pay card to actual amount
+          const markupPct = payExpense.marginPercentage || 0;
+          clientBillAmount = finalAmount * (1 + markupPct / 100);
+        } else {
+          // For FIXED expenses: use client rate from pay card
+          const clientRate = payExpense.clientRate || payExpense.rate || finalAmount / expenseForm.quantity;
+          clientBillAmount = clientRate * expenseForm.quantity;
         }
       }
 
@@ -1160,7 +1174,7 @@ export default function ProjectDetailPage() {
           let marginValue = 0;
           let marginPercentage = 0;
 
-          // Find matching expense in bill card to get markup/client rate
+          // Find matching expense in bill card to get markup/client rate (if bill card exists)
           if (billCard?.expenses) {
             const matchingBillExpense = billCard.expenses.find(
               (e: any) => e.categoryName === exp.category
@@ -1176,6 +1190,17 @@ export default function ProjectDetailPage() {
                 const clientRate = matchingBillExpense.clientRate || matchingBillExpense.rate || newAmount / quantity;
                 clientBillAmount = clientRate * quantity;
               }
+            }
+          } else if (matchingPayExpense) {
+            // FALLBACK: Use pay card's expense entry (same as labour uses selectedRateEntry.clientRate)
+            if (rateType === 'CAPPED') {
+              // For CAPPED expenses: apply markup percentage from pay card to actual amount
+              const markupPct = matchingPayExpense.marginPercentage || 0;
+              clientBillAmount = newAmount * (1 + markupPct / 100);
+            } else {
+              // For FIXED expenses: use client rate from pay card
+              const clientRate = matchingPayExpense.clientRate || matchingPayExpense.rate || newAmount / quantity;
+              clientBillAmount = clientRate * quantity;
             }
           }
 
