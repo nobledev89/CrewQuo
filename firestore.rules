@@ -142,7 +142,13 @@ service cloud.firestore {
       allow list: if !authed(); // Allow queries for invite token validation
       
       // Authenticated users can see subcontractors - in own company or companies they work for
-      allow read: if authed() && hasAccessToCompany(resource.data.companyId);
+      allow read: if authed() && (
+        hasAccessToCompany(resource.data.companyId) ||
+        // CLIENT users can read subcontractors for contractors they have access to
+        (userRole() == 'CLIENT' && 
+         request.auth.token.contractorCompanyIds != null &&
+         resource.data.companyId in request.auth.token.contractorCompanyIds)
+      );
       
       // Can only create in own company
       allow create: if authed() 
@@ -193,7 +199,13 @@ service cloud.firestore {
     // Projects
     match /projects/{projectId} {
       // Allow read if user has access to the company
-      allow read: if authed() && hasAccessToCompany(resource.data.companyId);
+      allow read: if authed() && (
+        hasAccessToCompany(resource.data.companyId) ||
+        // CLIENT users can read projects if they have access via contractorCompanyIds
+        (userRole() == 'CLIENT' && 
+         request.auth.token.contractorCompanyIds != null &&
+         resource.data.companyId in request.auth.token.contractorCompanyIds)
+      );
       // Can only create in own company
       allow create: if authed() 
         && sameActiveCompany(request.resource.data) 
@@ -219,7 +231,11 @@ service cloud.firestore {
         sameActiveCompany(resource.data) ||
         // Subcontractor: can ONLY see their own assignments
         (hasAccessToCompany(resource.data.companyId) && 
-         resource.data.subcontractorId == subcontractorIdForActiveCompany())
+         resource.data.subcontractorId == subcontractorIdForActiveCompany()) ||
+        // CLIENT users can read assignments for projects they have access to
+        (userRole() == 'CLIENT' && 
+         request.auth.token.contractorCompanyIds != null &&
+         resource.data.companyId in request.auth.token.contractorCompanyIds)
       );
       // Can only create in own company - prevent duplicates by checking no existing assignment
       allow create: if authed() 
@@ -273,7 +289,13 @@ service cloud.firestore {
     
     // Time Logs
     match /timeLogs/{timeLogId} {
-      allow read: if authed() && sameActiveCompany(resource.data);
+      allow read: if authed() && (
+        sameActiveCompany(resource.data) ||
+        // CLIENT users can read time logs for projects they have access to
+        (userRole() == 'CLIENT' && 
+         request.auth.token.contractorCompanyIds != null &&
+         resource.data.companyId in request.auth.token.contractorCompanyIds)
+      );
       
       allow create: if authed()
         && sameActiveCompany(request.resource.data)
@@ -319,7 +341,13 @@ service cloud.firestore {
     
     // Expenses
     match /expenses/{expenseId} {
-      allow read: if authed() && sameActiveCompany(resource.data);
+      allow read: if authed() && (
+        sameActiveCompany(resource.data) ||
+        // CLIENT users can read expenses for projects they have access to
+        (userRole() == 'CLIENT' && 
+         request.auth.token.contractorCompanyIds != null &&
+         resource.data.companyId in request.auth.token.contractorCompanyIds)
+      );
       
       allow create: if authed()
         && sameActiveCompany(request.resource.data)
@@ -365,7 +393,13 @@ service cloud.firestore {
     
     // Project Submissions
     match /projectSubmissions/{submissionId} {
-      allow read: if authed() && sameActiveCompany(resource.data);
+      allow read: if authed() && (
+        sameActiveCompany(resource.data) ||
+        // CLIENT users can read submissions for projects they have access to
+        (userRole() == 'CLIENT' && 
+         request.auth.token.contractorCompanyIds != null &&
+         resource.data.companyId in request.auth.token.contractorCompanyIds)
+      );
       
       allow create: if authed()
         && sameActiveCompany(request.resource.data)
