@@ -4,7 +4,7 @@ import { Timestamp } from 'firebase/firestore';
 // CORE TYPES
 // ============================================
 
-export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'SUBCONTRACTOR';
+export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'SUBCONTRACTOR' | 'CLIENT';
 
 export type SubscriptionPlan = 'free' | 'starter' | 'professional' | 'enterprise';
 
@@ -32,22 +32,27 @@ export interface User {
   firstName: string;
   lastName: string;
   
-  // Company relationships
-  ownCompanyId: string;      // Their primary company
-  activeCompanyId: string;   // Currently viewing company
-  companyId: string;         // Legacy field (= ownCompanyId)
+  // Company relationships (for contractors/admins/managers)
+  ownCompanyId?: string;      // Their primary company (not set for CLIENT role)
+  activeCompanyId?: string;   // Currently viewing company (not set for CLIENT role)
+  companyId?: string;         // Legacy field (= ownCompanyId)
   
-  // Role in their OWN company
+  // Role in their OWN company (or CLIENT for client portal users)
   role: UserRole;
   
+  // Client organization (for CLIENT role only)
+  clientOrgId?: string;       // Which client organization they belong to
+  clientOrgName?: string;     // Denormalized
+  contractorCompanyIds?: string[];  // Contractors they have access to (CLIENT role only)
+  
   // Subcontractor relationships with OTHER companies
-  subcontractorRoles: {
+  subcontractorRoles?: {
     [companyId: string]: SubcontractorRole;
   };
   
-  // Subscription (applies to own company only)
-  subscriptionPlan: SubscriptionPlan;
-  subscriptionStatus: SubscriptionStatus;
+  // Subscription (applies to own company only - not for CLIENT role)
+  subscriptionPlan?: SubscriptionPlan;
+  subscriptionStatus?: SubscriptionStatus;
   
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -119,7 +124,7 @@ export interface Invite {
 }
 
 // ============================================
-// CLIENT MODEL
+// CLIENT MODEL (Contractor's client records)
 // ============================================
 
 export interface Client {
@@ -132,6 +137,151 @@ export interface Client {
   notes: string;
   active: boolean;
   companyId: string;
+  
+  // Link to global client organization (optional - for multi-contractor support)
+  clientOrgId?: string;
+  clientOrgName?: string;  // Denormalized
+  
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// ============================================
+// CLIENT ORGANIZATION MODEL (Global - shared across contractors)
+// ============================================
+
+export interface ClientOrganization {
+  id: string;
+  name: string;                // "ABC Corporation"
+  domain?: string;             // "abccorp.com" (for auto-matching invites)
+  taxId?: string;
+  address?: string;
+  notes?: string;
+  
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  createdBy: string;           // First contractor userId who created it
+}
+
+// ============================================
+// CLIENT USER MODEL (Portal users for client companies)
+// ============================================
+
+export type ClientUserRole = 'VIEWER' | 'ADMIN';
+
+export interface ClientUser {
+  id: string;
+  userId: string;              // Links to users collection
+  clientOrgId: string;         // Links to clientOrganizations
+  clientOrgName?: string;      // Denormalized
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: ClientUserRole;        // Within their organization
+  active: boolean;
+  
+  // Track which contractors they have access to (denormalized for quick lookup)
+  contractorCompanyIds: string[];  // ["contractor-a-id", "contractor-b-id"]
+  
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// ============================================
+// CONTRACTOR-CLIENT RELATIONSHIP MODEL
+// ============================================
+
+export interface ContractorClientRelationship {
+  id: string;  // e.g., "contractorA_clientOrgABC"
+  contractorCompanyId: string;   // Main contractor's company
+  contractorCompanyName: string; // Denormalized for display
+  clientOrgId: string;           // Client organization
+  clientOrgName: string;         // Denormalized
+  
+  // Default settings for this contractor-client relationship
+  defaultShowCosts: boolean;
+  defaultShowMargins: boolean;
+  defaultShowSubcontractorRates: boolean;
+  allowClientNotes: boolean;
+  showDraftStatus: boolean;
+  showRejectedStatus: boolean;
+  
+  // Which contractor's client record this maps to
+  contractorClientId: string;    // Links to existing 'clients' collection
+  
+  active: boolean;
+  createdAt: Timestamp;
+  createdBy: string;             // Contractor user who created relationship
+  updatedAt: Timestamp;
+}
+
+// ============================================
+// CLIENT USER INVITE MODEL
+// ============================================
+
+export interface ClientUserInvite {
+  id: string;
+  email: string;
+  contractorCompanyId: string;
+  contractorCompanyName: string;
+  clientOrgId: string;
+  clientOrgName: string;
+  
+  invitedBy: string;             // Contractor userId
+  inviteToken: string;
+  status: InviteStatus;
+  
+  sentAt: Timestamp;
+  acceptedAt?: Timestamp;
+  expiresAt: Timestamp;
+}
+
+// ============================================
+// CLIENT PROJECT ACCESS MODEL
+// ============================================
+
+export interface ClientProjectAccess {
+  id: string;
+  contractorCompanyId: string;   // Which contractor owns the project
+  clientOrgId: string;           // Which client org has access
+  projectId: string;
+  projectName?: string;          // Denormalized
+  
+  grantedBy: string;             // Contractor userId
+  grantedAt: Timestamp;
+  
+  // Per-project visibility overrides (optional, falls back to relationship defaults)
+  overrideShowCosts?: boolean;
+  overrideShowMargins?: boolean;
+  overrideShowSubcontractorRates?: boolean;
+  
+  active: boolean;
+}
+
+// ============================================
+// LINE ITEM NOTE MODEL (Client collaboration)
+// ============================================
+
+export type NoteCreatorRole = 'CLIENT' | 'ADMIN' | 'MANAGER';
+
+export interface LineItemNote {
+  id: string;
+  itemId: string;              // timeLog or expense ID
+  itemType: 'timeLog' | 'expense';
+  projectId: string;
+  clientOrgId: string;         // Which client org (not contractor's clientId)
+  contractorCompanyId: string;
+  
+  // Who added the note
+  createdBy: string;           // userId
+  createdByRole: NoteCreatorRole;
+  createdByName: string;
+  
+  note: string;
+  isResolved: boolean;
+  resolvedBy?: string;
+  resolvedAt?: Timestamp;
+  
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -547,10 +697,16 @@ export interface ProjectSubmission {
 // ============================================
 
 export interface CustomClaims {
-  ownCompanyId: string;
-  activeCompanyId: string;
+  ownCompanyId?: string;       // Not set for CLIENT role
+  activeCompanyId?: string;    // Not set for CLIENT role
   role: UserRole;
   isSuperAdmin?: boolean;
+  
+  // For CLIENT role
+  clientOrgId?: string;        // Which client organization
+  contractorCompanyIds?: string[];  // Contractors they can access
+  
+  // For SUBCONTRACTOR role
   subcontractorRoles?: {
     [companyId: string]: {
       subcontractorId: string;

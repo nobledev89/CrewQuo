@@ -107,6 +107,14 @@ function DashboardContent({ children }: DashboardLayoutProps) {
 
   // Navigation items - contextual based on workspace
   const getNavItems = () => {
+    // CLIENT role - simplified navigation
+    if (userData?.role === 'CLIENT') {
+      return [
+        { name: 'My Projects', href: '/dashboard/client-portal', icon: Briefcase },
+      ];
+    }
+
+    // SUBCONTRACTOR role
     if (isActingAsSubcontractor()) {
       return [
         { name: 'Summary', href: '/dashboard/my-work/summary', icon: BarChart3 },
@@ -115,6 +123,7 @@ function DashboardContent({ children }: DashboardLayoutProps) {
       ];
     }
 
+    // ADMIN/MANAGER role
     const baseItems = [
       { name: 'Dashboard', href: '/dashboard', icon: Home },
     ];

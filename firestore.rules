@@ -412,5 +412,109 @@ service cloud.firestore {
         && isOwnCompany()
         && isAdminOrManager();
     }
+    
+    // ============================================
+    // CLIENT ACCESS COLLECTIONS
+    // ============================================
+    
+    // Client Organizations (Global)
+    match /clientOrganizations/{orgId} {
+      allow read: if authed() && (
+        // Contractors can read any org (for searching/linking)
+        userRole() in ['ADMIN', 'MANAGER', 'SUPER_ADMIN'] ||
+        // Clients can read their own org
+        (userRole() == 'CLIENT' && request.auth.token.clientOrgId == orgId)
+      );
+      allow create: if authed() && userRole() in ['ADMIN', 'MANAGER'];
+      allow update: if authed() && userRole() in ['ADMIN', 'MANAGER'];
+    }
+    
+    // Client Users
+    match /clientUsers/{clientUserId} {
+      allow read: if authed() && (
+        // Contractors can read client users for their clients
+        userRole() in ['ADMIN', 'MANAGER', 'SUPER_ADMIN'] ||
+        // Client users can read users from their same org
+        (userRole() == 'CLIENT' && resource.data.clientOrgId == request.auth.token.clientOrgId)
+      );
+      allow create: if authed() && userRole() in ['ADMIN', 'MANAGER'];
+      allow update: if authed() && (
+        userRole() in ['ADMIN', 'MANAGER'] ||
+        resource.data.userId == request.auth.uid
+      );
+    }
+    
+    // Contractor-Client Relationships
+    match /contractorClientRelationships/{relationshipId} {
+      allow read: if authed() && (
+        // Contractor can read their own relationships
+        resource.data.contractorCompanyId == ownCompanyId() ||
+        // Client can read relationships for their org
+        (userRole() == 'CLIENT' && resource.data.clientOrgId == request.auth.token.clientOrgId)
+      );
+      allow write: if authed() && 
+        userRole() in ['ADMIN', 'MANAGER'] &&
+        request.resource.data.contractorCompanyId == ownCompanyId();
+    }
+    
+    // Client User Invites
+    match /clientUserInvites/{inviteId} {
+      allow read: if authed() && (
+        // Contractor can read their sent invites
+        resource.data.contractorCompanyId == ownCompanyId() ||
+        // Invited user can read by email
+        resource.data.email == request.auth.token.email
+      );
+      allow create: if authed() && 
+        userRole() in ['ADMIN', 'MANAGER'] &&
+        request.resource.data.contractorCompanyId == ownCompanyId();
+      allow update: if authed() && (
+        // Contractor can update
+        resource.data.contractorCompanyId == ownCompanyId() ||
+        // User accepting invite
+        resource.data.email == request.auth.token.email
+      );
+    }
+    
+    // Client Project Access
+    match /clientProjectAccess/{accessId} {
+      allow read: if authed() && (
+        // Contractor can read their own access grants
+        resource.data.contractorCompanyId == ownCompanyId() ||
+        // Client can read if they're part of the clientOrg and have access to this contractor
+        (userRole() == 'CLIENT' && 
+         resource.data.clientOrgId == request.auth.token.clientOrgId &&
+         resource.data.contractorCompanyId in request.auth.token.contractorCompanyIds)
+      );
+      allow write: if authed() && 
+        userRole() in ['ADMIN', 'MANAGER'] &&
+        request.resource.data.contractorCompanyId == ownCompanyId();
+    }
+    
+    // Line Item Notes
+    match /lineItemNotes/{noteId} {
+      allow read: if authed() && (
+        // Contractor can read notes on their projects
+        resource.data.contractorCompanyId == ownCompanyId() ||
+        // Client can read notes on projects they have access to
+        (userRole() == 'CLIENT' && 
+         resource.data.clientOrgId == request.auth.token.clientOrgId &&
+         resource.data.contractorCompanyId in request.auth.token.contractorCompanyIds)
+      );
+      allow create: if authed() && (
+        // Contractors can create notes
+        (request.resource.data.createdByRole in ['ADMIN', 'MANAGER'] &&
+         request.resource.data.contractorCompanyId == ownCompanyId()) ||
+        // Clients can create notes if allowed
+        (request.resource.data.createdByRole == 'CLIENT' &&
+         request.resource.data.clientOrgId == request.auth.token.clientOrgId &&
+         request.resource.data.contractorCompanyId in request.auth.token.contractorCompanyIds)
+      );
+      allow update: if authed() && (
+        // Only contractors can update (resolve/unresolve)
+        userRole() in ['ADMIN', 'MANAGER'] &&
+        resource.data.contractorCompanyId == ownCompanyId()
+      );
+    }
   }
 }

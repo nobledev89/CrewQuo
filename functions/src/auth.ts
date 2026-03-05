@@ -6,10 +6,16 @@ export interface SubcontractorRoleInfo {
 }
 
 export interface UserClaims {
-  companyId: string; // Legacy field
-  ownCompanyId: string;
-  activeCompanyId: string;
-  role: 'ADMIN' | 'MANAGER' | 'SUBCONTRACTOR';
+  companyId?: string; // Legacy field - not set for CLIENT role
+  ownCompanyId?: string; // Not set for CLIENT role
+  activeCompanyId?: string; // Not set for CLIENT role
+  role: 'ADMIN' | 'MANAGER' | 'SUBCONTRACTOR' | 'CLIENT';
+  
+  // For CLIENT role
+  clientOrgId?: string;
+  contractorCompanyIds?: string[];
+  
+  // For SUBCONTRACTOR role
   subcontractorRoles?: {
     [companyId: string]: SubcontractorRoleInfo;
   };
@@ -31,6 +37,16 @@ export async function setCustomUserClaims(
 export function buildUserClaims(userData: any, uid?: string): UserClaims {
   const fallbackId = uid || 'unknown';
   
+  // Handle CLIENT role
+  if (userData.role === 'CLIENT') {
+    return {
+      role: 'CLIENT',
+      clientOrgId: userData.clientOrgId,
+      contractorCompanyIds: userData.contractorCompanyIds || [],
+    };
+  }
+  
+  // Handle ADMIN, MANAGER, SUBCONTRACTOR roles
   const claims: UserClaims = {
     companyId: userData.companyId || userData.ownCompanyId || fallbackId,
     ownCompanyId: userData.ownCompanyId || userData.companyId || fallbackId,
@@ -99,7 +115,7 @@ export function getUserClaims(request: { data: any; auth?: any }): UserClaims {
  */
 export function requireRole(
   claims: UserClaims,
-  allowedRoles: Array<'ADMIN' | 'MANAGER' | 'SUBCONTRACTOR'>
+  allowedRoles: Array<'ADMIN' | 'MANAGER' | 'SUBCONTRACTOR' | 'CLIENT'>
 ): void {
   if (!allowedRoles.includes(claims.role)) {
     throw new Error(`Insufficient permissions. Required: ${allowedRoles.join(' or ')}`);

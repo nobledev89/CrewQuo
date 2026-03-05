@@ -333,9 +333,33 @@ export default function ClientsPage() {
                 )}
 
                 <div className="pt-3 border-t border-gray-100">
-                  <p className="text-xs text-gray-500">
-                    Added on {formatDate(client.createdAt)}
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-gray-500">
+                      Added on {formatDate(client.createdAt)}
+                    </p>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => router.push(`/dashboard/clients/${client.id}/users`)}
+                        className="text-xs text-blue-600 hover:text-blue-700 font-semibold"
+                      >
+                        Users
+                      </button>
+                      <span className="text-gray-300">•</span>
+                      <button
+                        onClick={() => router.push(`/dashboard/clients/${client.id}/projects`)}
+                        className="text-xs text-blue-600 hover:text-blue-700 font-semibold"
+                      >
+                        Projects
+                      </button>
+                      <span className="text-gray-300">•</span>
+                      <button
+                        onClick={() => router.push(`/dashboard/clients/${client.id}/settings`)}
+                        className="text-xs text-blue-600 hover:text-blue-700 font-semibold"
+                      >
+                        Settings
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}

@@ -7,11 +7,20 @@ import { auth, db } from './firebase';
 
 interface UserData {
   email: string;
-  name: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
   role: string;
-  companyId: string;
+  companyId?: string;
   ownCompanyId?: string;
   activeCompanyId?: string;
+  
+  // For CLIENT role
+  clientOrgId?: string;
+  clientOrgName?: string;
+  contractorCompanyIds?: string[];
+  
+  // For SUBCONTRACTOR role
   subcontractorRoles?: {
     [companyId: string]: {
       subcontractorId: string;
@@ -100,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const ownCompanyId = userData.ownCompanyId || userData.companyId;
     
     // If viewing a different company and they have a subcontractor role there
-    if (activeCompanyId !== ownCompanyId) {
+    if (activeCompanyId && ownCompanyId && activeCompanyId !== ownCompanyId) {
       return !!(userData.subcontractorRoles && activeCompanyId in userData.subcontractorRoles);
     }
     

@@ -1,0 +1,2 @@
+After all changes are made, deploy to git main so that vercel can auto deploy in the hosting.
+If there are changes needed for firebase, deploy them also, except for the hosting because it is handles by vercel.
