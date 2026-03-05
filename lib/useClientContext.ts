@@ -31,11 +31,11 @@ export function useClientContext() {
   useEffect(() => {
     if (authLoading) return;
     
-    if (user && userData) {
+    if (user && userData && userData.companyId) {
       console.log('[ClientContext] User authenticated, loading clients');
       loadClients(userData.companyId);
     } else {
-      console.log('[ClientContext] No user authenticated');
+      console.log('[ClientContext] No user authenticated or no companyId');
       setClients([]);
       setLoading(false);
     }
