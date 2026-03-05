@@ -553,7 +553,8 @@ service cloud.firestore {
     
     // Client Project Access
     match /clientProjectAccess/{accessId} {
-      allow read: if authed() && (
+      // Get individual documents
+      allow get: if authed() && (
         // Allow reading non-existent documents (will return null anyway)
         !exists(/databases/$(database)/documents/clientProjectAccess/$(accessId)) ||
         // Contractor can read their own access grants
@@ -562,6 +563,13 @@ service cloud.firestore {
         (userRole() == 'CLIENT' && 
          resource.data.clientOrgId == request.auth.token.clientOrgId &&
          resource.data.contractorCompanyId in request.auth.token.contractorCompanyIds)
+      );
+      // List/query documents
+      allow list: if authed() && (
+        // Contractor can list their own access grants
+        (userRole() in ['ADMIN', 'MANAGER'] && request.resource == null) ||
+        // Client can list if they're querying their own clientOrg
+        userRole() == 'CLIENT'
       );
       allow create: if authed() && 
         userRole() in ['ADMIN', 'MANAGER'] &&
