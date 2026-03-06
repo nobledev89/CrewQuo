@@ -88,6 +88,8 @@ export default function ClientProjectsPage() {
 
   const fetchProjects = async (compId: string, cId: string) => {
     try {
+      console.log('🔍 Fetching projects with:', { compId, cId });
+      
       // Get all projects for this contractor
       const projectsQuery = query(
         collection(db, 'projects'),
@@ -95,10 +97,15 @@ export default function ClientProjectsPage() {
         where('clientId', '==', cId)
       );
       const projectsSnap = await getDocs(projectsQuery);
+      
+      console.log('📋 Found projects:', projectsSnap.size);
+      
       const allProjects = projectsSnap.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
       }));
+      
+      console.log('📦 All projects:', allProjects);
 
       // Get client org access if exists
       const clientDoc = await getDoc(doc(db, 'clients', cId));
