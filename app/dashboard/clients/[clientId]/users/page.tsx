@@ -143,9 +143,16 @@ export default function ClientUsersPage() {
 
   const fetchInvites = async (compId: string, cId: string) => {
     try {
+      // Only fetch invites if client has an organization
+      if (!client?.clientOrgId) {
+        setInvites([]);
+        return;
+      }
+
       const invitesQuery = query(
         collection(db, 'clientUserInvites'),
-        where('contractorCompanyId', '==', compId)
+        where('contractorCompanyId', '==', compId),
+        where('clientOrgId', '==', client.clientOrgId)
       );
       const invitesSnap = await getDocs(invitesQuery);
       const invitesList = invitesSnap.docs.map(doc => ({
