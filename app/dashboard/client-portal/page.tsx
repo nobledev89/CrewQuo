@@ -17,6 +17,8 @@ interface Project {
   location: string;
   status: string;
   contractorCompanyId: string;
+  createdAt?: any;
+  updatedAt?: any;
 }
 
 interface Contractor {
@@ -35,6 +37,7 @@ export default function ClientPortalPage() {
   const [contractors, setContractors] = useState<Contractor[]>([]);
   const [selectedContractorId, setSelectedContractorId] = useState('');
   const [projects, setProjects] = useState<Project[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -137,6 +140,28 @@ export default function ClientPortalPage() {
     }
   };
 
+  // Filter and sort projects
+  const filteredProjects = projects
+    .filter(project => {
+      if (statusFilter === 'ALL') return true;
+      return project.status === statusFilter;
+    })
+    .sort((a, b) => {
+      // Sort by createdAt (newest first)
+      const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+      const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+      return bTime - aTime;
+    });
+
+  // Count projects by status
+  const statusCounts = {
+    ALL: projects.length,
+    ACTIVE: projects.filter(p => p.status === 'ACTIVE').length,
+    COMPLETED: projects.filter(p => p.status === 'COMPLETED').length,
+    ON_HOLD: projects.filter(p => p.status === 'ON_HOLD').length,
+    CANCELLED: projects.filter(p => p.status === 'CANCELLED').length,
+  };
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -183,10 +208,87 @@ export default function ClientPortalPage() {
           </div>
         )}
 
+        {/* Status Filter Tabs */}
+        {contractors.length > 0 && projects.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6 overflow-hidden">
+            <div className="flex overflow-x-auto">
+              <button
+                onClick={() => setStatusFilter('ALL')}
+                className={`flex-1 min-w-[120px] px-6 py-4 text-sm font-medium border-b-2 transition ${
+                  statusFilter === 'ALL'
+                    ? 'border-blue-600 text-blue-600 bg-blue-50'
+                    : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                <div className="text-center">
+                  <div className="font-semibold text-lg">{statusCounts.ALL}</div>
+                  <div className="text-xs mt-1">All Projects</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setStatusFilter('ACTIVE')}
+                className={`flex-1 min-w-[120px] px-6 py-4 text-sm font-medium border-b-2 transition ${
+                  statusFilter === 'ACTIVE'
+                    ? 'border-green-600 text-green-600 bg-green-50'
+                    : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                <div className="text-center">
+                  <div className="font-semibold text-lg">{statusCounts.ACTIVE}</div>
+                  <div className="text-xs mt-1">Active</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setStatusFilter('COMPLETED')}
+                className={`flex-1 min-w-[120px] px-6 py-4 text-sm font-medium border-b-2 transition ${
+                  statusFilter === 'COMPLETED'
+                    ? 'border-blue-600 text-blue-600 bg-blue-50'
+                    : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                <div className="text-center">
+                  <div className="font-semibold text-lg">{statusCounts.COMPLETED}</div>
+                  <div className="text-xs mt-1">Completed</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setStatusFilter('ON_HOLD')}
+                className={`flex-1 min-w-[120px] px-6 py-4 text-sm font-medium border-b-2 transition ${
+                  statusFilter === 'ON_HOLD'
+                    ? 'border-yellow-600 text-yellow-600 bg-yellow-50'
+                    : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                <div className="text-center">
+                  <div className="font-semibold text-lg">{statusCounts.ON_HOLD}</div>
+                  <div className="text-xs mt-1">On Hold</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setStatusFilter('CANCELLED')}
+                className={`flex-1 min-w-[120px] px-6 py-4 text-sm font-medium border-b-2 transition ${
+                  statusFilter === 'CANCELLED'
+                    ? 'border-red-600 text-red-600 bg-red-50'
+                    : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                <div className="text-center">
+                  <div className="font-semibold text-lg">{statusCounts.CANCELLED}</div>
+                  <div className="text-xs mt-1">Cancelled</div>
+                </div>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Projects Grid */}
         {contractors.length > 0 && (
           <>
-            {projects.length === 0 ? (
+            {filteredProjects.length === 0 && projects.length === 0 ? (
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
                 <FolderOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">No Projects</h3>
@@ -196,7 +298,7 @@ export default function ClientPortalPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {projects.map((project) => (
+                {filteredProjects.map((project) => (
                   <div
                     key={project.id}
                     onClick={() => router.push(`/dashboard/client-portal/projects/${project.id}`)}
