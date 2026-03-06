@@ -300,14 +300,17 @@ export default function ProjectModal({
       };
 
       // Add timeframe fields (new system) or shiftType (old system)
-      if (selectedRateEntry.timeframeId && selectedRateEntry.timeframeName) {
-        timeLogData.timeframeId = selectedRateEntry.timeframeId;
-        timeLogData.timeframeName = selectedRateEntry.timeframeName;
-      } else if (selectedRateEntry.shiftType) {
-        timeLogData.shiftType = selectedRateEntry.shiftType;
-      }
+        if (selectedRateEntry.timeframeId && selectedRateEntry.timeframeName) {
+          timeLogData.timeframeId = selectedRateEntry.timeframeId;
+          timeLogData.timeframeName = selectedRateEntry.timeframeName;
+        } else if (selectedRateEntry.shiftType) {
+          timeLogData.shiftType = selectedRateEntry.shiftType;
+        }
 
-      await addDoc(collection(db, 'timeLogs'), timeLogData);
+        // Add notes if provided
+        timeLogData.notes = logForm.notes || '';
+
+        await addDoc(collection(db, 'timeLogs'), timeLogData);
 
       setLogForm({
         date: '',
@@ -706,6 +709,17 @@ export default function ProjectModal({
                       </div>
                     </div>
 
+                    <div className="mt-3">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Notes (Optional)</label>
+                      <input
+                        type="text"
+                        value={logForm.notes}
+                        onChange={(e) => setLogForm((p) => ({ ...p, notes: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        placeholder="Add notes about this time entry..."
+                      />
+                    </div>
+
                     {rateOptions.length === 0 && (
                       <div className="mt-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                         <p className="text-sm text-yellow-700">
@@ -742,6 +756,7 @@ export default function ProjectModal({
                             <tr>
                               <th className="px-4 py-2 text-left font-semibold text-gray-900">Date</th>
                               <th className="px-4 py-2 text-left font-semibold text-gray-900">Role / Shift</th>
+                              <th className="px-4 py-2 text-left font-semibold text-gray-900">Notes</th>
                               <th className="px-4 py-2 text-right font-semibold text-gray-900">Regular</th>
                               <th className="px-4 py-2 text-right font-semibold text-gray-900">OT</th>
                               <th className="px-4 py-2 text-right font-semibold text-gray-900">Cost</th>
@@ -753,6 +768,13 @@ export default function ProjectModal({
                               <tr key={log.id} className="border-b border-gray-200 hover:bg-gray-50">
                                 <td className="px-4 py-2 text-gray-900">{formatDate(log.date)}</td>
                                 <td className="px-4 py-2 text-gray-900">{log.roleName} - {log.timeframeName || log.shiftType || 'Standard'}</td>
+                                <td className="px-4 py-2 text-gray-600 text-xs">
+                                  {log.notes ? (
+                                    <span className="italic">{log.notes}</span>
+                                  ) : (
+                                    <span className="text-gray-400">-</span>
+                                  )}
+                                </td>
                                 <td className="px-4 py-2 text-right text-gray-900">{log.hoursRegular}h</td>
                                 <td className="px-4 py-2 text-right text-gray-900">{log.hoursOT}h</td>
                                 <td className="px-4 py-2 text-right text-gray-900 font-semibold">£{(log.subCost || 0).toFixed(2)}</td>

@@ -707,6 +707,7 @@ export default function ProjectDetailPage() {
             status,
             startTime: segmentStartTime,
             endTime: segmentEndTime,
+            notes: logForm.notes || '',
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           };
@@ -744,6 +745,7 @@ export default function ProjectDetailPage() {
           currency: 'GBP',
           payRateCardId: rateAssignment?.payRateCardId || null,
           billRateCardId: rateAssignment?.billRateCardId || null,
+          notes: logForm.notes || '',
           status,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
@@ -1934,16 +1936,27 @@ export default function ProjectDetailPage() {
                         <Plus className="w-4 h-4 inline mr-1" />
                         Add
                       </button>
+                      </div>
                     </div>
-                  </div>
 
-                  {rateOptions.length === 0 && (
-                    <div className="mt-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                      <p className="text-sm text-yellow-700">
-                        No rate card configured. Please contact your administrator.
-                      </p>
+                    <div className="mt-3">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Notes (Optional)</label>
+                      <input
+                        type="text"
+                        value={logForm.notes}
+                        onChange={(e) => setLogForm((p) => ({ ...p, notes: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        placeholder="Add notes about this time entry..."
+                      />
                     </div>
-                  )}
+
+                    {rateOptions.length === 0 && (
+                      <div className="mt-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                        <p className="text-sm text-yellow-700">
+                          No rate card configured. Please contact your administrator.
+                        </p>
+                      </div>
+                    )}
 
                   {/* Calculation Breakdown */}
                   {calculationBreakdown.length > 0 && (
@@ -1998,6 +2011,7 @@ export default function ProjectDetailPage() {
                             <tr>
                               <th className="px-4 py-2 text-left font-semibold text-gray-900">Date</th>
                               <th className="px-4 py-2 text-left font-semibold text-gray-900">Role / Shift</th>
+                              <th className="px-4 py-2 text-left font-semibold text-gray-900">Notes</th>
                               <th className="px-4 py-2 text-center font-semibold text-gray-900">Time</th>
                               <th className="px-4 py-2 text-right font-semibold text-gray-900">Hours</th>
                               <th className="px-4 py-2 text-right font-semibold text-gray-900">Rate</th>
@@ -2012,6 +2026,13 @@ export default function ProjectDetailPage() {
                               <tr key={log.id} className="border-b border-gray-200 hover:bg-gray-50">
                                 <td className="px-4 py-2 text-gray-900">{formatDate(log.date)}</td>
                                 <td className="px-4 py-2 text-gray-900">{log.roleName} - {log.timeframeName || log.shiftType || 'Standard'}</td>
+                                <td className="px-4 py-2 text-gray-600 text-xs">
+                                  {log.notes ? (
+                                    <span className="italic">{log.notes}</span>
+                                  ) : (
+                                    <span className="text-gray-400">-</span>
+                                  )}
+                                </td>
                                 <td className="px-4 py-2 text-center text-gray-600 text-xs">{log.startTime && log.endTime ? `${log.startTime}-${log.endTime}` : '-'}</td>
                                 <td className="px-4 py-2 text-right text-gray-900">{(log.hoursRegular || 0).toFixed(1)}h</td>
                                 <td className="px-4 py-2 text-right text-green-700 font-medium">£{hourlyRate.toFixed(2)}/hr</td>

@@ -608,6 +608,9 @@ export interface TimeLog {
   payRateCardId: string;   // Card used to calculate subCost (what we pay subcontractor)
   billRateCardId?: string; // Card used to calculate clientBill (what we charge client)
 
+  // Additional details
+  notes?: string;          // Optional notes/description for this time entry
+
   // Metadata
   currency: string;        // e.g., 'GBP'
   status?: string;         // e.g., 'DRAFT', 'SUBMITTED', 'APPROVED'
