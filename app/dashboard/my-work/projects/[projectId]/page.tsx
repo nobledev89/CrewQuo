@@ -1552,8 +1552,8 @@ export default function ProjectDetailPage() {
   return (
     <DashboardLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        {/* Rate Update Banner */}
-        {showRateUpdateBanner && outdatedItemsCount > 0 && (
+        {/* Rate Update Banner - HIDDEN FOR NOW */}
+        {false && showRateUpdateBanner && outdatedItemsCount > 0 && (
           <div className="bg-yellow-50 border-2 border-yellow-400 rounded-lg p-4 shadow-md">
             <div className="flex items-start gap-3">
               <AlertCircle className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-0.5" />
