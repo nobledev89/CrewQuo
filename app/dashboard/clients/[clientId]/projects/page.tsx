@@ -48,7 +48,6 @@ export default function ClientProjectsPage() {
   const [userId, setUserId] = useState('');
   const [userRole, setUserRole] = useState('');
   const [toggling, setToggling] = useState<string | null>(null);
-  const [tokenClaims, setTokenClaims] = useState<any>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -89,16 +88,6 @@ export default function ClientProjectsPage() {
 
   const fetchProjects = async (compId: string, cId: string) => {
     try {
-      console.log('🔍 Fetching projects with:', { compId, cId });
-      
-      // DEBUG: Check auth token claims
-      const currentUser = auth.currentUser;
-      if (currentUser) {
-        const tokenResult = await currentUser.getIdTokenResult(true); // Force refresh
-        console.log('🔐 Auth Token Claims:', tokenResult.claims);
-        setTokenClaims(tokenResult.claims);
-      }
-      
       // Use API route with Firebase Admin SDK (bypasses Firestore security rules)
       const response = await fetch(`/api/projects/by-client?companyId=${compId}&clientId=${cId}`);
       
@@ -108,8 +97,6 @@ export default function ClientProjectsPage() {
       
       const data = await response.json();
       const allProjects = data.projects || [];
-      
-      console.log('📦 Projects from API:', allProjects.length);
 
       // Get client org access if exists
       const clientDoc = await getDoc(doc(db, 'clients', cId));
@@ -279,20 +266,6 @@ export default function ClientProjectsPage() {
             </p>
           </div>
         )}
-
-        {/* Debug Info - TEMPORARY */}
-        <div className="bg-purple-50 rounded-xl border border-purple-200 p-4 mb-6">
-          <p className="text-sm font-mono text-purple-900 whitespace-pre-wrap">
-            <strong>Debug Info:</strong><br/>
-            Company ID: {companyId}<br/>
-            Client ID: {clientId}<br/>
-            Projects Found: {projects.length}<br/>
-            User Role (from Firestore): {userRole}<br/>
-            <br/>
-            <strong>JWT Token Claims:</strong><br/>
-            {tokenClaims ? JSON.stringify(tokenClaims, null, 2) : 'Loading...'}
-          </p>
-        </div>
 
         {/* Projects List */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
