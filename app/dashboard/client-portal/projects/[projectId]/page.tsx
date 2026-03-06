@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { ArrowLeft, Activity, Clock, DollarSign, TrendingUp, MessageSquare } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
+import LineItemNotesModal from '@/components/LineItemNotesModal';
 import { getProjectVisibilitySettings } from '@/lib/clientAccessUtils';
 import {
   aggregateProjectCosts,
@@ -67,6 +68,13 @@ export default function ClientProjectDetailPage() {
   const [projectTracking, setProjectTracking] = useState<ProjectTracking | null>(null);
   const [currency] = useState<string>('GBP');
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'submitted' | 'approved' | 'rejected'>('all');
+
+  // Notes modal state
+  const [selectedLineItem, setSelectedLineItem] = useState<{
+    itemId: string;
+    itemType: 'timeLog' | 'expense';
+    itemDescription: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!projectId) {
@@ -600,7 +608,14 @@ export default function ClientProjectDetailPage() {
                               </td>
                               {visibility.allowClientNotes && (
                                 <td className="px-4 py-3 text-center">
-                                  <button className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition">
+                                  <button 
+                                    onClick={() => setSelectedLineItem({
+                                      itemId: log.id,
+                                      itemType: 'timeLog',
+                                      itemDescription: `${log.roleName} - ${formatDate(log.date)} - ${totalHours.toFixed(1)}h`
+                                    })}
+                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                  >
                                     <MessageSquare className="w-4 h-4" />
                                   </button>
                                 </td>
@@ -662,7 +677,14 @@ export default function ClientProjectDetailPage() {
                               </td>
                               {visibility.allowClientNotes && (
                                 <td className="px-4 py-3 text-center">
-                                  <button className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition">
+                                  <button 
+                                    onClick={() => setSelectedLineItem({
+                                      itemId: exp.id,
+                                      itemType: 'expense',
+                                      itemDescription: `${exp.category} - ${formatDate(exp.date)} - ${formatCurrency(billing, currency)}`
+                                    })}
+                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                  >
                                     <MessageSquare className="w-4 h-4" />
                                   </button>
                                 </td>
@@ -688,6 +710,20 @@ export default function ClientProjectDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Notes Modal */}
+      {selectedLineItem && (
+        <LineItemNotesModal
+          itemId={selectedLineItem.itemId}
+          itemType={selectedLineItem.itemType}
+          itemDescription={selectedLineItem.itemDescription}
+          projectId={projectId}
+          clientOrgId={clientOrgId}
+          contractorCompanyId={contractorCompanyId}
+          onClose={() => setSelectedLineItem(null)}
+          allowClientNotes={visibility.allowClientNotes}
+        />
+      )}
     </DashboardLayout>
   );
 }
