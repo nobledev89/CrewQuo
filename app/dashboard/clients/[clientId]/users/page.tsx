@@ -96,9 +96,12 @@ export default function ClientUsersPage() {
               setCompanyName(companyDoc.data().name);
             }
 
-            await fetchClient(clientId);
-            await fetchClientUsers();
-            await fetchInvites(compId, clientId);
+            // Fetch client first, then use its data for other queries
+            const clientData = await fetchClient(clientId);
+            if (clientData) {
+              await fetchClientUsers(clientData.clientOrgId);
+              await fetchInvites(compId, clientData.clientOrgId);
+            }
           }
         } catch (error) {
           console.error('Error fetching data:', error);
@@ -111,24 +114,28 @@ export default function ClientUsersPage() {
     return () => unsubscribe();
   }, [clientId]);
 
-  const fetchClient = async (cId: string) => {
+  const fetchClient = async (cId: string): Promise<Client | null> => {
     try {
       const clientDoc = await getDoc(doc(db, 'clients', cId));
       if (clientDoc.exists()) {
-        setClient({ id: clientDoc.id, ...clientDoc.data() } as Client);
+        const clientData = { id: clientDoc.id, ...clientDoc.data() } as Client;
+        setClient(clientData);
+        return clientData;
       }
+      return null;
     } catch (error) {
       console.error('Error fetching client:', error);
+      return null;
     }
   };
 
-  const fetchClientUsers = async () => {
-    if (!client?.clientOrgId) return;
+  const fetchClientUsers = async (clientOrgId?: string) => {
+    if (!clientOrgId) return;
 
     try {
       const usersQuery = query(
         collection(db, 'clientUsers'),
-        where('clientOrgId', '==', client.clientOrgId)
+        where('clientOrgId', '==', clientOrgId)
       );
       const usersSnap = await getDocs(usersQuery);
       const users = usersSnap.docs.map(doc => ({
@@ -141,10 +148,10 @@ export default function ClientUsersPage() {
     }
   };
 
-  const fetchInvites = async (compId: string, cId: string) => {
+  const fetchInvites = async (compId: string, clientOrgId?: string) => {
     try {
       // Only fetch invites if client has an organization
-      if (!client?.clientOrgId) {
+      if (!clientOrgId) {
         setInvites([]);
         return;
       }
@@ -152,7 +159,7 @@ export default function ClientUsersPage() {
       const invitesQuery = query(
         collection(db, 'clientUserInvites'),
         where('contractorCompanyId', '==', compId),
-        where('clientOrgId', '==', client.clientOrgId)
+        where('clientOrgId', '==', clientOrgId)
       );
       const invitesSnap = await getDocs(invitesQuery);
       const invitesList = invitesSnap.docs.map(doc => ({
@@ -235,7 +242,7 @@ export default function ClientUsersPage() {
       setGeneratedInviteLink(inviteLink);
 
       // Refresh data
-      await fetchInvites(companyId, clientId);
+      await fetchInvites(companyId, clientOrgId);
       setShowInviteModal(false);
       setInviteForm({ email: '', firstName: '', lastName: '' });
       setShowInviteLinkModal(true);
@@ -269,7 +276,7 @@ export default function ClientUsersPage() {
 
     try {
       await cancelClientUserInvite(inviteId);
-      await fetchInvites(companyId, clientId);
+      await fetchInvites(companyId, client?.clientOrgId);
     } catch (error) {
       console.error('Error cancelling invite:', error);
       alert('Failed to cancel invitation. Please try again.');
@@ -283,7 +290,7 @@ export default function ClientUsersPage() {
 
     try {
       await deleteClientUserInvite(inviteId);
-      await fetchInvites(companyId, clientId);
+      await fetchInvites(companyId, client?.clientOrgId);
     } catch (error) {
       console.error('Error deleting invite:', error);
       alert('Failed to delete invitation. Please try again.');
