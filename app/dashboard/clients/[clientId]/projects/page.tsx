@@ -57,7 +57,7 @@ export default function ClientProjectsPage() {
           const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
           if (userDoc.exists()) {
             const userData = userDoc.data();
-            const compId = userData.companyId;
+            const compId = userData.activeCompanyId || userData.companyId;
             setCompanyId(compId);
             setUserRole(userData.role);
 
