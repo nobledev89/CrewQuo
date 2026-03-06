@@ -99,22 +99,24 @@ export default function ClientProjectsPage() {
         setTokenClaims(tokenResult.claims);
       }
       
-      // Get all projects for this contractor
+      // Get all projects for this contractor - query by companyId only (single where clause)
       const projectsQuery = query(
         collection(db, 'projects'),
-        where('companyId', '==', compId),
-        where('clientId', '==', cId)
+        where('companyId', '==', compId)
       );
       const projectsSnap = await getDocs(projectsQuery);
       
-      console.log('� Found projects:', projectsSnap.size);
+      console.log('📊 Found projects:', projectsSnap.size);
       
-      const allProjects = projectsSnap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      // Filter by clientId in code (not in Firestore query)
+      const allProjects = projectsSnap.docs
+        .map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+        }))
+        .filter((project: any) => project.clientId === cId);
       
-      console.log('�📦 All projects:', allProjects);
+      console.log('📦 Filtered projects for this client:', allProjects.length);
 
       // Get client org access if exists
       const clientDoc = await getDoc(doc(db, 'clients', cId));
