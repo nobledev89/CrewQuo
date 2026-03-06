@@ -48,6 +48,7 @@ export default function ClientProjectsPage() {
   const [userId, setUserId] = useState('');
   const [userRole, setUserRole] = useState('');
   const [toggling, setToggling] = useState<string | null>(null);
+  const [tokenClaims, setTokenClaims] = useState<any>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -90,6 +91,14 @@ export default function ClientProjectsPage() {
     try {
       console.log('🔍 Fetching projects with:', { compId, cId });
       
+      // DEBUG: Check auth token claims
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        const tokenResult = await currentUser.getIdTokenResult(true); // Force refresh
+        console.log('🔐 Auth Token Claims:', tokenResult.claims);
+        setTokenClaims(tokenResult.claims);
+      }
+      
       // Get all projects for this contractor
       const projectsQuery = query(
         collection(db, 'projects'),
@@ -98,14 +107,14 @@ export default function ClientProjectsPage() {
       );
       const projectsSnap = await getDocs(projectsQuery);
       
-      console.log('📋 Found projects:', projectsSnap.size);
+      console.log('� Found projects:', projectsSnap.size);
       
       const allProjects = projectsSnap.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
       }));
       
-      console.log('📦 All projects:', allProjects);
+      console.log('�📦 All projects:', allProjects);
 
       // Get client org access if exists
       const clientDoc = await getDoc(doc(db, 'clients', cId));
@@ -278,12 +287,15 @@ export default function ClientProjectsPage() {
 
         {/* Debug Info - TEMPORARY */}
         <div className="bg-purple-50 rounded-xl border border-purple-200 p-4 mb-6">
-          <p className="text-sm font-mono text-purple-900">
+          <p className="text-sm font-mono text-purple-900 whitespace-pre-wrap">
             <strong>Debug Info:</strong><br/>
             Company ID: {companyId}<br/>
             Client ID: {clientId}<br/>
             Projects Found: {projects.length}<br/>
-            User Role: {userRole}
+            User Role (from Firestore): {userRole}<br/>
+            <br/>
+            <strong>JWT Token Claims:</strong><br/>
+            {tokenClaims ? JSON.stringify(tokenClaims, null, 2) : 'Loading...'}
           </p>
         </div>
 
