@@ -99,27 +99,17 @@ export default function ClientProjectsPage() {
         setTokenClaims(tokenResult.claims);
       }
       
-      // WORKAROUND: Fetch ALL projects using admin script results
-      // Query is failing even with simplest rules, so we'll get project IDs differently
-      // For now, query by companyId through /api route or fetch individually
+      // Use API route with Firebase Admin SDK (bypasses Firestore security rules)
+      const response = await fetch(`/api/projects/by-client?companyId=${compId}&clientId=${cId}`);
       
-      // Try to list all projects by fetching them without query
-      const projectsRef = collection(db, 'projects');
-      const allProjectsSnap = await getDocs(projectsRef);
+      if (!response.ok) {
+        throw new Error('Failed to fetch projects from API');
+      }
       
-      console.log('📊 Total projects in database:', allProjectsSnap.size);
+      const data = await response.json();
+      const allProjects = data.projects || [];
       
-      // Filter for this company and client in JavaScript
-      const allProjects = allProjectsSnap.docs
-        .map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-        }))
-        .filter((project: any) => 
-          project.companyId === compId && project.clientId === cId
-        );
-      
-      console.log('📦 Filtered projects for this client:', allProjects.length);
+      console.log('📦 Projects from API:', allProjects.length);
 
       // Get client org access if exists
       const clientDoc = await getDoc(doc(db, 'clients', cId));
@@ -128,7 +118,7 @@ export default function ClientProjectsPage() {
 
       if (!clientOrgId) {
         // No client org yet, so no access to any projects
-        setProjects(allProjects.map(p => ({ ...p, hasAccess: false } as Project)));
+        setProjects(allProjects.map((p: any) => ({ ...p, hasAccess: false } as Project)));
         return;
       }
 
@@ -137,7 +127,7 @@ export default function ClientProjectsPage() {
       const accessibleProjectIds = new Set(accessibleProjects.map(a => a.projectId));
 
       // Mark which projects have access
-      const projectsWithAccess = allProjects.map(p => ({
+      const projectsWithAccess = allProjects.map((p: any) => ({
         ...p,
         hasAccess: accessibleProjectIds.has(p.id),
       } as Project));

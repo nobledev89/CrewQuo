@@ -197,7 +197,7 @@ service cloud.firestore {
         && isAdmin();
     }
     
-    // Projects
+    // Projects Collection
     match /projects/{projectId} {
       // Allow get for individual document reads
       allow get: if authed() && (
