@@ -246,6 +246,10 @@ function ProjectsContent() {
     setSaving(true);
 
     try {
+      // Fetch client name for denormalization
+      const clientDoc = await getDoc(doc(db, 'clients', formData.clientId));
+      const clientName = clientDoc.exists() ? clientDoc.data().name : 'Unknown';
+
       // Convert date strings to Firestore timestamps
       const startDateTimestamp = formData.startDate ? 
         Timestamp.fromDate(new Date(formData.startDate)) : null;
@@ -261,6 +265,7 @@ function ProjectsContent() {
         endDate: endDateTimestamp,
         notes: formData.notes,
         clientId: formData.clientId,
+        clientName: clientName, // Denormalized for easier querying and display
         updatedAt: serverTimestamp(),
       };
 
