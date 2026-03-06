@@ -1,21 +1,27 @@
 /**
  * Fix script to correct company ID mismatches in projects
- * Run with: node scripts/fix-company-mismatch.js
+ * Run with: npx ts-node scripts/fix-company-mismatch.ts
  */
 
-const admin = require('firebase-admin');
-const fs = require('fs');
-const path = require('path');
-const readline = require('readline');
+import * as admin from 'firebase-admin';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as readline from 'readline';
 
 // Initialize Firebase Admin
-const serviceAccount = require(path.resolve(__dirname, '../firebase-service-account.json'));
+const serviceAccountPath = path.join(__dirname, '..', 'serviceAccountKey.json');
 
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
+if (!fs.existsSync(serviceAccountPath)) {
+  console.error('❌ serviceAccountKey.json not found!');
+  console.error('Please download it from Firebase Console and place it in the project root.');
+  process.exit(1);
 }
+
+const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
 const db = admin.firestore();
 
@@ -25,7 +31,7 @@ const rl = readline.createInterface({
   output: process.stdout,
 });
 
-function question(prompt) {
+function question(prompt: string): Promise<string> {
   return new Promise((resolve) => {
     rl.question(prompt, resolve);
   });
@@ -44,7 +50,7 @@ async function fixCompanyMismatch() {
       .get();
 
     let totalMismatches = 0;
-    const fixes = [];
+    const fixes: Array<{ projectId: string; projectName: string; oldCompanyId: string; newCompanyId: string }> = [];
 
     for (const userDoc of usersSnapshot.docs) {
       const userData = userDoc.data();
@@ -104,7 +110,7 @@ async function fixCompanyMismatch() {
     // Step 3: Apply fixes
     console.log('\n🔧 Applying fixes...\n');
     
-    let batch = db.batch();
+    const batch = db.batch();
     let batchCount = 0;
     const batchLimit = 500; // Firestore batch limit
     
@@ -121,7 +127,6 @@ async function fixCompanyMismatch() {
       if (batchCount >= batchLimit) {
         await batch.commit();
         console.log(`✅ Committed batch of ${batchCount} updates`);
-        batch = db.batch(); // Create new batch
         batchCount = 0;
       }
       

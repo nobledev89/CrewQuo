@@ -41,6 +41,7 @@ service cloud.firestore {
     
     function hasAccessToCompany(compId) {
       return compId == ownCompanyId() || 
+             compId == activeCompanyId() ||
              (request.auth.token.subcontractorRoles != null && 
               compId in request.auth.token.subcontractorRoles);
     }
