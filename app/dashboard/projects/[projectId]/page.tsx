@@ -317,6 +317,7 @@ export default function ProjectDetailPage() {
           subcontractorId: data.subcontractorId,
           startTime: data.startTime,
           endTime: data.endTime,
+          notes: data.notes,
         };
       }).sort((a, b) => {
         // Sort by date descending

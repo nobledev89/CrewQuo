@@ -188,6 +188,7 @@ export default function SubcontractorCostBreakdown({
                         <th className="px-4 py-3 text-left font-semibold text-gray-700">Date</th>
                         <th className="px-4 py-3 text-left font-semibold text-gray-700">Type</th>
                         <th className="px-4 py-3 text-left font-semibold text-gray-700">Description</th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-700">Notes</th>
                         <th className="px-4 py-3 text-center font-semibold text-gray-700">Qty/Hours</th>
                         <th className="px-4 py-3 text-right font-semibold text-gray-700">Cost</th>
                         <th className="px-4 py-3 text-right font-semibold text-gray-700">Bill</th>
@@ -217,6 +218,13 @@ export default function SubcontractorCostBreakdown({
                               {log.roleName} {log.timeframeName ? `- ${log.timeframeName}` : log.shiftType ? `- ${log.shiftType}` : ''}
                               {log.startTime && log.endTime && (
                                 <span className="text-xs text-gray-500 ml-1">({log.startTime}-{log.endTime})</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-gray-600 text-xs">
+                              {log.notes ? (
+                                <span className="italic">{log.notes}</span>
+                              ) : (
+                                <span className="text-gray-400">-</span>
                               )}
                             </td>
                             <td className="px-4 py-3 text-center text-gray-900">
@@ -266,6 +274,7 @@ export default function SubcontractorCostBreakdown({
                               </span>
                             </td>
                             <td className="px-4 py-3 text-gray-900">{exp.category}</td>
+                            <td className="px-4 py-3 text-gray-400 text-xs">-</td>
                             <td className="px-4 py-3 text-center text-gray-900">
                               {exp.quantity ? exp.quantity.toFixed(1) : '1'}
                               {exp.unitRate && (

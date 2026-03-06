@@ -21,6 +21,7 @@ export interface TimeLogData {
   subcontractorId: string;
   startTime?: string;
   endTime?: string;
+  notes?: string;
 }
 
 export interface ExpenseData {
