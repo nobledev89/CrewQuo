@@ -276,6 +276,17 @@ export default function ClientProjectsPage() {
           </div>
         )}
 
+        {/* Debug Info - TEMPORARY */}
+        <div className="bg-purple-50 rounded-xl border border-purple-200 p-4 mb-6">
+          <p className="text-sm font-mono text-purple-900">
+            <strong>Debug Info:</strong><br/>
+            Company ID: {companyId}<br/>
+            Client ID: {clientId}<br/>
+            Projects Found: {projects.length}<br/>
+            User Role: {userRole}
+          </p>
+        </div>
+
         {/* Projects List */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-bold text-gray-900 mb-4">Your Projects with {client.name}</h3>
