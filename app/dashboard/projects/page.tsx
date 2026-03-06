@@ -35,6 +35,8 @@ interface Project {
   clientId: string;
   clientName?: string;
   companyId: string;
+  createdAt?: any;
+  updatedAt?: any;
 }
 
 interface Client {
@@ -75,6 +77,7 @@ function ProjectsContent() {
     clientId: '',
   });
   const [saving, setSaving] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
   
   // Get client filter from context
   const { selectedClient } = useClientFilter();
@@ -375,6 +378,28 @@ function ProjectsContent() {
 
   const canEdit = userRole === 'ADMIN' || userRole === 'MANAGER';
 
+  // Filter and sort projects
+  const filteredProjects = projects
+    .filter(project => {
+      if (statusFilter === 'ALL') return true;
+      return project.status === statusFilter;
+    })
+    .sort((a, b) => {
+      // Sort by createdAt (newest first)
+      const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+      const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+      return bTime - aTime;
+    });
+
+  // Count projects by status
+  const statusCounts = {
+    ALL: projects.length,
+    ACTIVE: projects.filter(p => p.status === 'ACTIVE').length,
+    COMPLETED: projects.filter(p => p.status === 'COMPLETED').length,
+    ON_HOLD: projects.filter(p => p.status === 'ON_HOLD').length,
+    CANCELLED: projects.filter(p => p.status === 'CANCELLED').length,
+  };
+
   if (loading || authLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -416,7 +441,82 @@ function ProjectsContent() {
           )}
         </div>
 
-        {projects.length === 0 ? (
+        {/* Status Filter Tabs */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6 overflow-hidden">
+          <div className="flex overflow-x-auto">
+            <button
+              onClick={() => setStatusFilter('ALL')}
+              className={`flex-1 min-w-[120px] px-6 py-4 text-sm font-medium border-b-2 transition ${
+                statusFilter === 'ALL'
+                  ? 'border-blue-600 text-blue-600 bg-blue-50'
+                  : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              <div className="text-center">
+                <div className="font-semibold text-lg">{statusCounts.ALL}</div>
+                <div className="text-xs mt-1">All Projects</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setStatusFilter('ACTIVE')}
+              className={`flex-1 min-w-[120px] px-6 py-4 text-sm font-medium border-b-2 transition ${
+                statusFilter === 'ACTIVE'
+                  ? 'border-green-600 text-green-600 bg-green-50'
+                  : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              <div className="text-center">
+                <div className="font-semibold text-lg">{statusCounts.ACTIVE}</div>
+                <div className="text-xs mt-1">Active</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setStatusFilter('COMPLETED')}
+              className={`flex-1 min-w-[120px] px-6 py-4 text-sm font-medium border-b-2 transition ${
+                statusFilter === 'COMPLETED'
+                  ? 'border-blue-600 text-blue-600 bg-blue-50'
+                  : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              <div className="text-center">
+                <div className="font-semibold text-lg">{statusCounts.COMPLETED}</div>
+                <div className="text-xs mt-1">Completed</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setStatusFilter('ON_HOLD')}
+              className={`flex-1 min-w-[120px] px-6 py-4 text-sm font-medium border-b-2 transition ${
+                statusFilter === 'ON_HOLD'
+                  ? 'border-yellow-600 text-yellow-600 bg-yellow-50'
+                  : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              <div className="text-center">
+                <div className="font-semibold text-lg">{statusCounts.ON_HOLD}</div>
+                <div className="text-xs mt-1">On Hold</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setStatusFilter('CANCELLED')}
+              className={`flex-1 min-w-[120px] px-6 py-4 text-sm font-medium border-b-2 transition ${
+                statusFilter === 'CANCELLED'
+                  ? 'border-red-600 text-red-600 bg-red-50'
+                  : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              <div className="text-center">
+                <div className="font-semibold text-lg">{statusCounts.CANCELLED}</div>
+                <div className="text-xs mt-1">Cancelled</div>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {filteredProjects.length === 0 ? (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
             <Briefcase className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">
@@ -437,7 +537,7 @@ function ProjectsContent() {
           </div>
         ) : (
           <div className="space-y-4">
-            {projects.map((project) => (
+            {filteredProjects.map((project) => (
               <div
                 key={project.id}
                 onClick={() => window.location.href = `/dashboard/projects/${project.id}`}
