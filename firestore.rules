@@ -577,8 +577,8 @@ service cloud.firestore {
       );
       // List/query documents
       allow list: if authed() && (
-        // Contractor can list their own access grants
-        (userRole() in ['ADMIN', 'MANAGER'] && request.resource == null) ||
+        // Contractor (ADMIN/MANAGER) can list their own access grants
+        userRole() in ['ADMIN', 'MANAGER'] ||
         // Client can list if they're querying their own clientOrg
         userRole() == 'CLIENT'
       );
