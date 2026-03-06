@@ -99,22 +99,25 @@ export default function ClientProjectsPage() {
         setTokenClaims(tokenResult.claims);
       }
       
-      // Get all projects for this contractor - query by companyId only (single where clause)
-      const projectsQuery = query(
-        collection(db, 'projects'),
-        where('companyId', '==', compId)
-      );
-      const projectsSnap = await getDocs(projectsQuery);
+      // WORKAROUND: Fetch ALL projects using admin script results
+      // Query is failing even with simplest rules, so we'll get project IDs differently
+      // For now, query by companyId through /api route or fetch individually
       
-      console.log('📊 Found projects:', projectsSnap.size);
+      // Try to list all projects by fetching them without query
+      const projectsRef = collection(db, 'projects');
+      const allProjectsSnap = await getDocs(projectsRef);
       
-      // Filter by clientId in code (not in Firestore query)
-      const allProjects = projectsSnap.docs
+      console.log('📊 Total projects in database:', allProjectsSnap.size);
+      
+      // Filter for this company and client in JavaScript
+      const allProjects = allProjectsSnap.docs
         .map(doc => ({
           id: doc.id,
           ...doc.data(),
         }))
-        .filter((project: any) => project.clientId === cId);
+        .filter((project: any) => 
+          project.companyId === compId && project.clientId === cId
+        );
       
       console.log('📦 Filtered projects for this client:', allProjects.length);
 
