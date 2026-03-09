@@ -98,15 +98,24 @@ export function calculateTimeBasedCost(
     
     for (const rate of sortedRates) {
       const rateStartMinutes = timeToMinutes(rate.startTime);
-      let rateEndMinutes = timeToMinutes(rate.endTime);
+      const rateEndMinutes = timeToMinutes(rate.endTime);
       
-      // Handle overnight rate ranges
-      if (rateEndMinutes <= rateStartMinutes) {
-        rateEndMinutes += 24 * 60;
+      // Check if this is an overnight rate (crosses midnight)
+      const isOvernightRate = rateEndMinutes <= rateStartMinutes;
+      
+      // Check if current time falls within this rate's range
+      let timeInRange = false;
+      if (isOvernightRate) {
+        // For overnight rates, check BOTH portions:
+        // Evening portion (>= start time) OR morning portion (< end time)
+        timeInRange = (normalizedCurrent >= rateStartMinutes) || (normalizedCurrent < rateEndMinutes);
+      } else {
+        // Standard same-day rate
+        timeInRange = (normalizedCurrent >= rateStartMinutes && normalizedCurrent < rateEndMinutes);
       }
       
       // Check if current time falls within this rate's range
-      if (normalizedCurrent >= rateStartMinutes && normalizedCurrent < rateEndMinutes) {
+      if (timeInRange) {
         // If this rate has day restrictions
         if (rate.applicableDays && rate.applicableDays.length > 0) {
           // Date must be provided when rates have day restrictions
@@ -162,14 +171,28 @@ export function calculateTimeBasedCost(
     if (applicableRate) {
       // Calculate minutes in this rate range
       const rateStartMinutes = timeToMinutes(applicableRate.startTime);
-      let rateEndMinutes = timeToMinutes(applicableRate.endTime);
-      
-      if (rateEndMinutes <= rateStartMinutes) {
-        rateEndMinutes += 24 * 60;
-      }
+      const rateEndMinutes = timeToMinutes(applicableRate.endTime);
+      const isOvernightRate = rateEndMinutes <= rateStartMinutes;
       
       // How many minutes until this rate range ends?
-      const minutesUntilRateEnd = rateEndMinutes - normalizedCurrent;
+      let minutesUntilRateEnd: number;
+      
+      if (isOvernightRate) {
+        // For overnight rates, check which portion we're in
+        if (normalizedCurrent >= rateStartMinutes) {
+          // We're in the evening portion (e.g., 22:00-23:59)
+          // Calculate to midnight, then add the morning portion
+          const toMidnight = (24 * 60) - normalizedCurrent;
+          minutesUntilRateEnd = toMidnight + rateEndMinutes;
+        } else {
+          // We're in the morning portion (e.g., 00:00-06:00)
+          minutesUntilRateEnd = rateEndMinutes - normalizedCurrent;
+        }
+      } else {
+        // Standard same-day rate
+        minutesUntilRateEnd = rateEndMinutes - normalizedCurrent;
+      }
+      
       const minutesInThisRange = Math.min(remainingMinutes, minutesUntilRateEnd);
       
       const hoursInThisRange = minutesToHours(minutesInThisRange);
