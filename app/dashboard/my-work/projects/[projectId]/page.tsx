@@ -1000,6 +1000,25 @@ export default function ProjectDetailPage() {
     approvedCount: timeLogs.filter((l) => l.status === 'APPROVED').length + expenses.filter((e) => e.status === 'APPROVED').length,
   };
 
+  // Check if project is active and editable
+  const isProjectActive = project?.status === 'ACTIVE';
+  const canEdit = isProjectActive && summaryStats.submittedCount === 0;
+  
+  // Get status message
+  const getProjectStatusMessage = () => {
+    if (!project) return null;
+    switch (project.status) {
+      case 'COMPLETED':
+        return 'This project has been completed. No further entries can be added.';
+      case 'CANCELLED':
+        return 'This project has been cancelled. No further entries can be added.';
+      case 'ON_HOLD':
+        return 'This project is on hold. No further entries can be added at this time.';
+      default:
+        return null;
+    }
+  };
+
   const recalculateRates = async () => {
     if (!payCard || !rateAssignment) {
       setError('Rate card not found');
@@ -1757,6 +1776,19 @@ export default function ProjectDetailPage() {
           </div>
         )}
 
+        {/* Project Status Banner */}
+        {!isProjectActive && getProjectStatusMessage() && (
+          <div className="bg-amber-50 border-2 border-amber-400 rounded-lg p-4 shadow-md">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-amber-900 text-lg mb-1">Project {project.status}</h3>
+                <p className="text-amber-800">{getProjectStatusMessage()}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Success/Error Messages */}
         {success && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-2">
@@ -1831,9 +1863,15 @@ export default function ProjectDetailPage() {
             {activeTab === 'logs' && (
               <div className="space-y-6">
                 {/* Add Time Log Form */}
-                <div className={`bg-gray-50 border border-gray-200 rounded-lg p-4 ${summaryStats.submittedCount > 0 ? 'opacity-50 pointer-events-none' : ''}`}>
+                <div className={`bg-gray-50 border border-gray-200 rounded-lg p-4 ${!canEdit ? 'opacity-50 pointer-events-none' : ''}`}>
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Add Time Log</h3>
-                  {summaryStats.submittedCount > 0 && (
+                  {!isProjectActive && (
+                    <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-2">
+                      <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                      <p className="text-sm text-amber-700">{getProjectStatusMessage()}</p>
+                    </div>
+                  )}
+                  {isProjectActive && summaryStats.submittedCount > 0 && (
                     <div className="mb-4 bg-orange-50 border border-orange-200 rounded-lg p-3 flex items-center gap-2">
                       <AlertCircle className="w-5 h-5 text-orange-600 flex-shrink-0" />
                       <p className="text-sm text-orange-700">You have submitted items for approval. New items cannot be added until they are approved or rejected.</p>
@@ -2086,9 +2124,15 @@ export default function ProjectDetailPage() {
             {activeTab === 'expenses' && (
               <div className="space-y-6">
                 {/* Add Expense Form */}
-                <div className={`bg-gray-50 border border-gray-200 rounded-lg p-4 ${summaryStats.submittedCount > 0 ? 'opacity-50 pointer-events-none' : ''}`}>
+                <div className={`bg-gray-50 border border-gray-200 rounded-lg p-4 ${!canEdit ? 'opacity-50 pointer-events-none' : ''}`}>
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Add Expense</h3>
-                  {summaryStats.submittedCount > 0 && (
+                  {!isProjectActive && (
+                    <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-2">
+                      <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                      <p className="text-sm text-amber-700">{getProjectStatusMessage()}</p>
+                    </div>
+                  )}
+                  {isProjectActive && summaryStats.submittedCount > 0 && (
                     <div className="mb-4 bg-orange-50 border border-orange-200 rounded-lg p-3 flex items-center gap-2">
                       <AlertCircle className="w-5 h-5 text-orange-600 flex-shrink-0" />
                       <p className="text-sm text-orange-700">You have submitted items for approval. New items cannot be added until they are approved or rejected.</p>
