@@ -113,7 +113,8 @@ export default function ClientPortalPage() {
         })
       );
 
-      setProjects(projectsData.filter(p => p !== null) as Project[]);
+      // Filter out null and CANCELLED projects (safety check - access should have been revoked)
+      setProjects(projectsData.filter(p => p !== null && p.status !== 'CANCELLED') as Project[]);
     } catch (error) {
       console.error('Error loading projects:', error);
     }
