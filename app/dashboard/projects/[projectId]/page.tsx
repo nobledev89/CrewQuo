@@ -15,9 +15,10 @@ import {
   deleteDoc,
   serverTimestamp 
 } from 'firebase/firestore';
-import { Briefcase, Users, UserPlus, X, Trash2, ArrowLeft, Activity, Clock, DollarSign, TrendingUp } from 'lucide-react';
+import { Briefcase, Users, UserPlus, X, Trash2, ArrowLeft, Activity, Clock, DollarSign, TrendingUp, MessageSquare } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import SubcontractorCostBreakdown from '@/components/SubcontractorCostBreakdown';
+import LineItemNotesModal from '@/components/LineItemNotesModal';
 import { useParams, useRouter } from 'next/navigation';
 import { 
   aggregateProjectCosts, 
@@ -27,6 +28,7 @@ import {
   type ExpenseData,
   type ProjectTracking
 } from '@/lib/projectTrackingUtils';
+import { getUnresolvedNotesCounts } from '@/lib/lineItemNotesUtils';
 
 interface Project {
   id: string;
@@ -75,6 +77,15 @@ export default function ProjectDetailPage() {
   const [projectTracking, setProjectTracking] = useState<ProjectTracking | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'submitted' | 'approved'>('all');
   const [currency] = useState<string>('GBP');
+
+  // Notes modal state
+  const [selectedLineItem, setSelectedLineItem] = useState<{
+    itemId: string;
+    itemType: 'timeLog' | 'expense';
+    itemDescription: string;
+  } | null>(null);
+  const [unresolvedNotesMap, setUnresolvedNotesMap] = useState<Map<string, number>>(new Map());
+  const [clientOrgId, setClientOrgId] = useState<string>('');
 
   useEffect(() => {
     // Safety check: ensure projectId is available
@@ -134,15 +145,19 @@ export default function ProjectDetailPage() {
       if (projectDoc.exists()) {
         const projectData = projectDoc.data();
         
-        // Fetch client name
+        // Fetch client name and clientOrgId
         let clientName = 'Unknown Client';
+        let orgId = '';
         if (projectData.clientId) {
           const clientDoc = await getDoc(doc(db, 'clients', projectData.clientId));
           if (clientDoc.exists()) {
-            clientName = clientDoc.data().name;
+            const clientData = clientDoc.data();
+            clientName = clientData.name;
+            orgId = clientData.clientOrgId || '';
           }
         }
         
+        setClientOrgId(orgId);
         setProject({
           id: projectDoc.id,
           projectCode: projectData.projectCode,
@@ -362,6 +377,13 @@ export default function ProjectDetailPage() {
       // Aggregate the data with the subcontractors map
       const tracking = aggregateProjectCosts(logsData, expensesData, subsMap);
       setProjectTracking(tracking);
+
+      // Fetch unresolved notes counts for all line items
+      const allItemIds = [...logsData.map(log => log.id), ...expensesData.map(exp => exp.id)];
+      if (allItemIds.length > 0) {
+        const notesCountsMap = await getUnresolvedNotesCounts(allItemIds);
+        setUnresolvedNotesMap(notesCountsMap);
+      }
     } catch (error) {
       console.error('Error fetching live tracking data:', error);
     }
@@ -821,6 +843,27 @@ export default function ProjectDetailPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Notes Modal */}
+      {selectedLineItem && clientOrgId && (
+        <LineItemNotesModal
+          itemId={selectedLineItem.itemId}
+          itemType={selectedLineItem.itemType}
+          itemDescription={selectedLineItem.itemDescription}
+          projectId={projectId}
+          clientOrgId={clientOrgId}
+          contractorCompanyId={companyId}
+          onClose={() => {
+            setSelectedLineItem(null);
+            // Refresh notes counts after closing modal
+            if (projectId) {
+              fetchLiveTrackingData(companyId, projectId);
+            }
+          }}
+          allowClientNotes={true}
+          allowSubcontractorNotes={false}
+        />
       )}
     </DashboardLayout>
   );

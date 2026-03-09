@@ -600,14 +600,19 @@ service cloud.firestore {
         // Client can read notes on projects they have access to
         (userRole() == 'CLIENT' && 
          resource.data.clientOrgId == request.auth.token.clientOrgId &&
-         resource.data.contractorCompanyId in request.auth.token.contractorCompanyIds)
+         resource.data.contractorCompanyId in request.auth.token.contractorCompanyIds) ||
+        // Subcontractor can read notes on projects they work on
+        (userRole() == 'SUBCONTRACTOR' &&
+         hasAccessToCompany(resource.data.contractorCompanyId))
       );
       // Allow list/query operations
       allow list: if authed() && (
         // Contractors can list their notes
         userRole() in ['ADMIN', 'MANAGER'] ||
         // Clients can list notes (filtered by their access in queries)
-        userRole() == 'CLIENT'
+        userRole() == 'CLIENT' ||
+        // Subcontractors can list notes (filtered by their access in queries)
+        userRole() == 'SUBCONTRACTOR'
       );
       allow create: if authed() && (
         // Contractors can create notes
@@ -616,7 +621,10 @@ service cloud.firestore {
         // Clients can create notes if allowed
         (request.resource.data.createdByRole == 'CLIENT' &&
          request.resource.data.clientOrgId == request.auth.token.clientOrgId &&
-         request.resource.data.contractorCompanyId in request.auth.token.contractorCompanyIds)
+         request.resource.data.contractorCompanyId in request.auth.token.contractorCompanyIds) ||
+        // Subcontractors can create notes if allowed (checked in app logic via allowSubcontractorNotes setting)
+        (request.resource.data.createdByRole == 'SUBCONTRACTOR' &&
+         hasAccessToCompany(request.resource.data.contractorCompanyId))
       );
       allow update: if authed() && (
         // Only contractors can update (resolve/unresolve)

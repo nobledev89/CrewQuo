@@ -161,6 +161,7 @@ export async function grantProjectAccess(
     overrideShowCosts?: boolean;
     overrideShowMargins?: boolean;
     overrideShowSubcontractorRates?: boolean;
+    allowSubcontractorNotes?: boolean;
   }
 ): Promise<string> {
   const accessId = `${clientOrgId}_${projectId}`;

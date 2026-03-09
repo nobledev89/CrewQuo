@@ -255,6 +255,9 @@ export interface ClientProjectAccess {
   overrideShowMargins?: boolean;
   overrideShowSubcontractorRates?: boolean;
   
+  // Collaboration settings (per-project)
+  allowSubcontractorNotes?: boolean;  // Let subcontractors join conversations on this project
+  
   active: boolean;
 }
 
@@ -262,7 +265,7 @@ export interface ClientProjectAccess {
 // LINE ITEM NOTE MODEL (Client collaboration)
 // ============================================
 
-export type NoteCreatorRole = 'CLIENT' | 'ADMIN' | 'MANAGER';
+export type NoteCreatorRole = 'CLIENT' | 'ADMIN' | 'MANAGER' | 'SUBCONTRACTOR';
 
 export interface LineItemNote {
   id: string;

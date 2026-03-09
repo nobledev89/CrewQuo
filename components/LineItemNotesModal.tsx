@@ -20,6 +20,7 @@ interface LineItemNotesModalProps {
   contractorCompanyId: string;
   onClose: () => void;
   allowClientNotes: boolean;
+  allowSubcontractorNotes?: boolean;
 }
 
 export default function LineItemNotesModal({
@@ -31,6 +32,7 @@ export default function LineItemNotesModal({
   contractorCompanyId,
   onClose,
   allowClientNotes,
+  allowSubcontractorNotes = false,
 }: LineItemNotesModalProps) {
   const { user, userData } = useAuth();
   const [notes, setNotes] = useState<LineItemNote[]>([]);
@@ -59,7 +61,20 @@ export default function LineItemNotesModal({
 
     setSubmitting(true);
     try {
-      const createdByRole = userData.role === 'CLIENT' ? 'CLIENT' : (userData.role === 'ADMIN' ? 'ADMIN' : 'MANAGER');
+      // Determine role
+      let createdByRole: 'CLIENT' | 'ADMIN' | 'MANAGER' | 'SUBCONTRACTOR';
+      if (userData.role === 'CLIENT') {
+        createdByRole = 'CLIENT';
+      } else if (userData.role === 'ADMIN') {
+        createdByRole = 'ADMIN';
+      } else if (userData.role === 'MANAGER') {
+        createdByRole = 'MANAGER';
+      } else if (userData.role === 'SUBCONTRACTOR') {
+        createdByRole = 'SUBCONTRACTOR';
+      } else {
+        createdByRole = 'MANAGER'; // Fallback
+      }
+
       const createdByName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.email;
 
       await addLineItemNote(
@@ -111,8 +126,31 @@ export default function LineItemNotesModal({
   };
 
   const isClient = userData?.role === 'CLIENT';
-  const canAddNotes = isClient ? allowClientNotes : true;
-  const canResolve = !isClient; // Only contractors can resolve notes
+  const isSubcontractor = userData?.role === 'SUBCONTRACTOR';
+  const isContractor = userData?.role === 'ADMIN' || userData?.role === 'MANAGER';
+  
+  // Determine if user can add notes
+  const canAddNotes = isClient 
+    ? allowClientNotes 
+    : isSubcontractor
+    ? allowSubcontractorNotes
+    : true; // Admins and managers can always add notes
+  
+  const canResolve = isContractor; // Only contractors (admin/manager) can resolve notes
+  
+  // Helper to get role label and color
+  const getRoleDisplay = (role: string) => {
+    switch (role) {
+      case 'CLIENT':
+        return { label: 'Client', color: 'bg-blue-600' };
+      case 'SUBCONTRACTOR':
+        return { label: 'Subcontractor', color: 'bg-purple-600' };
+      case 'ADMIN':
+      case 'MANAGER':
+      default:
+        return { label: 'Contractor', color: 'bg-green-600' };
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -151,57 +189,60 @@ export default function LineItemNotesModal({
             </div>
           ) : (
             <div className="space-y-4">
-              {notes.map((note) => (
-                <div
-                  key={note.id}
-                  className={`border rounded-lg p-4 ${
-                    note.isResolved
-                      ? 'bg-gray-50 border-gray-200'
-                      : note.createdByRole === 'CLIENT'
-                      ? 'bg-blue-50 border-blue-200'
-                      : 'bg-green-50 border-green-200'
-                  }`}
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-center space-x-2">
-                      <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${
-                          note.createdByRole === 'CLIENT' ? 'bg-blue-600' : 'bg-green-600'
+              {notes.map((note) => {
+                const roleDisplay = getRoleDisplay(note.createdByRole);
+                return (
+                  <div
+                    key={note.id}
+                    className={`border rounded-lg p-4 ${
+                      note.isResolved
+                        ? 'bg-gray-50 border-gray-200'
+                        : note.createdByRole === 'CLIENT'
+                        ? 'bg-blue-50 border-blue-200'
+                        : note.createdByRole === 'SUBCONTRACTOR'
+                        ? 'bg-purple-50 border-purple-200'
+                        : 'bg-green-50 border-green-200'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center space-x-2">
+                        <div
+                          className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${roleDisplay.color}`}
+                        >
+                          {note.createdByName.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-900">{note.createdByName}</p>
+                          <p className="text-xs text-gray-500">
+                            {roleDisplay.label} • {formatDate(note.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+                      {note.isResolved && (
+                        <span className="flex items-center space-x-1 px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold">
+                          <CheckCircle className="w-3 h-3" />
+                          <span>Resolved</span>
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-gray-800 mb-3 whitespace-pre-wrap">{note.note}</p>
+
+                    {canResolve && (
+                      <button
+                        onClick={() => handleToggleResolve(note)}
+                        className={`text-xs font-semibold px-3 py-1 rounded-lg transition ${
+                          note.isResolved
+                            ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            : 'bg-green-100 text-green-700 hover:bg-green-200'
                         }`}
                       >
-                        {note.createdByName.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-900">{note.createdByName}</p>
-                        <p className="text-xs text-gray-500">
-                          {note.createdByRole === 'CLIENT' ? 'Client' : 'Contractor'} • {formatDate(note.createdAt)}
-                        </p>
-                      </div>
-                    </div>
-                    {note.isResolved && (
-                      <span className="flex items-center space-x-1 px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold">
-                        <CheckCircle className="w-3 h-3" />
-                        <span>Resolved</span>
-                      </span>
+                        {note.isResolved ? 'Mark as Unresolved' : 'Mark as Resolved'}
+                      </button>
                     )}
                   </div>
-
-                  <p className="text-gray-800 mb-3 whitespace-pre-wrap">{note.note}</p>
-
-                  {canResolve && (
-                    <button
-                      onClick={() => handleToggleResolve(note)}
-                      className={`text-xs font-semibold px-3 py-1 rounded-lg transition ${
-                        note.isResolved
-                          ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                          : 'bg-green-100 text-green-700 hover:bg-green-200'
-                      }`}
-                    >
-                      {note.isResolved ? 'Mark as Unresolved' : 'Mark as Resolved'}
-                    </button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
