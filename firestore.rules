@@ -632,5 +632,57 @@ service cloud.firestore {
         resource.data.contractorCompanyId == ownCompanyId()
       );
     }
+    
+    // ============================================
+    // AUDIT LOGS
+    // ============================================
+    
+    // Audit Logs (Read-only after creation, auto-deleted after 90 days via TTL)
+    match /auditLogs/{logId} {
+      // Get individual audit log
+      allow get: if authed() && (
+        // Contractors (admin/manager) can read logs for their company
+        (userRole() in ['ADMIN', 'MANAGER'] && resource.data.companyId == ownCompanyId()) ||
+        // Clients can read logs if marked as visible AND they have access to the contractor
+        (userRole() == 'CLIENT' && 
+         resource.data.visibleToClient == true &&
+         resource.data.companyId in request.auth.token.contractorCompanyIds) ||
+        // Super admin can read all
+        isSuperAdmin()
+      );
+      // List/query audit logs
+      allow list: if authed() && (
+        // Contractors (admin/manager) can list their company's logs
+        userRole() in ['ADMIN', 'MANAGER', 'SUPER_ADMIN'] ||
+        // Clients can list (filtered by their access and visibleToClient in queries)
+        userRole() == 'CLIENT'
+      );
+      // Only admins/managers can create audit logs (write-only, no updates)
+      allow create: if authed() && 
+        userRole() in ['ADMIN', 'MANAGER'] &&
+        request.resource.data.companyId == ownCompanyId() &&
+        request.resource.data.keys().hasAll(['companyId', 'action', 'entityType', 'entityId', 'userId', 'userName', 'userRole', 'changes', 'description', 'timestamp', 'expiresAt', 'visibleToClient']);
+      // No updates allowed - audit logs are immutable
+      allow update: if false;
+      // No manual deletes - TTL handles cleanup after 90 days
+      allow delete: if false;
+    }
+    
+    // Client Audit Settings
+    match /clientAuditSettings/{settingsId} {
+      allow read: if authed() && (
+        // Contractors can read settings for their relationships
+        (userRole() in ['ADMIN', 'MANAGER'] && resource.data.contractorCompanyId == ownCompanyId()) ||
+        // Clients can read their own settings
+        (userRole() == 'CLIENT' && resource.data.clientOrgId == request.auth.token.clientOrgId)
+      );
+      allow create: if authed() && 
+        userRole() in ['ADMIN', 'MANAGER'] &&
+        request.resource.data.contractorCompanyId == ownCompanyId();
+      allow update: if authed() && 
+        userRole() in ['ADMIN', 'MANAGER'] &&
+        resource.data.contractorCompanyId == ownCompanyId() &&
+        request.resource.data.contractorCompanyId == ownCompanyId();
+    }
   }
 }

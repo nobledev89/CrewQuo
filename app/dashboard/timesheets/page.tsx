@@ -27,6 +27,7 @@ import {
   Download,
 } from 'lucide-react';
 import type { ProjectSubmission, TimeLog, Expense, LineItemRejectionNote } from '@/lib/types';
+import { logTimesheetApproval, logTimesheetRejection } from '@/lib/auditLogger';
 
 interface ExpandedNote {
   timesheetId: string;
@@ -281,6 +282,24 @@ export default function TimesheetsPage() {
       });
 
       await batch.commit();
+      
+      // Log approval audit event
+      if (userData && timesheet.project && timesheet.subcontractor) {
+        await logTimesheetApproval(
+          timesheetId,
+          timesheet.submission.projectId,
+          timesheet.project.name,
+          timesheet.submission.subcontractorId,
+          timesheet.subcontractor.name,
+          activeCompanyId,
+          userData.uid,
+          `${userData.firstName} ${userData.lastName}`,
+          userData.role as any,
+          timesheet.submission.timeLogIds,
+          timesheet.submission.expenseIds
+        );
+      }
+      
       setSuccess('Timesheet approved successfully');
 
       // Refresh data
@@ -357,6 +376,23 @@ export default function TimesheetsPage() {
       });
 
       await batch.commit();
+      
+      // Log rejection audit event
+      if (userData && timesheet.project && timesheet.subcontractor && auth.currentUser) {
+        await logTimesheetRejection(
+          rejectingTimesheetId,
+          timesheet.submission.projectId,
+          timesheet.project.name,
+          timesheet.submission.subcontractorId,
+          timesheet.subcontractor.name,
+          activeCompanyId,
+          auth.currentUser.uid,
+          `${userData.firstName} ${userData.lastName}`,
+          userData.role as any,
+          rejectionReason.trim()
+        );
+      }
+      
       setSuccess('Timesheet rejected with reason provided');
 
       // Close modal and refresh data

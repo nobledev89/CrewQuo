@@ -705,6 +705,82 @@ export interface ProjectSubmission {
 }
 
 // ============================================
+// AUDIT LOG MODEL
+// ============================================
+
+export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'APPROVE' | 'REJECT' | 'SUBMIT' | 'SYNC';
+export type AuditEntityType = 'TIME_LOG' | 'EXPENSE' | 'TIMESHEET' | 'RATE_TEMPLATE' | 'RATE_CARD' | 'RATE_ASSIGNMENT';
+
+export interface AuditFieldChange {
+  field: string;
+  oldValue: any;
+  newValue: any;
+  displayOld?: string; // Formatted for display
+  displayNew?: string; // Formatted for display
+}
+
+export interface AuditLog {
+  id: string;
+  companyId: string;
+  
+  // What happened
+  action: AuditAction;
+  entityType: AuditEntityType;
+  entityId: string;
+  entityName?: string;
+  
+  // Who did it
+  userId: string;
+  userName: string;
+  userRole: UserRole;
+  
+  // Context (for time logs/expenses)
+  projectId?: string;
+  projectName?: string;
+  clientId?: string;
+  clientName?: string;
+  subcontractorId?: string;
+  subcontractorName?: string;
+  
+  // Field-level changes
+  changes: AuditFieldChange[];
+  
+  description: string; // Human-readable summary
+  
+  // Timestamps
+  timestamp: Timestamp;
+  expiresAt: Timestamp; // Auto-delete after 90 days
+  
+  // Client visibility control
+  visibleToClient: boolean; // Default: false
+}
+
+// ============================================
+// CLIENT AUDIT SETTINGS MODEL
+// ============================================
+
+export interface ClientAuditSettings {
+  id: string;
+  clientOrgId: string;
+  contractorCompanyId: string;
+  
+  // Audit log visibility (master toggle)
+  showAuditLogs: boolean;
+  
+  // What types of changes they can see
+  showTimeLogChanges: boolean;
+  showExpenseChanges: boolean;
+  showTimesheetActions: boolean;
+  
+  // What details they can see
+  showUserNames: boolean;     // Show who made changes
+  showOldValues: boolean;     // Show before/after comparison
+  
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// ============================================
 // CUSTOM CLAIMS
 // ============================================
 
