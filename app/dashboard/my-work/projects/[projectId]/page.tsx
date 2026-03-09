@@ -23,6 +23,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { ArrowLeft, Clock, DollarSign, BarChart3, Send, Plus, Edit2, Trash2, AlertCircle, CheckCircle } from 'lucide-react';
 import { calculateTimeBasedCost } from '@/lib/timeBasedRateCalculator';
 import { retryWithTokenRefresh, isPermissionError, handlePermissionError } from '@/lib/tokenRefresh';
+import { logTimeLogCreate, logTimeLogDelete } from '@/lib/auditLogger';
 
 export default function ProjectDetailPage() {
   const params = useParams();
@@ -716,10 +717,27 @@ export default function ProjectDetailPage() {
           const description = segment.timeRange.split('(')[1]?.split(')')[0] || 'Standard';
           timeLogData.shiftType = description;
 
-          await addDoc(collection(db, 'timeLogs'), timeLogData);
+          const newLogRef = await addDoc(collection(db, 'timeLogs'), timeLogData);
+          
+          // Log audit event for this segment
+          if (userData) {
+            await logTimeLogCreate(
+              { ...timeLogData, id: newLogRef.id } as any,
+              user.uid,
+              `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || user.email || 'Unknown',
+              userData.role as any,
+              {
+                projectName: project.name,
+                clientName: clientName,
+                subcontractorName: userData.firstName && userData.lastName 
+                  ? `${userData.firstName} ${userData.lastName}` 
+                  : user.email || 'Unknown'
+              }
+            );
+          }
         }
 
-        setSuccess(`${calculationBreakdown.length} time log entries created (split by shift)`);
+        setSuccess('Time log added successfully');
       } else {
         // Single entry (no split needed)
         const timeLogData: any = {
@@ -764,7 +782,25 @@ export default function ProjectDetailPage() {
           timeLogData.shiftType = selectedRateEntry.shiftType;
         }
 
-        await addDoc(collection(db, 'timeLogs'), timeLogData);
+        const newLogRef = await addDoc(collection(db, 'timeLogs'), timeLogData);
+        
+        // Log audit event
+        if (userData) {
+          await logTimeLogCreate(
+            { ...timeLogData, id: newLogRef.id } as any,
+            user.uid,
+            `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || user.email || 'Unknown',
+            userData.role as any,
+            {
+              projectName: project.name,
+              clientName: clientName,
+              subcontractorName: userData.firstName && userData.lastName 
+                ? `${userData.firstName} ${userData.lastName}` 
+                : user.email || 'Unknown'
+            }
+          );
+        }
+        
         setSuccess('Time log added successfully');
       }
 
