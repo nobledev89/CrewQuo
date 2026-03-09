@@ -284,7 +284,7 @@ export default function TimesheetsPage() {
       await batch.commit();
       
       // Log approval audit event
-      if (userData && timesheet.project && timesheet.subcontractor) {
+      if (userData && timesheet.project && timesheet.subcontractor && auth.currentUser) {
         await logTimesheetApproval(
           timesheetId,
           timesheet.submission.projectId,
@@ -292,7 +292,7 @@ export default function TimesheetsPage() {
           timesheet.submission.subcontractorId,
           timesheet.subcontractor.name,
           activeCompanyId,
-          userData.uid,
+          auth.currentUser.uid,
           `${userData.firstName} ${userData.lastName}`,
           userData.role as any,
           timesheet.submission.timeLogIds,
