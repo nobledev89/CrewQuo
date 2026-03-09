@@ -12,10 +12,12 @@ import {
   where,
   getDocs,
 } from 'firebase/firestore';
-import { ArrowLeft, Activity, Clock, DollarSign, TrendingUp, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Activity, Clock, DollarSign, TrendingUp, MessageSquare, Download, FileSpreadsheet, FileText, FileDown } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import LineItemNotesModal from '@/components/LineItemNotesModal';
+import DownloadProgressBar from '@/components/DownloadProgressBar';
 import { getProjectVisibilitySettings } from '@/lib/clientAccessUtils';
+import { exportToCSV, exportToXLSX, exportToPDF } from '@/lib/projectExportUtils';
 import {
   aggregateProjectCosts,
   formatCurrency,
@@ -76,6 +78,10 @@ export default function ClientProjectDetailPage() {
     itemDescription: string;
   } | null>(null);
 
+  // Download state
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadFormat, setDownloadFormat] = useState<'CSV' | 'XLSX' | 'PDF' | null>(null);
+
   useEffect(() => {
     if (!projectId) {
       setLoading(false);
@@ -111,6 +117,48 @@ export default function ClientProjectDetailPage() {
 
     return () => unsubscribe();
   }, [projectId, router]);
+
+  const handleDownload = async (format: 'CSV' | 'XLSX' | 'PDF') => {
+    if (!project || !projectTracking) return;
+
+    setIsDownloading(true);
+    setDownloadFormat(format);
+
+    try {
+      // Small delay to show the loading indicator
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const exportOptions = {
+        projectCode: project.projectCode,
+        projectName: project.name,
+        location: project.location,
+        status: project.status,
+        projectTracking,
+        timeLogs,
+        expenses,
+        visibility,
+        currency,
+      };
+
+      switch (format) {
+        case 'CSV':
+          exportToCSV(exportOptions);
+          break;
+        case 'XLSX':
+          exportToXLSX(exportOptions);
+          break;
+        case 'PDF':
+          exportToPDF(exportOptions);
+          break;
+      }
+    } catch (error) {
+      console.error('Error exporting project:', error);
+      alert('Failed to export project. Please try again.');
+    } finally {
+      setIsDownloading(false);
+      setDownloadFormat(null);
+    }
+  };
 
   const fetchProject = async (projId: string) => {
     try {
@@ -293,9 +341,40 @@ export default function ClientProjectDetailPage() {
               <h2 className="text-2xl font-bold text-gray-900 mb-2">{project.name}</h2>
               <p className="text-gray-600 font-mono">{project.projectCode}</p>
             </div>
-            <span className={`px-3 py-1 text-xs font-semibold rounded-full border ${getStatusColor(project.status)}`}>
-              {project.status}
-            </span>
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => handleDownload('XLSX')}
+                  disabled={isDownloading}
+                  className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Download as Excel"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>XLSX</span>
+                </button>
+                <button
+                  onClick={() => handleDownload('CSV')}
+                  disabled={isDownloading}
+                  className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Download as CSV"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>CSV</span>
+                </button>
+                <button
+                  onClick={() => handleDownload('PDF')}
+                  disabled={isDownloading}
+                  className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Download as PDF"
+                >
+                  <FileDown className="w-4 h-4" />
+                  <span>PDF</span>
+                </button>
+              </div>
+              <span className={`px-3 py-1 text-xs font-semibold rounded-full border ${getStatusColor(project.status)}`}>
+                {project.status}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -751,6 +830,9 @@ export default function ClientProjectDetailPage() {
           allowClientNotes={visibility.allowClientNotes}
         />
       )}
+
+      {/* Download Progress Bar */}
+      <DownloadProgressBar format={downloadFormat} isVisible={isDownloading} />
     </DashboardLayout>
   );
 }
