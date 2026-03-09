@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, Clock, DollarSign, TrendingUp, FileText } from 'lucide-react';
+import { ChevronDown, ChevronUp, Clock, DollarSign, TrendingUp, FileText, MessageSquare } from 'lucide-react';
 import {
   SubcontractorTracking,
   formatCurrency,
@@ -13,14 +13,20 @@ interface SubcontractorCostBreakdownProps {
   subcontractor: SubcontractorTracking;
   currency?: string;
   showLineItems?: boolean;
+  unresolvedNotesMap?: Map<string, number>;
+  onOpenConversation?: (itemId: string, itemType: 'timeLog' | 'expense', description: string) => void;
 }
 
 export default function SubcontractorCostBreakdown({
   subcontractor,
   currency = 'GBP',
   showLineItems = true,
+  unresolvedNotesMap,
+  onOpenConversation,
 }: SubcontractorCostBreakdownProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  
+  const showConversations = unresolvedNotesMap && onOpenConversation;
 
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow">
@@ -194,6 +200,9 @@ export default function SubcontractorCostBreakdown({
                         <th className="px-4 py-3 text-right font-semibold text-gray-700">Bill</th>
                         <th className="px-4 py-3 text-right font-semibold text-gray-700">Margin</th>
                         <th className="px-4 py-3 text-center font-semibold text-gray-700">Status</th>
+                        {showConversations && (
+                          <th className="px-4 py-3 text-center font-semibold text-gray-700">Conversation</th>
+                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
@@ -254,6 +263,35 @@ export default function SubcontractorCostBreakdown({
                                 {log.status}
                               </span>
                             </td>
+                            {showConversations && (
+                              <td className="px-4 py-3 text-center">
+                                {(() => {
+                                  const unresolvedCount = unresolvedNotesMap!.get(log.id) || 0;
+                                  const hasConversation = unresolvedCount > 0;
+                                  return (
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onOpenConversation!(log.id, 'timeLog', `${log.roleName} - ${formatDate(log.date)} - ${totalHours.toFixed(1)}h`);
+                                      }}
+                                      className={`relative p-2 rounded-lg transition ${
+                                        hasConversation 
+                                          ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' 
+                                          : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'
+                                      }`}
+                                      title={hasConversation ? `${unresolvedCount} unresolved message${unresolvedCount !== 1 ? 's' : ''}` : "View conversation"}
+                                    >
+                                      <MessageSquare className="w-4 h-4" fill={hasConversation ? 'currentColor' : 'none'} />
+                                      {hasConversation && (
+                                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                                          {unresolvedCount}
+                                        </span>
+                                      )}
+                                    </button>
+                                  );
+                                })()}
+                              </td>
+                            )}
                           </tr>
                         );
                       })}
@@ -302,6 +340,35 @@ export default function SubcontractorCostBreakdown({
                                 {exp.status}
                               </span>
                             </td>
+                            {showConversations && (
+                              <td className="px-4 py-3 text-center">
+                                {(() => {
+                                  const unresolvedCount = unresolvedNotesMap!.get(exp.id) || 0;
+                                  const hasConversation = unresolvedCount > 0;
+                                  return (
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onOpenConversation!(exp.id, 'expense', `${exp.category} - ${formatDate(exp.date)} - ${formatCurrency(exp.amount, currency)}`);
+                                      }}
+                                      className={`relative p-2 rounded-lg transition ${
+                                        hasConversation 
+                                          ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' 
+                                          : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'
+                                      }`}
+                                      title={hasConversation ? `${unresolvedCount} unresolved message${unresolvedCount !== 1 ? 's' : ''}` : "View conversation"}
+                                    >
+                                      <MessageSquare className="w-4 h-4" fill={hasConversation ? 'currentColor' : 'none'} />
+                                      {hasConversation && (
+                                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                                          {unresolvedCount}
+                                        </span>
+                                      )}
+                                    </button>
+                                  );
+                                })()}
+                              </td>
+                            )}
                           </tr>
                         );
                       })}

@@ -774,6 +774,10 @@ export default function ProjectDetailPage() {
                       subcontractor={sub}
                       currency={currency}
                       showLineItems={true}
+                      unresolvedNotesMap={unresolvedNotesMap}
+                      onOpenConversation={(itemId, itemType, description) => {
+                        setSelectedLineItem({ itemId, itemType, itemDescription: description });
+                      }}
                     />
                   ))}
                 </div>
