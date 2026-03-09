@@ -11,8 +11,9 @@ import {
   query,
   where,
   getDocs,
+  updateDoc,
 } from 'firebase/firestore';
-import { FolderOpen, CheckCircle, X, ArrowLeft, Settings } from 'lucide-react';
+import { FolderOpen, CheckCircle, X, ArrowLeft, Settings, MessageSquare } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import {
   grantProjectAccess,
@@ -48,6 +49,14 @@ export default function ClientProjectsPage() {
   const [userId, setUserId] = useState('');
   const [userRole, setUserRole] = useState('');
   const [toggling, setToggling] = useState<string | null>(null);
+  
+  // Settings modal state
+  const [settingsModal, setSettingsModal] = useState<{
+    projectId: string;
+    projectName: string;
+    allowSubcontractorNotes: boolean;
+  } | null>(null);
+  const [savingSettings, setSavingSettings] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -172,6 +181,48 @@ export default function ClientProjectsPage() {
         return 'bg-red-100 text-red-800 border-red-200';
       default:
         return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  const handleOpenSettings = async (projectId: string, projectName: string) => {
+    if (!client?.clientOrgId) return;
+
+    try {
+      // Fetch current settings from clientProjectAccess
+      const accessId = `${client.clientOrgId}_${projectId}`;
+      const accessDoc = await getDoc(doc(db, 'clientProjectAccess', accessId));
+      
+      const currentSettings = accessDoc.exists() ? accessDoc.data() : {};
+      
+      setSettingsModal({
+        projectId,
+        projectName,
+        allowSubcontractorNotes: currentSettings.allowSubcontractorNotes || false,
+      });
+    } catch (error) {
+      console.error('Error fetching project settings:', error);
+      alert('Failed to load project settings.');
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    if (!settingsModal || !client?.clientOrgId) return;
+
+    setSavingSettings(true);
+    try {
+      const accessId = `${client.clientOrgId}_${settingsModal.projectId}`;
+      const accessRef = doc(db, 'clientProjectAccess', accessId);
+      
+      await updateDoc(accessRef, {
+        allowSubcontractorNotes: settingsModal.allowSubcontractorNotes,
+      });
+
+      setSettingsModal(null);
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      alert('Failed to save settings. Please try again.');
+    } finally {
+      setSavingSettings(false);
     }
   };
 
@@ -302,32 +353,43 @@ export default function ClientProjectsPage() {
                   </div>
 
                   {canEdit && client.clientOrgId && (
-                    <button
-                      onClick={() => handleToggleAccess(project.id, project.hasAccess)}
-                      disabled={toggling === project.id}
-                      className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition ${
-                        project.hasAccess
-                          ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      } disabled:opacity-50`}
-                    >
-                      {toggling === project.id ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                          <span>Updating...</span>
-                        </>
-                      ) : project.hasAccess ? (
-                        <>
-                          <CheckCircle className="w-4 h-4" />
-                          <span>Access Granted</span>
-                        </>
-                      ) : (
-                        <>
-                          <X className="w-4 h-4" />
-                          <span>Grant Access</span>
-                        </>
+                    <div className="flex items-center space-x-2">
+                      {project.hasAccess && (
+                        <button
+                          onClick={() => handleOpenSettings(project.id, project.name)}
+                          className="p-2 text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg transition"
+                          title="Conversation Settings"
+                        >
+                          <MessageSquare className="w-5 h-5" />
+                        </button>
                       )}
-                    </button>
+                      <button
+                        onClick={() => handleToggleAccess(project.id, project.hasAccess)}
+                        disabled={toggling === project.id}
+                        className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition ${
+                          project.hasAccess
+                            ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        } disabled:opacity-50`}
+                      >
+                        {toggling === project.id ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                            <span>Updating...</span>
+                          </>
+                        ) : project.hasAccess ? (
+                          <>
+                            <CheckCircle className="w-4 h-4" />
+                            <span>Access Granted</span>
+                          </>
+                        ) : (
+                          <>
+                            <X className="w-4 h-4" />
+                            <span>Grant Access</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   )}
 
                   {!canEdit && (
@@ -353,6 +415,89 @@ export default function ClientProjectsPage() {
             <p className="text-sm text-gray-700">
               💡 <strong>Tip:</strong> Client users can only view projects that have been granted access. Use the toggle buttons to control which projects they can see.
             </p>
+          </div>
+        )}
+
+        {/* Settings Modal */}
+        {settingsModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl max-w-lg w-full">
+              <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                <h3 className="text-xl font-bold text-gray-900">
+                  Conversation Settings
+                </h3>
+                <button
+                  onClick={() => setSettingsModal(null)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition"
+                >
+                  <X className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+
+              <div className="p-6">
+                <div className="mb-4">
+                  <p className="text-sm font-semibold text-gray-700 mb-1">Project:</p>
+                  <p className="text-lg text-gray-900">{settingsModal.projectName}</p>
+                </div>
+
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
+                  <div className="flex items-start space-x-3">
+                    <MessageSquare className="w-5 h-5 text-purple-600 mt-0.5" />
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-purple-900 mb-1">Line Item Conversations</h4>
+                      <p className="text-sm text-purple-700 mb-3">
+                        Control who can participate in conversations on time logs and expenses for this project.
+                      </p>
+                      
+                      <label className="flex items-center space-x-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={settingsModal.allowSubcontractorNotes}
+                          onChange={(e) =>
+                            setSettingsModal({
+                              ...settingsModal,
+                              allowSubcontractorNotes: e.target.checked,
+                            })
+                          }
+                          className="w-5 h-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                        />
+                        <div>
+                          <span className="font-medium text-gray-900">Allow Subcontractor Participation</span>
+                          <p className="text-xs text-gray-600">
+                            When enabled, subcontractors can view and join conversations on line items
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-600">
+                  <p className="mb-2"><strong>Note:</strong></p>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>Clients can always participate in conversations</li>
+                    <li>Admins/Managers can always participate and resolve conversations</li>
+                    <li>Subcontractors need this setting enabled to join discussions</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200">
+                <button
+                  onClick={() => setSettingsModal(null)}
+                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveSettings}
+                  disabled={savingSettings}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:bg-gray-400"
+                >
+                  {savingSettings ? 'Saving...' : 'Save Settings'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
