@@ -18,6 +18,7 @@ import LineItemNotesModal from '@/components/LineItemNotesModal';
 import DownloadProgressBar from '@/components/DownloadProgressBar';
 import { getProjectVisibilitySettings } from '@/lib/clientAccessUtils';
 import { exportToCSV, exportToXLSX, exportToPDF } from '@/lib/projectExportUtils';
+import { getUnresolvedNotesCounts } from '@/lib/lineItemNotesUtils';
 import {
   aggregateProjectCosts,
   formatCurrency,
@@ -81,6 +82,9 @@ export default function ClientProjectDetailPage() {
   // Download state
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadFormat, setDownloadFormat] = useState<'CSV' | 'XLSX' | 'PDF' | null>(null);
+
+  // Notes conversation state
+  const [unresolvedNotesMap, setUnresolvedNotesMap] = useState<Map<string, number>>(new Map());
 
   useEffect(() => {
     if (!projectId) {
@@ -283,6 +287,13 @@ export default function ClientProjectDetailPage() {
 
       const tracking = aggregateProjectCosts(logsData, expensesData, subsMap);
       setProjectTracking(tracking);
+
+      // Fetch unresolved notes counts for all line items
+      const allItemIds = [...logsData.map(log => log.id), ...expensesData.map(exp => exp.id)];
+      if (allItemIds.length > 0) {
+        const notesCountsMap = await getUnresolvedNotesCounts(allItemIds);
+        setUnresolvedNotesMap(notesCountsMap);
+      }
     } catch (error) {
       console.error('Error fetching live tracking data:', error);
     }
@@ -442,11 +453,8 @@ export default function ClientProjectDetailPage() {
             {/* Draft */}
             {visibility.showDraftStatus && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-3">
+                <div className="mb-3">
                   <span className="text-xs font-semibold text-yellow-700 uppercase">🟡 DRAFT</span>
-                  <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor('DRAFT')}`}>
-                    {projectTracking.byStatus.draft.count}
-                  </span>
                 </div>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
@@ -469,11 +477,8 @@ export default function ClientProjectDetailPage() {
 
             {/* Submitted */}
             <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
+              <div className="mb-3">
                 <span className="text-xs font-semibold text-orange-700 uppercase">🟠 SUBMITTED</span>
-                <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor('SUBMITTED')}`}>
-                  {projectTracking.byStatus.submitted.count}
-                </span>
               </div>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
@@ -495,11 +500,8 @@ export default function ClientProjectDetailPage() {
 
             {/* Approved */}
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
+              <div className="mb-3">
                 <span className="text-xs font-semibold text-green-700 uppercase">🟢 APPROVED</span>
-                <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor('APPROVED')}`}>
-                  {projectTracking.byStatus.approved.count}
-                </span>
               </div>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
@@ -522,11 +524,8 @@ export default function ClientProjectDetailPage() {
             {/* Rejected */}
             {visibility.showRejectedStatus && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-3">
+                <div className="mb-3">
                   <span className="text-xs font-semibold text-red-700 uppercase">🔴 REJECTED</span>
-                  <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor('REJECTED')}`}>
-                    {projectTracking.byStatus.rejected.count}
-                  </span>
                 </div>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
@@ -621,8 +620,7 @@ export default function ClientProjectDetailPage() {
                           {visibility.showMargins && (
                             <th className="px-4 py-3 text-right font-semibold text-gray-700">Margin</th>
                           )}
-                          <th className="px-4 py-3 text-center font-semibold text-gray-700">Status</th>
-                          <th className="px-4 py-3 text-left font-semibold text-gray-700">Notes</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-700 w-1/4">Notes</th>
                           {visibility.allowClientNotes && (
                             <th className="px-4 py-3 text-center font-semibold text-gray-700">Conversation</th>
                           )}
@@ -683,35 +681,43 @@ export default function ClientProjectDetailPage() {
                                   </div>
                                 </td>
                               )}
-                              <td className="px-4 py-3 text-center">
-                                <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor(log.status)}`}>
-                                  {log.status}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 text-left">
+                              <td className="px-4 py-3 text-left align-top">
                                 {log.notes ? (
-                                  <div className="max-w-xs">
-                                    <p className="text-sm text-gray-700 truncate" title={log.notes}>
-                                      {log.notes}
-                                    </p>
-                                  </div>
+                                  <p className="text-sm text-gray-700 whitespace-normal break-words">
+                                    {log.notes}
+                                  </p>
                                 ) : (
                                   <span className="text-xs text-gray-400">-</span>
                                 )}
                               </td>
                               {visibility.allowClientNotes && (
-                                <td className="px-4 py-3 text-center">
-                                  <button 
-                                    onClick={() => setSelectedLineItem({
-                                      itemId: log.id,
-                                      itemType: 'timeLog',
-                                      itemDescription: `${log.roleName} - ${formatDate(log.date)} - ${totalHours.toFixed(1)}h`
-                                    })}
-                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                                    title="View conversation"
-                                  >
-                                    <MessageSquare className="w-4 h-4" />
-                                  </button>
+                                <td className="px-4 py-3 text-center align-top">
+                                  {(() => {
+                                    const unresolvedCount = unresolvedNotesMap.get(log.id) || 0;
+                                    const hasConversation = unresolvedCount > 0;
+                                    return (
+                                      <button 
+                                        onClick={() => setSelectedLineItem({
+                                          itemId: log.id,
+                                          itemType: 'timeLog',
+                                          itemDescription: `${log.roleName} - ${formatDate(log.date)} - ${totalHours.toFixed(1)}h`
+                                        })}
+                                        className={`relative p-2 rounded-lg transition ${
+                                          hasConversation 
+                                            ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' 
+                                            : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'
+                                        }`}
+                                        title={hasConversation ? `${unresolvedCount} unresolved message${unresolvedCount !== 1 ? 's' : ''}` : "View conversation"}
+                                      >
+                                        <MessageSquare className="w-4 h-4" fill={hasConversation ? 'currentColor' : 'none'} />
+                                        {hasConversation && (
+                                          <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                                            {unresolvedCount}
+                                          </span>
+                                        )}
+                                      </button>
+                                    );
+                                  })()}
                                 </td>
                               )}
                             </tr>
@@ -764,35 +770,43 @@ export default function ClientProjectDetailPage() {
                                   </div>
                                 </td>
                               )}
-                              <td className="px-4 py-3 text-center">
-                                <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor(exp.status)}`}>
-                                  {exp.status}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 text-left">
+                              <td className="px-4 py-3 text-left align-top">
                                 {exp.description ? (
-                                  <div className="max-w-xs">
-                                    <p className="text-sm text-gray-700 truncate" title={exp.description}>
-                                      {exp.description}
-                                    </p>
-                                  </div>
+                                  <p className="text-sm text-gray-700 whitespace-normal break-words">
+                                    {exp.description}
+                                  </p>
                                 ) : (
                                   <span className="text-xs text-gray-400">-</span>
                                 )}
                               </td>
                               {visibility.allowClientNotes && (
-                                <td className="px-4 py-3 text-center">
-                                  <button 
-                                    onClick={() => setSelectedLineItem({
-                                      itemId: exp.id,
-                                      itemType: 'expense',
-                                      itemDescription: `${exp.category} - ${formatDate(exp.date)} - ${formatCurrency(billing, currency)}`
-                                    })}
-                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                                    title="View conversation"
-                                  >
-                                    <MessageSquare className="w-4 h-4" />
-                                  </button>
+                                <td className="px-4 py-3 text-center align-top">
+                                  {(() => {
+                                    const unresolvedCount = unresolvedNotesMap.get(exp.id) || 0;
+                                    const hasConversation = unresolvedCount > 0;
+                                    return (
+                                      <button 
+                                        onClick={() => setSelectedLineItem({
+                                          itemId: exp.id,
+                                          itemType: 'expense',
+                                          itemDescription: `${exp.category} - ${formatDate(exp.date)} - ${formatCurrency(billing, currency)}`
+                                        })}
+                                        className={`relative p-2 rounded-lg transition ${
+                                          hasConversation 
+                                            ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' 
+                                            : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'
+                                        }`}
+                                        title={hasConversation ? `${unresolvedCount} unresolved message${unresolvedCount !== 1 ? 's' : ''}` : "View conversation"}
+                                      >
+                                        <MessageSquare className="w-4 h-4" fill={hasConversation ? 'currentColor' : 'none'} />
+                                        {hasConversation && (
+                                          <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                                            {unresolvedCount}
+                                          </span>
+                                        )}
+                                      </button>
+                                    );
+                                  })()}
                                 </td>
                               )}
                             </tr>
