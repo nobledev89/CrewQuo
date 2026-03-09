@@ -36,6 +36,7 @@ export interface ExpenseData {
   marginPercentage?: number;    // (marginValue / clientBillAmount) * 100
   status: string;
   subcontractorId: string;
+  description?: string;         // Optional notes/description for expense
 }
 
 export interface StatusBreakdown {

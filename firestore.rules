@@ -593,13 +593,21 @@ service cloud.firestore {
     
     // Line Item Notes
     match /lineItemNotes/{noteId} {
-      allow read: if authed() && (
+      // Allow get for individual document reads
+      allow get: if authed() && (
         // Contractor can read notes on their projects
         resource.data.contractorCompanyId == ownCompanyId() ||
         // Client can read notes on projects they have access to
         (userRole() == 'CLIENT' && 
          resource.data.clientOrgId == request.auth.token.clientOrgId &&
          resource.data.contractorCompanyId in request.auth.token.contractorCompanyIds)
+      );
+      // Allow list/query operations
+      allow list: if authed() && (
+        // Contractors can list their notes
+        userRole() in ['ADMIN', 'MANAGER'] ||
+        // Clients can list notes (filtered by their access in queries)
+        userRole() == 'CLIENT'
       );
       allow create: if authed() && (
         // Contractors can create notes

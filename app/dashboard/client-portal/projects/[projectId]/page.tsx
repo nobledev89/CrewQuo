@@ -192,6 +192,7 @@ export default function ClientProjectDetailPage() {
           subcontractorId: data.subcontractorId,
           startTime: data.startTime,
           endTime: data.endTime,
+          notes: data.notes,
         };
       }).sort((a, b) => {
         const dateA = a.date ? new Date(a.date).getTime() : 0;
@@ -221,6 +222,7 @@ export default function ClientProjectDetailPage() {
           marginPercentage: data.marginPercentage,
           status: data.status || 'DRAFT',
           subcontractorId: data.subcontractorId,
+          description: data.description,
         };
       }).sort((a, b) => {
         const dateA = a.date ? new Date(a.date).getTime() : 0;
@@ -541,8 +543,9 @@ export default function ClientProjectDetailPage() {
                             <th className="px-4 py-3 text-right font-semibold text-gray-700">Margin</th>
                           )}
                           <th className="px-4 py-3 text-center font-semibold text-gray-700">Status</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-700">Notes</th>
                           {visibility.allowClientNotes && (
-                            <th className="px-4 py-3 text-center font-semibold text-gray-700">Notes</th>
+                            <th className="px-4 py-3 text-center font-semibold text-gray-700">Conversation</th>
                           )}
                         </tr>
                       </thead>
@@ -606,6 +609,17 @@ export default function ClientProjectDetailPage() {
                                   {log.status}
                                 </span>
                               </td>
+                              <td className="px-4 py-3 text-left">
+                                {log.notes ? (
+                                  <div className="max-w-xs">
+                                    <p className="text-sm text-gray-700 truncate" title={log.notes}>
+                                      {log.notes}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-gray-400">-</span>
+                                )}
+                              </td>
                               {visibility.allowClientNotes && (
                                 <td className="px-4 py-3 text-center">
                                   <button 
@@ -615,6 +629,7 @@ export default function ClientProjectDetailPage() {
                                       itemDescription: `${log.roleName} - ${formatDate(log.date)} - ${totalHours.toFixed(1)}h`
                                     })}
                                     className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                    title="View conversation"
                                   >
                                     <MessageSquare className="w-4 h-4" />
                                   </button>
@@ -675,6 +690,17 @@ export default function ClientProjectDetailPage() {
                                   {exp.status}
                                 </span>
                               </td>
+                              <td className="px-4 py-3 text-left">
+                                {exp.description ? (
+                                  <div className="max-w-xs">
+                                    <p className="text-sm text-gray-700 truncate" title={exp.description}>
+                                      {exp.description}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-gray-400">-</span>
+                                )}
+                              </td>
                               {visibility.allowClientNotes && (
                                 <td className="px-4 py-3 text-center">
                                   <button 
@@ -684,6 +710,7 @@ export default function ClientProjectDetailPage() {
                                       itemDescription: `${exp.category} - ${formatDate(exp.date)} - ${formatCurrency(billing, currency)}`
                                     })}
                                     className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                    title="View conversation"
                                   >
                                     <MessageSquare className="w-4 h-4" />
                                   </button>
@@ -705,7 +732,7 @@ export default function ClientProjectDetailPage() {
         {visibility.allowClientNotes && (
           <div className="mt-6 bg-blue-50 rounded-xl border border-blue-200 p-4">
             <p className="text-sm text-blue-800">
-              💬 <strong>Have questions?</strong> Click the message icon next to any line item to add notes or ask questions. Your contractor will be notified and can respond.
+              💬 <strong>Have questions?</strong> Click the message icon in the "Conversation" column to discuss any line item with your contractor. The "Notes" column shows subcontractor entry notes.
             </p>
           </div>
         )}

@@ -122,7 +122,7 @@ export default function LineItemNotesModal({
           <div>
             <h3 className="text-xl font-bold text-gray-900 flex items-center space-x-2">
               <MessageSquare className="w-6 h-6 text-blue-600" />
-              <span>Line Item Notes</span>
+              <span>Line Item Conversation</span>
             </h3>
             <p className="text-sm text-gray-600 mt-1">{itemDescription}</p>
           </div>
