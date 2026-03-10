@@ -37,6 +37,7 @@ export interface ExpenseData {
   status: string;
   subcontractorId: string;
   description?: string;         // Optional notes/description for expense
+  notes?: string;               // Optional notes field (also used in some views)
 }
 
 export interface StatusBreakdown {

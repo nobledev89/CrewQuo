@@ -363,6 +363,7 @@ export default function ProjectDetailPage() {
           marginPercentage: data.marginPercentage,
           status: data.status || 'DRAFT',
           subcontractorId: data.subcontractorId,
+          notes: data.notes,
         };
       }).sort((a, b) => {
         // Sort by date descending

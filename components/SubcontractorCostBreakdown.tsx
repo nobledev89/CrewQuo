@@ -312,7 +312,13 @@ export default function SubcontractorCostBreakdown({
                               </span>
                             </td>
                             <td className="px-4 py-3 text-gray-900">{exp.category}</td>
-                            <td className="px-4 py-3 text-gray-400 text-xs">-</td>
+                            <td className="px-4 py-3 text-gray-600 text-xs">
+                              {exp.notes ? (
+                                <span className="italic">{exp.notes}</span>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
                             <td className="px-4 py-3 text-center text-gray-900">
                               {exp.quantity ? exp.quantity.toFixed(1) : '1'}
                               {exp.unitRate && (
