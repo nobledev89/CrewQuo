@@ -275,7 +275,6 @@ export default function ClientProjectDetailPage() {
           status: data.status || 'DRAFT',
           subcontractorId: data.subcontractorId,
           description: data.description,
-          notes: data.notes,
         };
       }).sort((a, b) => {
         const dateA = a.date ? new Date(a.date).getTime() : 0;
@@ -772,9 +771,9 @@ export default function ClientProjectDetailPage() {
                                 </td>
                               )}
                               <td className="px-4 py-3 text-left align-top">
-                                {exp.notes ? (
+                                {exp.description ? (
                                   <p className="text-sm text-gray-700 whitespace-normal break-words">
-                                    {exp.notes}
+                                    {exp.description}
                                   </p>
                                 ) : (
                                   <span className="text-xs text-gray-400">-</span>
