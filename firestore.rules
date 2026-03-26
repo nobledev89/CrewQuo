@@ -300,7 +300,8 @@ service cloud.firestore {
     
     // Time Logs
     match /timeLogs/{timeLogId} {
-      allow read: if authed() && (
+      // Individual document reads — can check resource.data fields
+      allow get: if authed() && (
         resource.data.companyId == ownCompanyId() ||
         sameActiveCompany(resource.data) ||
         sameCompany(resource.data) ||
@@ -308,6 +309,12 @@ service cloud.firestore {
         (userRole() == 'CLIENT' && 
          request.auth.token.contractorCompanyIds != null &&
          resource.data.companyId in request.auth.token.contractorCompanyIds)
+      );
+      // Collection queries — role-based only (client code supplies companyId/subcontractorId where clauses)
+      allow list: if authed() && (
+        isAdminOrManager() ||
+        isSubcontractor() ||
+        userRole() == 'CLIENT'
       );
       
       allow create: if authed()
@@ -354,7 +361,8 @@ service cloud.firestore {
     
     // Expenses
     match /expenses/{expenseId} {
-      allow read: if authed() && (
+      // Individual document reads — can check resource.data fields
+      allow get: if authed() && (
         resource.data.companyId == ownCompanyId() ||
         sameActiveCompany(resource.data) ||
         sameCompany(resource.data) ||
@@ -362,6 +370,12 @@ service cloud.firestore {
         (userRole() == 'CLIENT' && 
          request.auth.token.contractorCompanyIds != null &&
          resource.data.companyId in request.auth.token.contractorCompanyIds)
+      );
+      // Collection queries — role-based only (client code supplies companyId/subcontractorId where clauses)
+      allow list: if authed() && (
+        isAdminOrManager() ||
+        isSubcontractor() ||
+        userRole() == 'CLIENT'
       );
       
       allow create: if authed()
@@ -408,7 +422,8 @@ service cloud.firestore {
     
     // Project Submissions
     match /projectSubmissions/{submissionId} {
-      allow read: if authed() && (
+      // Individual document reads — can check resource.data fields
+      allow get: if authed() && (
         resource.data.companyId == ownCompanyId() ||
         sameActiveCompany(resource.data) ||
         sameCompany(resource.data) ||
@@ -416,6 +431,12 @@ service cloud.firestore {
         (userRole() == 'CLIENT' && 
          request.auth.token.contractorCompanyIds != null &&
          resource.data.companyId in request.auth.token.contractorCompanyIds)
+      );
+      // Collection queries — role-based only (client code supplies companyId where clauses)
+      allow list: if authed() && (
+        isAdminOrManager() ||
+        isSubcontractor() ||
+        userRole() == 'CLIENT'
       );
       
       allow create: if authed()

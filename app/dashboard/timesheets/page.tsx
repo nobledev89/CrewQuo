@@ -65,7 +65,6 @@ export default function TimesheetsPage() {
   const [filter, setFilter] = useState<'all' | 'submitted' | 'approved' | 'rejected'>('submitted');
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
-  const [debugInfo, setDebugInfo] = useState<Record<string, any>>({});
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
   const [rejectionNotes, setRejectionNotes] = useState<Record<string, string>>({});
@@ -100,39 +99,12 @@ export default function TimesheetsPage() {
         }
 
         // Force-refresh the token to ensure latest custom claims are loaded
-        const freshToken = await currentUser.getIdToken(true);
-        const tokenResult = await currentUser.getIdTokenResult();
-        const claims = tokenResult.claims;
-
-        setDebugInfo({
-          uid: currentUser.uid,
-          email: currentUser.email,
-          role: userData.role,
-          activeIdUsed: activeId,
-          firestoreUserDoc: {
-            companyId: userData.companyId,
-            activeCompanyId: userData.activeCompanyId,
-            ownCompanyId: userData.ownCompanyId,
-          },
-          tokenClaims: {
-            companyId: claims.companyId ?? '(missing)',
-            ownCompanyId: claims.ownCompanyId ?? '(missing)',
-            activeCompanyId: claims.activeCompanyId ?? '(missing)',
-            role: claims.role ?? '(missing)',
-          },
-          tokenIssuedAt: tokenResult.issuedAtTime,
-          tokenExpiration: tokenResult.expirationTime,
-          queryWillUse: activeId,
-        });
+        await currentUser.getIdToken(true);
 
         await fetchTimesheets(activeId);
-      } catch (err: any) {
-        setDebugInfo(prev => ({
-          ...prev,
-          fetchError: err?.message || String(err),
-          fetchErrorCode: err?.code,
-        }));
-        setError('Failed to load timesheets: ' + (err?.message || String(err)));
+      } catch (err) {
+        console.error('Error loading timesheets', err);
+        setError('Failed to load timesheets');
       } finally {
         setLoading(false);
       }
@@ -659,8 +631,6 @@ export default function TimesheetsPage() {
     document.body.removeChild(link);
   };
 
-  const hasDebug = Object.keys(debugInfo).length > 0;
-
   if (loading || authLoading) {
     return (
       <DashboardLayout>
@@ -700,58 +670,6 @@ export default function TimesheetsPage() {
           <h1 className="text-3xl font-bold text-gray-900">Timesheet Approvals</h1>
           <p className="text-gray-600 mt-1">Review and approve subcontractor timesheets by project</p>
         </div>
-
-        {/* DEBUG PANEL — remove after fixing */}
-        {hasDebug && (
-          <div className="bg-yellow-50 border-2 border-yellow-400 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-bold text-yellow-900 uppercase tracking-wide">🔍 Debug Info (Firestore Auth)</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
-              {/* User */}
-              <div className="bg-white rounded-lg p-3 border border-yellow-200">
-                <p className="font-bold text-yellow-800 mb-1">User</p>
-                <p><span className="text-gray-500">UID:</span> {debugInfo.uid}</p>
-                <p><span className="text-gray-500">Email:</span> {debugInfo.email}</p>
-                <p><span className="text-gray-500">Role (Firestore):</span> {debugInfo.role}</p>
-              </div>
-
-              {/* Firestore Doc */}
-              <div className="bg-white rounded-lg p-3 border border-yellow-200">
-                <p className="font-bold text-yellow-800 mb-1">Firestore User Doc</p>
-                <p><span className="text-gray-500">companyId:</span> {debugInfo.firestoreUserDoc?.companyId ?? '—'}</p>
-                <p><span className="text-gray-500">activeCompanyId:</span> {debugInfo.firestoreUserDoc?.activeCompanyId ?? '—'}</p>
-                <p><span className="text-gray-500">ownCompanyId:</span> {debugInfo.firestoreUserDoc?.ownCompanyId ?? '—'}</p>
-              </div>
-
-              {/* Token Claims */}
-              <div className={`rounded-lg p-3 border ${debugInfo.tokenClaims?.companyId === '(missing)' && debugInfo.tokenClaims?.ownCompanyId === '(missing)' ? 'bg-red-50 border-red-300' : 'bg-white border-yellow-200'}`}>
-                <p className="font-bold text-yellow-800 mb-1">JWT Token Claims</p>
-                <p><span className="text-gray-500">companyId:</span> <strong className={debugInfo.tokenClaims?.companyId === '(missing)' ? 'text-red-600' : 'text-green-700'}>{debugInfo.tokenClaims?.companyId}</strong></p>
-                <p><span className="text-gray-500">ownCompanyId:</span> <strong className={debugInfo.tokenClaims?.ownCompanyId === '(missing)' ? 'text-red-600' : 'text-green-700'}>{debugInfo.tokenClaims?.ownCompanyId}</strong></p>
-                <p><span className="text-gray-500">activeCompanyId:</span> <strong className={debugInfo.tokenClaims?.activeCompanyId === '(missing)' ? 'text-red-600' : 'text-green-700'}>{debugInfo.tokenClaims?.activeCompanyId}</strong></p>
-                <p><span className="text-gray-500">role:</span> <strong>{debugInfo.tokenClaims?.role}</strong></p>
-              </div>
-
-              {/* Query */}
-              <div className="bg-white rounded-lg p-3 border border-yellow-200">
-                <p className="font-bold text-yellow-800 mb-1">Query Details</p>
-                <p><span className="text-gray-500">activeId used:</span> <strong className="text-blue-700">{debugInfo.queryWillUse}</strong></p>
-                <p><span className="text-gray-500">Token issued:</span> {debugInfo.tokenIssuedAt}</p>
-                <p><span className="text-gray-500">Token expires:</span> {debugInfo.tokenExpiration}</p>
-              </div>
-
-              {/* Error */}
-              {debugInfo.fetchError && (
-                <div className="md:col-span-2 bg-red-50 rounded-lg p-3 border border-red-300">
-                  <p className="font-bold text-red-800 mb-1">Fetch Error</p>
-                  <p><span className="text-gray-500">Code:</span> <strong className="text-red-700">{debugInfo.fetchErrorCode}</strong></p>
-                  <p><span className="text-gray-500">Message:</span> {debugInfo.fetchError}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Alerts */}
         {error && (
