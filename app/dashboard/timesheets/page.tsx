@@ -98,6 +98,9 @@ export default function TimesheetsPage() {
           return;
         }
 
+        // Force-refresh the token to ensure latest custom claims are loaded
+        await currentUser.getIdToken(true);
+
         await fetchTimesheets(activeId);
       } catch (err) {
         console.error('Error loading timesheets', err);
