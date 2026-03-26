@@ -114,86 +114,64 @@ export default function TimesheetsPage() {
   }, []);
 
   const fetchTimesheets = async (companyId: string) => {
-    const submissionsSnap = await getDocs(
-      query(
+    // Use collection queries (allow list) instead of individual getDoc (allow get)
+    // to avoid permission issues with individual document reads
+    const [submissionsSnap, subcontractorsSnap, projectsSnap, timeLogsSnap, expensesSnap] = await Promise.all([
+      getDocs(query(
         collection(db, 'projectSubmissions'),
         where('companyId', '==', companyId),
         orderBy('submittedAt', 'desc')
-      )
-    );
-
-    // Parse all submissions first and collect all IDs we need to fetch
-    const submissions: ProjectSubmission[] = [];
-    const subcontractorIds = new Set<string>();
-    const projectIds = new Set<string>();
-    const allTimeLogIds: string[] = [];
-    const allExpenseIds: string[] = [];
-
-    for (const submissionDoc of submissionsSnap.docs) {
-      const submissionData = submissionDoc.data();
-      const submission: ProjectSubmission = {
-        id: submissionDoc.id,
-        companyId: submissionData.companyId,
-        projectId: submissionData.projectId,
-        subcontractorId: submissionData.subcontractorId,
-        createdByUserId: submissionData.createdByUserId,
-        timeLogIds: submissionData.timeLogIds || [],
-        expenseIds: submissionData.expenseIds || [],
-        status: submissionData.status || 'DRAFT',
-        submittedAt: submissionData.submittedAt,
-        approvedAt: submissionData.approvedAt,
-        approvedBy: submissionData.approvedBy,
-        rejectionReason: submissionData.rejectionReason,
-        lineItemRejectionNotes: submissionData.lineItemRejectionNotes,
-        totalHours: submissionData.totalHours || 0,
-        totalCost: submissionData.totalCost || 0,
-        totalExpenses: submissionData.totalExpenses || 0,
-        createdAt: submissionData.createdAt,
-        updatedAt: submissionData.updatedAt,
-      } as ProjectSubmission;
-
-      submissions.push(submission);
-      subcontractorIds.add(submission.subcontractorId);
-      projectIds.add(submission.projectId);
-      allTimeLogIds.push(...(submission.timeLogIds || []));
-      allExpenseIds.push(...(submission.expenseIds || []));
-    }
-
-    // Batch fetch all related documents in parallel
-    const [subcontractorDocs, projectDocs, timeLogDocs, expenseDocs] = await Promise.all([
-      Promise.all(Array.from(subcontractorIds).map(id => getDoc(doc(db, 'subcontractors', id)))),
-      Promise.all(Array.from(projectIds).map(id => getDoc(doc(db, 'projects', id)))),
-      Promise.all(allTimeLogIds.map(id => getDoc(doc(db, 'timeLogs', id)))),
-      Promise.all(allExpenseIds.map(id => getDoc(doc(db, 'expenses', id)))),
+      )),
+      getDocs(query(collection(db, 'subcontractors'), where('companyId', '==', companyId))),
+      getDocs(query(collection(db, 'projects'), where('companyId', '==', companyId))),
+      getDocs(query(collection(db, 'timeLogs'), where('companyId', '==', companyId))),
+      getDocs(query(collection(db, 'expenses'), where('companyId', '==', companyId))),
     ]);
 
-    // Build lookup maps for quick access
+    // Build lookup maps from query results
     const subcontractorMap = new Map<string, Subcontractor>();
-    subcontractorDocs.forEach(docSnap => {
-      if (docSnap.exists()) {
-        subcontractorMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Subcontractor);
-      }
+    subcontractorsSnap.docs.forEach(docSnap => {
+      subcontractorMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Subcontractor);
     });
 
     const projectMap = new Map<string, Project>();
-    projectDocs.forEach(docSnap => {
-      if (docSnap.exists()) {
-        projectMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Project);
-      }
+    projectsSnap.docs.forEach(docSnap => {
+      projectMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Project);
     });
 
     const timeLogMap = new Map<string, TimeLog>();
-    timeLogDocs.forEach(docSnap => {
-      if (docSnap.exists()) {
-        timeLogMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as TimeLog);
-      }
+    timeLogsSnap.docs.forEach(docSnap => {
+      timeLogMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as TimeLog);
     });
 
     const expenseMap = new Map<string, Expense>();
-    expenseDocs.forEach(docSnap => {
-      if (docSnap.exists()) {
-        expenseMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Expense);
-      }
+    expensesSnap.docs.forEach(docSnap => {
+      expenseMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Expense);
+    });
+
+    // Parse submissions and assemble timesheet data
+    const submissions: ProjectSubmission[] = submissionsSnap.docs.map(submissionDoc => {
+      const d = submissionDoc.data();
+      return {
+        id: submissionDoc.id,
+        companyId: d.companyId,
+        projectId: d.projectId,
+        subcontractorId: d.subcontractorId,
+        createdByUserId: d.createdByUserId,
+        timeLogIds: d.timeLogIds || [],
+        expenseIds: d.expenseIds || [],
+        status: d.status || 'DRAFT',
+        submittedAt: d.submittedAt,
+        approvedAt: d.approvedAt,
+        approvedBy: d.approvedBy,
+        rejectionReason: d.rejectionReason,
+        lineItemRejectionNotes: d.lineItemRejectionNotes,
+        totalHours: d.totalHours || 0,
+        totalCost: d.totalCost || 0,
+        totalExpenses: d.totalExpenses || 0,
+        createdAt: d.createdAt,
+        updatedAt: d.updatedAt,
+      } as ProjectSubmission;
     });
 
     // Assemble timesheet data using lookup maps
