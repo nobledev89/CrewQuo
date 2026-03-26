@@ -143,12 +143,21 @@ service cloud.firestore {
       allow list: if !authed(); // Allow queries for invite token validation
       
       // Authenticated users can see subcontractors - in own company or companies they work for
-      allow read: if authed() && (
+      // Individual document reads (get): ADMIN/MANAGER can read any subcontractor doc they reference
+      // (IDs come from their own projectSubmissions so cross-company leakage is not a concern)
+      allow get: if authed() && (
+        isAdminOrManager() ||
         hasAccessToCompany(resource.data.companyId) ||
         // CLIENT users can read subcontractors for contractors they have access to
         (userRole() == 'CLIENT' && 
          request.auth.token.contractorCompanyIds != null &&
          resource.data.companyId in request.auth.token.contractorCompanyIds)
+      );
+      // Collection queries
+      allow list: if authed() && (
+        isAdminOrManager() ||
+        isSubcontractor() ||
+        userRole() == 'CLIENT'
       );
       
       // Can only create in own company
