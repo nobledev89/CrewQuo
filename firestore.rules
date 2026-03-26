@@ -303,6 +303,7 @@ service cloud.firestore {
       allow read: if authed() && (
         resource.data.companyId == ownCompanyId() ||
         sameActiveCompany(resource.data) ||
+        sameCompany(resource.data) ||
         // CLIENT users can read time logs for projects they have access to
         (userRole() == 'CLIENT' && 
          request.auth.token.contractorCompanyIds != null &&
@@ -356,6 +357,7 @@ service cloud.firestore {
       allow read: if authed() && (
         resource.data.companyId == ownCompanyId() ||
         sameActiveCompany(resource.data) ||
+        sameCompany(resource.data) ||
         // CLIENT users can read expenses for projects they have access to
         (userRole() == 'CLIENT' && 
          request.auth.token.contractorCompanyIds != null &&
@@ -409,6 +411,7 @@ service cloud.firestore {
       allow read: if authed() && (
         resource.data.companyId == ownCompanyId() ||
         sameActiveCompany(resource.data) ||
+        sameCompany(resource.data) ||
         // CLIENT users can read submissions for projects they have access to
         (userRole() == 'CLIENT' && 
          request.auth.token.contractorCompanyIds != null &&
