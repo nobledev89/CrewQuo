@@ -65,6 +65,7 @@ export default function TimesheetsPage() {
   const [filter, setFilter] = useState<'all' | 'submitted' | 'approved' | 'rejected'>('submitted');
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
+  const [debugSteps, setDebugSteps] = useState<string[]>([]);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
   const [rejectionNotes, setRejectionNotes] = useState<Record<string, string>>({});
@@ -114,14 +115,24 @@ export default function TimesheetsPage() {
   }, []);
 
   const fetchTimesheets = async (companyId: string) => {
-    // Fetch all project submissions
-    const submissionsSnap = await getDocs(
-      query(
-        collection(db, 'projectSubmissions'),
-        where('companyId', '==', companyId),
-        orderBy('submittedAt', 'desc')
-      )
-    );
+    const steps: string[] = [];
+    const addStep = (msg: string) => { steps.push(msg); setDebugSteps([...steps]); };
+
+    addStep(`[1] Querying projectSubmissions where companyId == "${companyId}"`);
+    let submissionsSnap: any;
+    try {
+      submissionsSnap = await getDocs(
+        query(
+          collection(db, 'projectSubmissions'),
+          where('companyId', '==', companyId),
+          orderBy('submittedAt', 'desc')
+        )
+      );
+      addStep(`[1] ✅ projectSubmissions OK — ${submissionsSnap.docs.length} docs`);
+    } catch (e: any) {
+      addStep(`[1] ❌ projectSubmissions FAILED: ${e?.code} — ${e?.message}`);
+      throw e;
+    }
 
     // Parse all submissions first and collect all IDs we need to fetch
     const submissions: ProjectSubmission[] = [];
@@ -160,25 +171,37 @@ export default function TimesheetsPage() {
       allExpenseIds.push(...(submission.expenseIds || []));
     }
 
-    // Batch fetch all related documents in parallel
-    const [subcontractorDocs, projectDocs, timeLogDocs, expenseDocs] = await Promise.all([
-      // Fetch all subcontractors
-      Promise.all(
-        Array.from(subcontractorIds).map(id => getDoc(doc(db, 'subcontractors', id)))
-      ),
-      // Fetch all projects
-      Promise.all(
-        Array.from(projectIds).map(id => getDoc(doc(db, 'projects', id)))
-      ),
-      // Fetch all time logs
-      Promise.all(
-        allTimeLogIds.map(id => getDoc(doc(db, 'timeLogs', id)))
-      ),
-      // Fetch all expenses
-      Promise.all(
-        allExpenseIds.map(id => getDoc(doc(db, 'expenses', id)))
-      ),
-    ]);
+    addStep(`[2] Fetching ${subcontractorIds.size} subcontractors, ${projectIds.size} projects, ${allTimeLogIds.length} timeLogs, ${allExpenseIds.length} expenses`);
+
+    let subcontractorDocs: any[], projectDocs: any[], timeLogDocs: any[], expenseDocs: any[];
+    try {
+      subcontractorDocs = await Promise.all(Array.from(subcontractorIds).map(id => getDoc(doc(db, 'subcontractors', id))));
+      addStep(`[2a] ✅ subcontractors OK`);
+    } catch (e: any) {
+      addStep(`[2a] ❌ subcontractors FAILED: ${e?.code} — ${e?.message}`);
+      throw e;
+    }
+    try {
+      projectDocs = await Promise.all(Array.from(projectIds).map(id => getDoc(doc(db, 'projects', id))));
+      addStep(`[2b] ✅ projects OK`);
+    } catch (e: any) {
+      addStep(`[2b] ❌ projects FAILED: ${e?.code} — ${e?.message}`);
+      throw e;
+    }
+    try {
+      timeLogDocs = await Promise.all(allTimeLogIds.map(id => getDoc(doc(db, 'timeLogs', id))));
+      addStep(`[2c] ✅ timeLogs OK`);
+    } catch (e: any) {
+      addStep(`[2c] ❌ timeLogs FAILED: ${e?.code} — ${e?.message}`);
+      throw e;
+    }
+    try {
+      expenseDocs = await Promise.all(allExpenseIds.map(id => getDoc(doc(db, 'expenses', id))));
+      addStep(`[2d] ✅ expenses OK`);
+    } catch (e: any) {
+      addStep(`[2d] ❌ expenses FAILED: ${e?.code} — ${e?.message}`);
+      throw e;
+    }
 
     // Build lookup maps for quick access
     const subcontractorMap = new Map<string, Subcontractor>();
@@ -670,6 +693,18 @@ export default function TimesheetsPage() {
           <h1 className="text-3xl font-bold text-gray-900">Timesheet Approvals</h1>
           <p className="text-gray-600 mt-1">Review and approve subcontractor timesheets by project</p>
         </div>
+
+        {/* STEP DEBUG — remove after fix */}
+        {debugSteps.length > 0 && (
+          <div className="bg-gray-900 rounded-xl p-4 font-mono text-xs space-y-1">
+            <p className="text-gray-400 font-bold mb-2">🔍 Fetch trace:</p>
+            {debugSteps.map((step, i) => (
+              <p key={i} className={step.includes('❌') ? 'text-red-400' : step.includes('✅') ? 'text-green-400' : 'text-yellow-300'}>
+                {step}
+              </p>
+            ))}
+          </div>
+        )}
 
         {/* Alerts */}
         {error && (
