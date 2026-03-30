@@ -259,7 +259,10 @@ export default function SubmissionsPage() {
     ].sort((a, b) => {
       const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date);
       const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date);
-      return dateB.getTime() - dateA.getTime();
+      if (dateA.getTime() !== dateB.getTime()) return dateB.getTime() - dateA.getTime();
+      const createdA = (a.data as any).createdAt?.toDate ? (a.data as any).createdAt.toDate().getTime() : 0;
+      const createdB = (b.data as any).createdAt?.toDate ? (b.data as any).createdAt.toDate().getTime() : 0;
+      return createdA - createdB;
     });
   }, [timeLogs, expenses]);
 
