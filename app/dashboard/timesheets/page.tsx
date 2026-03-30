@@ -181,11 +181,27 @@ export default function TimesheetsPage() {
       
       const timeLogs = (submission.timeLogIds || [])
         .map(id => timeLogMap.get(id))
-        .filter((log): log is TimeLog => log !== undefined);
-      
+        .filter((log): log is TimeLog => log !== undefined)
+        .sort((a, b) => {
+          const dateA = a.date?.toDate ? a.date.toDate().getTime() : 0;
+          const dateB = b.date?.toDate ? b.date.toDate().getTime() : 0;
+          if (dateA !== dateB) return dateA - dateB;
+          const createdA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+          const createdB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+          return createdA - createdB;
+        });
+
       const expenses = (submission.expenseIds || [])
         .map(id => expenseMap.get(id))
-        .filter((exp): exp is Expense => exp !== undefined);
+        .filter((exp): exp is Expense => exp !== undefined)
+        .sort((a, b) => {
+          const dateA = a.date?.toDate ? a.date.toDate().getTime() : 0;
+          const dateB = b.date?.toDate ? b.date.toDate().getTime() : 0;
+          if (dateA !== dateB) return dateA - dateB;
+          const createdA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+          const createdB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+          return createdA - createdB;
+        });
 
       // Calculate totals
       const totalHours = timeLogs.reduce((sum, log) => sum + (log.hoursRegular || 0) + (log.hoursOT || 0), 0);
