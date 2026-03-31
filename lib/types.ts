@@ -613,6 +613,9 @@ export interface TimeLog {
 
   // Additional details
   notes?: string;          // Optional notes/description for this time entry
+  splitGroupId?: string;   // Groups split segments from one logged entry
+  splitIndex?: number;     // 1-based index within the split group
+  splitTotal?: number;     // Total segments in the split group
 
   // Metadata
   currency: string;        // e.g., 'GBP'

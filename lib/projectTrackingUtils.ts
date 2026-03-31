@@ -18,10 +18,21 @@ export interface TimeLogData {
   marginValue?: number;
   marginPct?: number;
   status: string;
+  projectId?: string;
+  createdByUserId?: string;
   subcontractorId: string;
   startTime?: string;
   endTime?: string;
   notes?: string;
+  createdAt?: any;
+  unitSubCost?: number;
+  unitClientBill?: number;
+  timeframeId?: string;
+  payRateCardId?: string;
+  billRateCardId?: string;
+  splitGroupId?: string;
+  splitIndex?: number;
+  splitTotal?: number;
 }
 
 export interface ExpenseData {

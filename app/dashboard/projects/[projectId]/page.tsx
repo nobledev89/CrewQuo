@@ -318,7 +318,11 @@ export default function ProjectDetailPage() {
         return {
           id: doc.id,
           date: data.date?.toDate ? data.date.toDate() : (data.date || null),
+          createdAt: data.createdAt,
+          projectId: data.projectId,
+          createdByUserId: data.createdByUserId,
           roleName: data.roleName || 'Unknown Role',
+          timeframeId: data.timeframeId,
           timeframeName: data.timeframeName,
           shiftType: data.shiftType,
           hoursRegular: data.hoursRegular || 0,
@@ -328,11 +332,18 @@ export default function ProjectDetailPage() {
           clientBill: data.clientBill || 0,
           marginValue: data.marginValue || 0,
           marginPct: data.marginPct || 0,
+          unitSubCost: data.unitSubCost,
+          unitClientBill: data.unitClientBill,
           status: data.status || 'DRAFT',
           subcontractorId: data.subcontractorId,
           startTime: data.startTime,
           endTime: data.endTime,
           notes: data.notes,
+          payRateCardId: data.payRateCardId,
+          billRateCardId: data.billRateCardId,
+          splitGroupId: data.splitGroupId,
+          splitIndex: data.splitIndex,
+          splitTotal: data.splitTotal,
         };
       }).sort((a, b) => {
         // Sort by date descending

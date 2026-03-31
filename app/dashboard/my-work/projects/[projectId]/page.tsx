@@ -672,8 +672,10 @@ export default function ProjectDetailPage() {
 
       // If we have multiple rate segments (time-based rates), create separate entries for each
       if (calculationBreakdown.length > 1) {
+        const splitGroupId = crypto.randomUUID();
+        const splitTotal = calculationBreakdown.length;
         // Create separate time log entry for each rate segment
-        for (const segment of calculationBreakdown) {
+        for (const [index, segment] of calculationBreakdown.entries()) {
           // Extract start and end times from the segment time range
           const timeRangeMatch = segment.timeRange.match(/(\d{2}:\d{2})-(\d{2}:\d{2})/);
           const segmentStartTime = timeRangeMatch ? timeRangeMatch[1] : logForm.startTime;
@@ -702,6 +704,9 @@ export default function ProjectDetailPage() {
                 : 0,
             unitSubCost: segment.subRate,
             unitClientBill: segment.clientRate,
+            splitGroupId,
+            splitIndex: index + 1,
+            splitTotal,
             currency: 'GBP',
             payRateCardId: rateAssignment?.payRateCardId || null,
             billRateCardId: rateAssignment?.billRateCardId || null,

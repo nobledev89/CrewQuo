@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, Clock, DollarSign, TrendingUp, FileText, MessageSquare } from 'lucide-react';
 import {
   SubcontractorTracking,
@@ -27,6 +27,188 @@ export default function SubcontractorCostBreakdown({
   const [isExpanded, setIsExpanded] = useState(false);
   
   const showConversations = unresolvedNotesMap && onOpenConversation;
+  const groupedTimeLogs = useMemo(() => {
+    const GROUP_WINDOW_MS = 10000;
+
+    const toMillis = (value: any): number | null => {
+      if (!value) return null;
+      if (typeof value === 'number') return value;
+      if (value.toMillis && typeof value.toMillis === 'function') return value.toMillis();
+      if (value.toDate && typeof value.toDate === 'function') return value.toDate().getTime();
+      if (value instanceof Date) return value.getTime();
+      const parsed = new Date(value).getTime();
+      return Number.isNaN(parsed) ? null : parsed;
+    };
+
+    const dateKey = (value: any): string => {
+      if (!value) return '';
+      let date: Date | null = null;
+      if (value.toDate && typeof value.toDate === 'function') {
+        date = value.toDate();
+      } else if (value instanceof Date) {
+        date = value;
+      } else {
+        const parsed = new Date(value);
+        if (!Number.isNaN(parsed.getTime())) {
+          date = parsed;
+        }
+      }
+      if (!date) return '';
+      return date.toISOString().slice(0, 10);
+    };
+
+    const buildKey = (log: any): string => {
+      return [
+        log.projectId || '',
+        log.subcontractorId || '',
+        log.createdByUserId || '',
+        dateKey(log.date),
+        log.roleName || '',
+        log.quantity ?? 1,
+        log.status || 'DRAFT',
+        log.notes || '',
+        log.payRateCardId || '',
+        log.billRateCardId || '',
+      ].join('|');
+    };
+
+    const hashString = (value: string): string => {
+      let hash = 0;
+      for (let i = 0; i < value.length; i += 1) {
+        hash = ((hash << 5) - hash) + value.charCodeAt(i);
+        hash |= 0;
+      }
+      return Math.abs(hash).toString(36).toUpperCase();
+    };
+
+    const shortLabel = (value: string): string => {
+      if (!value) return 'GRP';
+      const cleaned = value.replace(/[^a-zA-Z0-9]/g, '');
+      const label = cleaned.slice(-4).toUpperCase();
+      return label || 'GRP';
+    };
+
+    const hasSegmentVariance = (logs: any[]): boolean => {
+      const sigs = new Set<string>();
+      logs.forEach((log) => {
+        sigs.add([
+          log.timeframeId || '',
+          log.timeframeName || log.shiftType || '',
+          `${log.startTime || ''}-${log.endTime || ''}`,
+          log.unitSubCost ?? '',
+          log.unitClientBill ?? '',
+        ].join('|'));
+      });
+      return sigs.size > 1;
+    };
+
+    const groupInfo = new Map<string, { label: string; index: number; total: number }>();
+
+    // Prefer stored split groups when available
+    const storedGroups = new Map<string, any[]>();
+    subcontractor.timeLogs.forEach((log) => {
+      if (log.splitGroupId) {
+        const existing = storedGroups.get(log.splitGroupId) || [];
+        existing.push(log);
+        storedGroups.set(log.splitGroupId, existing);
+      }
+    });
+
+    storedGroups.forEach((logs, groupId) => {
+      const sorted = [...logs].sort((a, b) => {
+        const idxDiff = (a.splitIndex || 0) - (b.splitIndex || 0);
+        if (idxDiff !== 0) return idxDiff;
+        const aMs = toMillis(a.createdAt) ?? 0;
+        const bMs = toMillis(b.createdAt) ?? 0;
+        return aMs - bMs;
+      });
+      const total = logs[0]?.splitTotal || logs.length;
+      sorted.forEach((log, idx) => {
+        groupInfo.set(log.id, {
+          label: shortLabel(groupId),
+          index: log.splitIndex || (idx + 1),
+          total: log.splitTotal || total,
+        });
+      });
+    });
+
+    // Heuristic grouping for older entries (no stored group id)
+    const byKey = new Map<string, any[]>();
+    subcontractor.timeLogs.forEach((log) => {
+      if (log.splitGroupId) return;
+      const createdAtMs = toMillis(log.createdAt);
+      if (createdAtMs === null) return;
+      const key = buildKey(log);
+      const existing = byKey.get(key) || [];
+      existing.push(log);
+      byKey.set(key, existing);
+    });
+
+    byKey.forEach((logs, key) => {
+      const sorted = [...logs].sort((a, b) => {
+        const aMs = toMillis(a.createdAt) ?? 0;
+        const bMs = toMillis(b.createdAt) ?? 0;
+        return aMs - bMs;
+      });
+
+      let cluster: any[] = [];
+      let clusterStartMs: number | null = null;
+      let lastMs: number | null = null;
+
+      const flushCluster = () => {
+        if (cluster.length < 2) {
+          cluster = [];
+          return;
+        }
+        if (!hasSegmentVariance(cluster)) {
+          cluster = [];
+          return;
+        }
+
+        const label = hashString(`${key}|${clusterStartMs ?? ''}`).slice(0, 4) || 'GRP';
+        cluster.forEach((log, idx) => {
+          if (!groupInfo.has(log.id)) {
+            groupInfo.set(log.id, {
+              label,
+              index: idx + 1,
+              total: cluster.length,
+            });
+          }
+        });
+        cluster = [];
+      };
+
+      sorted.forEach((log) => {
+        const currentMs = toMillis(log.createdAt);
+        if (currentMs === null) return;
+
+        if (cluster.length === 0) {
+          cluster = [log];
+          clusterStartMs = currentMs;
+          lastMs = currentMs;
+          return;
+        }
+
+        if (lastMs !== null && currentMs - lastMs <= GROUP_WINDOW_MS) {
+          cluster.push(log);
+          lastMs = currentMs;
+          return;
+        }
+
+        flushCluster();
+        cluster = [log];
+        clusterStartMs = currentMs;
+        lastMs = currentMs;
+      });
+
+      flushCluster();
+    });
+
+    return subcontractor.timeLogs.map((log) => ({
+      ...log,
+      __groupInfo: groupInfo.get(log.id),
+    }));
+  }, [subcontractor.timeLogs]);
 
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow">
@@ -207,7 +389,7 @@ export default function SubcontractorCostBreakdown({
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                       {/* Time Logs */}
-                      {subcontractor.timeLogs.map((log) => {
+                      {groupedTimeLogs.map((log) => {
                         const totalHours = (log.hoursRegular || 0) + (log.hoursOT || 0);
                         const margin = (log.clientBill || 0) - (log.subCost || 0);
                         const marginPct = log.clientBill && log.clientBill > 0
@@ -227,6 +409,11 @@ export default function SubcontractorCostBreakdown({
                               {log.roleName} {log.timeframeName ? `- ${log.timeframeName}` : log.shiftType ? `- ${log.shiftType}` : ''}
                               {log.startTime && log.endTime && (
                                 <span className="text-xs text-gray-500 ml-1">({log.startTime}-{log.endTime})</span>
+                              )}
+                              {log.__groupInfo && (
+                                <span className="ml-2 inline-flex items-center rounded-full bg-indigo-50 text-indigo-700 px-2 py-0.5 text-[10px] font-semibold border border-indigo-200">
+                                  Group {log.__groupInfo.label} {log.__groupInfo.index}/{log.__groupInfo.total}
+                                </span>
                               )}
                             </td>
                             <td className="px-4 py-3 text-gray-600 text-xs">
