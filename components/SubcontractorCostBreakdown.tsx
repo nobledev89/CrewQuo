@@ -27,6 +27,10 @@ export default function SubcontractorCostBreakdown({
   const [isExpanded, setIsExpanded] = useState(false);
   
   const showConversations = unresolvedNotesMap && onOpenConversation;
+  const normalizeTimeframeName = (value?: string): string | undefined => {
+    if (!value) return value;
+    return value.replace(/\(\d{2}:\d{2}-\d{2}:\d{2}\)/g, '').replace(/\s{2,}/g, ' ').trim();
+  };
   const groupedTimeLogs = useMemo(() => {
     const GROUP_WINDOW_MS = 10000;
 
@@ -376,12 +380,12 @@ export default function SubcontractorCostBreakdown({
                         <th className="px-4 py-3 text-left font-semibold text-gray-700">Date</th>
                         <th className="px-4 py-3 text-left font-semibold text-gray-700">Type</th>
                         <th className="px-4 py-3 text-left font-semibold text-gray-700">Description</th>
+                        <th className="px-4 py-3 text-center font-semibold text-gray-700">Time</th>
                         <th className="px-4 py-3 text-left font-semibold text-gray-700">Notes</th>
                         <th className="px-4 py-3 text-center font-semibold text-gray-700">Qty/Hours</th>
                         <th className="px-4 py-3 text-right font-semibold text-gray-700">Cost</th>
                         <th className="px-4 py-3 text-right font-semibold text-gray-700">Bill</th>
                         <th className="px-4 py-3 text-right font-semibold text-gray-700">Margin</th>
-                        <th className="px-4 py-3 text-center font-semibold text-gray-700">Status</th>
                         {showConversations && (
                           <th className="px-4 py-3 text-center font-semibold text-gray-700">Conversation</th>
                         )}
@@ -406,15 +410,16 @@ export default function SubcontractorCostBreakdown({
                               </span>
                             </td>
                             <td className="px-4 py-3 text-gray-900">
-                              {log.roleName} {log.timeframeName ? `- ${log.timeframeName}` : log.shiftType ? `- ${log.shiftType}` : ''}
-                              {log.startTime && log.endTime && (
-                                <span className="text-xs text-gray-500 ml-1">({log.startTime}-{log.endTime})</span>
-                              )}
+                              {log.roleName}
+                              {log.timeframeName ? ` - ${normalizeTimeframeName(log.timeframeName)}` : log.shiftType ? ` - ${log.shiftType}` : ''}
                               {log.__groupInfo && (
                                 <span className="ml-2 inline-flex items-center rounded-full bg-indigo-50 text-indigo-700 px-2 py-0.5 text-[10px] font-semibold border border-indigo-200">
                                   Group {log.__groupInfo.label} {log.__groupInfo.index}/{log.__groupInfo.total}
                                 </span>
                               )}
+                            </td>
+                            <td className="px-4 py-3 text-center text-gray-600 text-xs">
+                              {log.startTime && log.endTime ? `${log.startTime}-${log.endTime}` : '-'}
                             </td>
                             <td className="px-4 py-3 text-gray-600 text-xs">
                               {log.notes ? (
@@ -444,11 +449,6 @@ export default function SubcontractorCostBreakdown({
                                   {marginPct}%
                                 </div>
                               </div>
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor(log.status)}`}>
-                                {log.status}
-                              </span>
                             </td>
                             {showConversations && (
                               <td className="px-4 py-3 text-center">
@@ -499,13 +499,14 @@ export default function SubcontractorCostBreakdown({
                               </span>
                             </td>
                             <td className="px-4 py-3 text-gray-900">{exp.category}</td>
-                              <td className="px-4 py-3 text-gray-600 text-xs">
-                                {exp.description ? (
-                                  <span className="italic">{exp.description}</span>
-                                ) : (
-                                  <span className="text-gray-400">-</span>
-                                )}
-                              </td>
+                            <td className="px-4 py-3 text-center text-gray-600 text-xs">-</td>
+                            <td className="px-4 py-3 text-gray-600 text-xs">
+                              {exp.description ? (
+                                <span className="italic">{exp.description}</span>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
                             <td className="px-4 py-3 text-center text-gray-900">
                               {exp.quantity ? exp.quantity.toFixed(1) : '1'}
                               {exp.unitRate && (
@@ -527,11 +528,6 @@ export default function SubcontractorCostBreakdown({
                                   {marginPct.toFixed(1)}%
                                 </div>
                               </div>
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor(exp.status)}`}>
-                                {exp.status}
-                              </span>
                             </td>
                             {showConversations && (
                               <td className="px-4 py-3 text-center">
