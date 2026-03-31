@@ -15,10 +15,11 @@ import {
   deleteDoc,
   serverTimestamp 
 } from 'firebase/firestore';
-import { Briefcase, Users, UserPlus, X, Trash2, ArrowLeft, Activity, Clock, DollarSign, TrendingUp, MessageSquare } from 'lucide-react';
+import { Briefcase, Users, UserPlus, X, Trash2, ArrowLeft, Activity, Clock, DollarSign, TrendingUp, MessageSquare, FileSpreadsheet, FileText, FileDown } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import SubcontractorCostBreakdown from '@/components/SubcontractorCostBreakdown';
 import LineItemNotesModal from '@/components/LineItemNotesModal';
+import DownloadProgressBar from '@/components/DownloadProgressBar';
 import { useParams, useRouter } from 'next/navigation';
 import { 
   aggregateProjectCosts, 
@@ -28,6 +29,7 @@ import {
   type ExpenseData,
   type ProjectTracking
 } from '@/lib/projectTrackingUtils';
+import { exportToCSV, exportToXLSX, exportToPDF } from '@/lib/projectExportUtils';
 import { getUnresolvedNotesCounts } from '@/lib/lineItemNotesUtils';
 
 interface Project {
@@ -77,6 +79,8 @@ export default function ProjectDetailPage() {
   const [projectTracking, setProjectTracking] = useState<ProjectTracking | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'submitted' | 'approved'>('all');
   const [currency] = useState<string>('GBP');
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadFormat, setDownloadFormat] = useState<'CSV' | 'XLSX' | 'PDF' | null>(null);
 
   // Notes modal state
   const [selectedLineItem, setSelectedLineItem] = useState<{
@@ -406,6 +410,54 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const handleDownload = async (format: 'CSV' | 'XLSX' | 'PDF') => {
+    if (!project || !projectTracking) return;
+
+    setIsDownloading(true);
+    setDownloadFormat(format);
+
+    try {
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const exportOptions = {
+        projectCode: project.projectCode,
+        projectName: project.name,
+        location: project.location,
+        status: project.status,
+        projectTracking,
+        timeLogs,
+        expenses,
+        visibility: {
+          showCosts: true,
+          showMargins: true,
+          showSubcontractorRates: true,
+          allowClientNotes: true,
+          showDraftStatus: true,
+          showRejectedStatus: true,
+        },
+        currency,
+      };
+
+      switch (format) {
+        case 'CSV':
+          exportToCSV(exportOptions);
+          break;
+        case 'XLSX':
+          exportToXLSX(exportOptions);
+          break;
+        case 'PDF':
+          exportToPDF(exportOptions);
+          break;
+      }
+    } catch (error) {
+      console.error('Error exporting project:', error);
+      alert('Failed to export project. Please try again.');
+    } finally {
+      setIsDownloading(false);
+      setDownloadFormat(null);
+    }
+  };
+
   const formatDate = (timestamp: any) => {
     if (!timestamp) return 'N/A';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -495,9 +547,40 @@ export default function ProjectDetailPage() {
               <h2 className="text-2xl font-bold text-gray-900 mb-2">{project.name}</h2>
               <p className="text-gray-600 font-mono">{project.projectCode}</p>
             </div>
-            <span className={`px-3 py-1 text-xs font-semibold rounded-full border ${getStatusColor(project.status)}`}>
-              {project.status}
-            </span>
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => handleDownload('XLSX')}
+                  disabled={isDownloading}
+                  className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Download as Excel"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>XLSX</span>
+                </button>
+                <button
+                  onClick={() => handleDownload('CSV')}
+                  disabled={isDownloading}
+                  className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Download as CSV"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>CSV</span>
+                </button>
+                <button
+                  onClick={() => handleDownload('PDF')}
+                  disabled={isDownloading}
+                  className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Download as PDF"
+                >
+                  <FileDown className="w-4 h-4" />
+                  <span>PDF</span>
+                </button>
+              </div>
+              <span className={`px-3 py-1 text-xs font-semibold rounded-full border ${getStatusColor(project.status)}`}>
+                {project.status}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -886,6 +969,8 @@ export default function ProjectDetailPage() {
           allowSubcontractorNotes={false}
         />
       )}
+
+      <DownloadProgressBar format={downloadFormat} isVisible={isDownloading} />
     </DashboardLayout>
   );
 }
