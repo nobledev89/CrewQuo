@@ -106,7 +106,7 @@ export default function SubcontractorCostBreakdown({
       return sigs.size > 1;
     };
 
-    const groupInfo = new Map<string, { label: string; index: number; total: number }>();
+    const groupInfo = new Map<string, { label: string; index: number; total: number; key: string }>();
 
     // Prefer stored split groups when available
     const storedGroups = new Map<string, any[]>();
@@ -119,6 +119,7 @@ export default function SubcontractorCostBreakdown({
     });
 
     storedGroups.forEach((logs, groupId) => {
+      const groupKey = `split:${groupId}`;
       const sorted = [...logs].sort((a, b) => {
         const idxDiff = (a.splitIndex || 0) - (b.splitIndex || 0);
         if (idxDiff !== 0) return idxDiff;
@@ -132,6 +133,7 @@ export default function SubcontractorCostBreakdown({
           label: shortLabel(groupId),
           index: log.splitIndex || (idx + 1),
           total: log.splitTotal || total,
+          key: groupKey,
         });
       });
     });
@@ -169,13 +171,15 @@ export default function SubcontractorCostBreakdown({
           return;
         }
 
-        const label = hashString(`${key}|${clusterStartMs ?? ''}`).slice(0, 4) || 'GRP';
+        const groupKey = `heur:${hashString(`${key}|${clusterStartMs ?? ''}`)}`;
+        const label = groupKey.slice(-4) || 'GRP';
         cluster.forEach((log, idx) => {
           if (!groupInfo.has(log.id)) {
             groupInfo.set(log.id, {
               label,
               index: idx + 1,
               total: cluster.length,
+              key: groupKey,
             });
           }
         });
@@ -208,10 +212,66 @@ export default function SubcontractorCostBreakdown({
       flushCluster();
     });
 
-    return subcontractor.timeLogs.map((log) => ({
-      ...log,
-      __groupInfo: groupInfo.get(log.id),
-    }));
+    const toDateMillis = (value: any): number => {
+      if (!value) return 0;
+      if (value.toMillis && typeof value.toMillis === 'function') return value.toMillis();
+      if (value.toDate && typeof value.toDate === 'function') return value.toDate().getTime();
+      if (value instanceof Date) return value.getTime();
+      const parsed = new Date(value).getTime();
+      return Number.isNaN(parsed) ? 0 : parsed;
+    };
+
+    const sortedLogs = subcontractor.timeLogs
+      .map((log) => ({
+        ...log,
+        __groupInfo: groupInfo.get(log.id),
+      }))
+      .sort((a, b) => {
+        const dateDiff = toDateMillis(b.date) - toDateMillis(a.date);
+        if (dateDiff !== 0) return dateDiff;
+        return (toMillis(b.createdAt) ?? 0) - (toMillis(a.createdAt) ?? 0);
+      });
+
+    const items: any[] = [];
+    const groupMap = new Map<string, { logs: any[]; headerIndex: number }>();
+
+    sortedLogs.forEach((log) => {
+      const groupKey = log.__groupInfo?.key;
+      if (groupKey) {
+        let group = groupMap.get(groupKey);
+        if (!group) {
+          group = { logs: [], headerIndex: items.length };
+          groupMap.set(groupKey, group);
+          items.push({ type: 'group', key: groupKey, logs: group.logs });
+        }
+        group.logs.push(log);
+        items.push({ type: 'log', log, grouped: true });
+      } else {
+        items.push({ type: 'log', log, grouped: false });
+      }
+    });
+
+    groupMap.forEach((group, key) => {
+      const totalHours = group.logs.reduce((sum, log) => sum + (log.hoursRegular || 0) + (log.hoursOT || 0), 0);
+      const totalCost = group.logs.reduce((sum, log) => sum + (log.subCost || 0), 0);
+      const totalBill = group.logs.reduce((sum, log) => sum + (log.clientBill || 0), 0);
+      const totalMargin = totalBill - totalCost;
+      const marginPct = totalBill > 0 ? (totalMargin / totalBill) * 100 : 0;
+      items[group.headerIndex] = {
+        type: 'group',
+        key,
+        logs: group.logs,
+        summary: {
+          totalHours,
+          totalCost,
+          totalBill,
+          totalMargin,
+          marginPct,
+        },
+      };
+    });
+
+    return items;
   }, [subcontractor.timeLogs]);
 
   return (
@@ -393,7 +453,35 @@ export default function SubcontractorCostBreakdown({
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                       {/* Time Logs */}
-                      {groupedTimeLogs.map((log) => {
+                      {groupedTimeLogs.map((item) => {
+                        if (item.type === 'group') {
+                          const columnCount = showConversations ? 10 : 9;
+                          const summary = item.summary;
+                          return (
+                            <tr key={`group-${item.key}`} className="bg-indigo-50/60 border-t border-indigo-100">
+                              <td colSpan={columnCount} className="px-4 py-3">
+                                <div className="flex items-center justify-between text-xs sm:text-sm">
+                                  <div className="font-semibold text-indigo-900">
+                                    Grouped time log • {item.logs.length} segments
+                                  </div>
+                                  {summary && (
+                                    <div className="flex items-center gap-4 text-indigo-900">
+                                      <span>{summary.totalHours.toFixed(1)}h</span>
+                                      <span>{formatCurrency(summary.totalCost, currency)}</span>
+                                      <span>{formatCurrency(summary.totalBill, currency)}</span>
+                                      <span className="text-indigo-700">
+                                        {formatCurrency(summary.totalMargin, currency)} ({summary.marginPct.toFixed(1)}%)
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        const log = item.log;
+                        const isGrouped = item.grouped;
                         const totalHours = (log.hoursRegular || 0) + (log.hoursOT || 0);
                         const margin = (log.clientBill || 0) - (log.subCost || 0);
                         const marginPct = log.clientBill && log.clientBill > 0
@@ -401,7 +489,7 @@ export default function SubcontractorCostBreakdown({
                           : '0.0';
 
                         return (
-                          <tr key={`log-${log.id}`} className="hover:bg-gray-50">
+                          <tr key={`log-${log.id}`} className={`hover:bg-gray-50 ${isGrouped ? 'bg-indigo-50/20' : ''}`}>
                             <td className="px-4 py-3 text-gray-600">{formatDate(log.date)}</td>
                             <td className="px-4 py-3">
                               <span className="inline-flex items-center space-x-1 text-blue-700">
@@ -409,14 +497,9 @@ export default function SubcontractorCostBreakdown({
                                 <span className="font-medium">Time</span>
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-gray-900">
+                            <td className={`px-4 py-3 text-gray-900 ${isGrouped ? 'pl-8 border-l-4 border-indigo-200' : ''}`}>
                               {log.roleName}
                               {log.timeframeName ? ` - ${normalizeTimeframeName(log.timeframeName)}` : log.shiftType ? ` - ${log.shiftType}` : ''}
-                              {log.__groupInfo && (
-                                <span className="ml-2 inline-flex items-center rounded-full bg-indigo-50 text-indigo-700 px-2 py-0.5 text-[10px] font-semibold border border-indigo-200">
-                                  Group {log.__groupInfo.label} {log.__groupInfo.index}/{log.__groupInfo.total}
-                                </span>
-                              )}
                             </td>
                             <td className="px-4 py-3 text-center text-gray-600 text-xs">
                               {log.startTime && log.endTime ? `${log.startTime}-${log.endTime}` : '-'}
