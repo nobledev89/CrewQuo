@@ -39,14 +39,35 @@ interface LineItem {
   type: string;
   subcontractor: string;
   description: string;
+  time: string;
+  notes?: string;
   qtyHours: string;
   cost?: string;
   bill: string;
   margin?: string;
   marginPct?: string;
-  status: string;
-  notes?: string;
 }
+
+const normalizeTimeframeName = (value?: string): string | undefined => {
+  if (!value) return value;
+  return value.replace(/\(\d{2}:\d{2}-\d{2}:\d{2}\)/g, '').replace(/\s{2,}/g, ' ').trim();
+};
+
+const getLogTimeRange = (log: TimeLogData): string => {
+  const isSegment = Boolean(
+    log.splitGroupId ||
+    log.splitIndex ||
+    log.segmentStartTime ||
+    log.segmentEndTime
+  );
+  if (log.entryStartTime && log.entryEndTime) {
+    return `${log.entryStartTime}-${log.entryEndTime}`;
+  }
+  if (!isSegment && log.startTime && log.endTime) {
+    return `${log.startTime}-${log.endTime}`;
+  }
+  return '-';
+};
 
 /**
  * Filter data based on visibility settings
@@ -55,14 +76,14 @@ function filterLineItems(
   timeLogs: TimeLogData[],
   expenses: ExpenseData[],
   subcontractorsMap: Map<string, string>,
-  visibility: ExportOptions['visibility']
+  visibility: ExportOptions['visibility'],
+  subcontractors?: SubcontractorTracking[]
 ): LineItem[] {
   const items: LineItem[] = [];
 
-  // Process time logs
-  timeLogs.forEach((log) => {
+  const pushTimeLog = (log: TimeLogData, subcontractorName: string) => {
     const status = log.status.toUpperCase();
-    
+
     // Filter by status visibility
     if (status === 'DRAFT' && !visibility.showDraftStatus) return;
     if (status === 'REJECTED' && !visibility.showRejectedStatus) return;
@@ -76,12 +97,12 @@ function filterLineItems(
     const item: LineItem = {
       date: formatDate(log.date),
       type: 'Time',
-      subcontractor: subcontractorsMap.get(log.subcontractorId) || 'Unknown',
-      description: `${log.roleName}${log.timeframeName ? ` - ${log.timeframeName}` : log.shiftType ? ` - ${log.shiftType}` : ''}`,
-      qtyHours: `${totalHours.toFixed(1)}h${log.quantity && log.quantity > 1 ? ` × ${log.quantity}` : ''}`,
-      bill: String(log.clientBill || 0),
-      status,
+      subcontractor: subcontractorName,
+      description: `${log.roleName}${log.timeframeName ? ` - ${normalizeTimeframeName(log.timeframeName)}` : log.shiftType ? ` - ${log.shiftType}` : ''}`,
+      time: getLogTimeRange(log),
       notes: log.notes || '',
+      qtyHours: `${totalHours.toFixed(1)}h${log.quantity && log.quantity > 1 ? ` x ${log.quantity}` : ''}`,
+      bill: String(log.clientBill || 0),
     };
 
     if (visibility.showCosts) {
@@ -94,12 +115,11 @@ function filterLineItems(
     }
 
     items.push(item);
-  });
+  };
 
-  // Process expenses
-  expenses.forEach((exp) => {
+  const pushExpense = (exp: ExpenseData, subcontractorName: string) => {
     const status = exp.status.toUpperCase();
-    
+
     // Filter by status visibility
     if (status === 'DRAFT' && !visibility.showDraftStatus) return;
     if (status === 'REJECTED' && !visibility.showRejectedStatus) return;
@@ -111,12 +131,12 @@ function filterLineItems(
     const item: LineItem = {
       date: formatDate(exp.date),
       type: 'Expense',
-      subcontractor: subcontractorsMap.get(exp.subcontractorId) || 'Unknown',
+      subcontractor: subcontractorName,
       description: exp.category,
+      time: '-',
+      notes: exp.description || '',
       qtyHours: exp.quantity ? `${exp.quantity.toFixed(1)}${exp.unitRate ? ` @ ${exp.unitRate}` : ''}` : '1',
       bill: String(billing),
-      status,
-      notes: exp.description || '',
     };
 
     if (visibility.showCosts) {
@@ -129,6 +149,28 @@ function filterLineItems(
     }
 
     items.push(item);
+  };
+
+  if (subcontractors && subcontractors.length > 0) {
+    subcontractors.forEach((sub) => {
+      const subcontractorName = sub.name || subcontractorsMap.get(sub.id) || 'Unknown';
+      sub.timeLogs.forEach((log) => pushTimeLog(log, subcontractorName));
+      sub.expenses.forEach((exp) => pushExpense(exp, subcontractorName));
+    });
+
+    return items;
+  }
+
+  // Process time logs
+  timeLogs.forEach((log) => {
+    const subcontractorName = subcontractorsMap.get(log.subcontractorId) || 'Unknown';
+    pushTimeLog(log, subcontractorName);
+  });
+
+  // Process expenses
+  expenses.forEach((exp) => {
+    const subcontractorName = subcontractorsMap.get(exp.subcontractorId) || 'Unknown';
+    pushExpense(exp, subcontractorName);
   });
 
   // Sort by date descending
@@ -140,7 +182,6 @@ function filterLineItems(
 
   return items;
 }
-
 /**
  * Export to CSV
  */
@@ -154,16 +195,15 @@ export function exportToCSV(options: ExportOptions): void {
   });
 
   // Get filtered line items
-  const items = filterLineItems(timeLogs, expenses, subcontractorsMap, visibility);
+  const items = filterLineItems(timeLogs, expenses, subcontractorsMap, visibility, projectTracking.subcontractors);
 
   // Build CSV header
-  const headers = ['Date', 'Type', 'Subcontractor', 'Description', 'Qty/Hours'];
+  const headers = ['Date', 'Type', 'Subcontractor', 'Description', 'Time', 'Notes', 'Qty/Hours'];
   if (visibility.showCosts) headers.push('Cost');
   headers.push('Bill');
   if (visibility.showMargins) {
     headers.push('Margin', 'Margin %');
   }
-  headers.push('Status', 'Notes');
 
   // Build CSV rows
   const rows = items.map(item => {
@@ -172,6 +212,8 @@ export function exportToCSV(options: ExportOptions): void {
       item.type,
       item.subcontractor,
       item.description,
+      item.time,
+      item.notes || '',
       item.qtyHours,
     ];
     
@@ -187,9 +229,7 @@ export function exportToCSV(options: ExportOptions): void {
         `${item.marginPct}%`
       );
     }
-    
-    row.push(item.status, item.notes || '');
-    
+
     return row;
   });
 
@@ -280,13 +320,12 @@ export function exportToXLSX(options: ExportOptions): void {
   XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
 
   // ===== SHEET 2: All Line Items =====
-  const items = filterLineItems(timeLogs, expenses, subcontractorsMap, visibility);
+  const items = filterLineItems(timeLogs, expenses, subcontractorsMap, visibility, projectTracking.subcontractors);
   
-  const itemsHeaders = ['Date', 'Type', 'Subcontractor', 'Description', 'Qty/Hours'];
+  const itemsHeaders = ['Date', 'Type', 'Subcontractor', 'Description', 'Time', 'Notes', 'Qty/Hours'];
   if (visibility.showCosts) itemsHeaders.push('Cost');
   itemsHeaders.push('Bill');
   if (visibility.showMargins) itemsHeaders.push('Margin', 'Margin %');
-  itemsHeaders.push('Status', 'Notes');
 
   const itemsData = items.map(item => {
     const row: any[] = [
@@ -294,6 +333,8 @@ export function exportToXLSX(options: ExportOptions): void {
       item.type,
       item.subcontractor,
       item.description,
+      item.time,
+      item.notes || '',
       item.qtyHours,
     ];
     
@@ -309,9 +350,7 @@ export function exportToXLSX(options: ExportOptions): void {
         `${item.marginPct}%`
       );
     }
-    
-    row.push(item.status, item.notes || '');
-    
+
     return row;
   });
 
@@ -515,7 +554,8 @@ export function exportToPDF(options: ExportOptions): void {
       sub.timeLogs,
       sub.expenses,
       subcontractorsMap,
-      visibility
+      visibility,
+      [sub]
     );
 
     if (subItems.length === 0) {
@@ -524,11 +564,10 @@ export function exportToPDF(options: ExportOptions): void {
     }
 
     // Build table headers
-    const headers: string[] = ['Date', 'Type', 'Description', 'Qty/Hours'];
+    const headers: string[] = ['Date', 'Type', 'Description', 'Time', 'Notes', 'Qty/Hours'];
     if (visibility.showCosts) headers.push('Cost');
     headers.push('Bill');
     if (visibility.showMargins) headers.push('Margin %');
-    headers.push('Status');
 
     // Build table data
     const tableData = subItems.slice(0, 20).map(item => { // Limit to first 20 items per subcontractor
@@ -536,12 +575,13 @@ export function exportToPDF(options: ExportOptions): void {
         item.date,
         item.type,
         item.description.length > 40 ? item.description.substring(0, 37) + '...' : item.description,
+        item.time,
+        (item.notes || '').length > 40 ? (item.notes || '').substring(0, 37) + '...' : (item.notes || ''),
         item.qtyHours,
       ];
       if (visibility.showCosts) row.push(formatCurrency(parseFloat(item.cost || '0'), currency));
       row.push(formatCurrency(parseFloat(item.bill), currency));
       if (visibility.showMargins) row.push(`${item.marginPct}%`);
-      row.push(item.status);
       return row;
     });
 
@@ -587,3 +627,4 @@ export function exportToPDF(options: ExportOptions): void {
   // Save PDF
   doc.save(`${projectCode}_${projectName.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
 }
+

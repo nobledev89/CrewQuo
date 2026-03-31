@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp, Clock, DollarSign, TrendingUp, FileText, MessageSquare } from 'lucide-react';
+import { ChevronDown, ChevronUp, Clock, DollarSign, FileText, MessageSquare } from 'lucide-react';
 import {
   SubcontractorTracking,
   formatCurrency,
@@ -13,6 +13,10 @@ interface SubcontractorCostBreakdownProps {
   subcontractor: SubcontractorTracking;
   currency?: string;
   showLineItems?: boolean;
+  showCosts?: boolean;
+  showMargins?: boolean;
+  showDraftStatus?: boolean;
+  showRejectedStatus?: boolean;
   unresolvedNotesMap?: Map<string, number>;
   onOpenConversation?: (itemId: string, itemType: 'timeLog' | 'expense', description: string) => void;
 }
@@ -21,6 +25,10 @@ export default function SubcontractorCostBreakdown({
   subcontractor,
   currency = 'GBP',
   showLineItems = true,
+  showCosts = true,
+  showMargins = true,
+  showDraftStatus = true,
+  showRejectedStatus = true,
   unresolvedNotesMap,
   onOpenConversation,
 }: SubcontractorCostBreakdownProps) {
@@ -41,6 +49,12 @@ export default function SubcontractorCostBreakdown({
     return '-';
   };
   const groupedTimeLogs = useMemo(() => {
+    const visibleTimeLogs = subcontractor.timeLogs.filter((log) => {
+      const status = (log.status || 'DRAFT').toUpperCase();
+      if (status === 'DRAFT' && !showDraftStatus) return false;
+      if (status === 'REJECTED' && !showRejectedStatus) return false;
+      return true;
+    });
     const GROUP_WINDOW_MS = 10000;
 
     const toMillis = (value: any): number | null => {
@@ -119,7 +133,7 @@ export default function SubcontractorCostBreakdown({
 
     // Prefer stored split groups when available
     const storedGroups = new Map<string, any[]>();
-    subcontractor.timeLogs.forEach((log) => {
+    visibleTimeLogs.forEach((log) => {
       if (log.splitGroupId) {
         const existing = storedGroups.get(log.splitGroupId) || [];
         existing.push(log);
@@ -149,7 +163,7 @@ export default function SubcontractorCostBreakdown({
 
     // Heuristic grouping for older entries (no stored group id)
     const byKey = new Map<string, any[]>();
-    subcontractor.timeLogs.forEach((log) => {
+    visibleTimeLogs.forEach((log) => {
       if (log.splitGroupId) return;
       const createdAtMs = toMillis(log.createdAt);
       if (createdAtMs === null) return;
@@ -230,7 +244,7 @@ export default function SubcontractorCostBreakdown({
       return Number.isNaN(parsed) ? 0 : parsed;
     };
 
-    const sortedLogs = subcontractor.timeLogs
+    const sortedLogs = visibleTimeLogs
       .map((log) => ({
         ...log,
         __groupInfo: groupInfo.get(log.id),
@@ -281,7 +295,20 @@ export default function SubcontractorCostBreakdown({
     });
 
     return items;
-  }, [subcontractor.timeLogs]);
+  }, [subcontractor.timeLogs, showDraftStatus, showRejectedStatus]);
+
+  const visibleExpenses = useMemo(() => {
+    return subcontractor.expenses.filter((exp) => {
+      const status = (exp.status || 'DRAFT').toUpperCase();
+      if (status === 'DRAFT' && !showDraftStatus) return false;
+      if (status === 'REJECTED' && !showRejectedStatus) return false;
+      return true;
+    });
+  }, [subcontractor.expenses, showDraftStatus, showRejectedStatus]);
+
+  const summaryGridClass = showCosts
+    ? (showMargins ? 'grid-cols-4' : 'grid-cols-3')
+    : (showMargins ? 'grid-cols-3' : 'grid-cols-2');
 
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow">
@@ -303,24 +330,28 @@ export default function SubcontractorCostBreakdown({
             </div>
           </div>
           <div className="flex items-center space-x-4">
-            <div className="text-right">
-              <p className="text-sm text-gray-600">Total Cost</p>
-              <p className="text-xl font-bold text-red-600">
-                {formatCurrency(subcontractor.totalCost, currency)}
-              </p>
-            </div>
+            {showCosts && (
+              <div className="text-right">
+                <p className="text-sm text-gray-600">Total Cost</p>
+                <p className="text-xl font-bold text-red-600">
+                  {formatCurrency(subcontractor.totalCost, currency)}
+                </p>
+              </div>
+            )}
             <div className="text-right">
               <p className="text-sm text-gray-600">Total Bill</p>
               <p className="text-xl font-bold text-green-600">
                 {formatCurrency(subcontractor.totalBilling, currency)}
               </p>
             </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-600">Margin</p>
-              <p className={`text-xl font-bold ${subcontractor.marginPct >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                {subcontractor.marginPct.toFixed(1)}%
-              </p>
-            </div>
+            {showMargins && (
+              <div className="text-right">
+                <p className="text-sm text-gray-600">Margin</p>
+                <p className={`text-xl font-bold ${subcontractor.marginPct >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                  {subcontractor.marginPct.toFixed(1)}%
+                </p>
+              </div>
+            )}
             <button className="p-2 hover:bg-blue-100 rounded-lg transition">
               {isExpanded ? (
                 <ChevronUp className="w-5 h-5 text-gray-600" />
@@ -338,28 +369,32 @@ export default function SubcontractorCostBreakdown({
           {/* Status Breakdown */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Draft */}
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-yellow-700 uppercase">Draft</span>
-                <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor('DRAFT')}`}>
-                  {subcontractor.byStatus.draft.count}
-                </span>
+            {showDraftStatus && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-yellow-700 uppercase">Draft</span>
+                  <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor('DRAFT')}`}>
+                    {subcontractor.byStatus.draft.count}
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-yellow-700">Hours:</span>
+                    <span className="font-semibold text-yellow-900">{subcontractor.byStatus.draft.hours.toFixed(1)}h</span>
+                  </div>
+                  {showCosts && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-yellow-700">Cost:</span>
+                      <span className="font-semibold text-yellow-900">{formatCurrency(subcontractor.byStatus.draft.cost, currency)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm">
+                    <span className="text-yellow-700">Bill:</span>
+                    <span className="font-semibold text-yellow-900">{formatCurrency(subcontractor.byStatus.draft.billing, currency)}</span>
+                  </div>
+                </div>
               </div>
-              <div className="space-y-1">
-                <div className="flex justify-between text-sm">
-                  <span className="text-yellow-700">Hours:</span>
-                  <span className="font-semibold text-yellow-900">{subcontractor.byStatus.draft.hours.toFixed(1)}h</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-yellow-700">Cost:</span>
-                  <span className="font-semibold text-yellow-900">{formatCurrency(subcontractor.byStatus.draft.cost, currency)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-yellow-700">Bill:</span>
-                  <span className="font-semibold text-yellow-900">{formatCurrency(subcontractor.byStatus.draft.billing, currency)}</span>
-                </div>
-              </div>
-            </div>
+            )}
 
             {/* Submitted */}
             <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
@@ -374,10 +409,12 @@ export default function SubcontractorCostBreakdown({
                   <span className="text-orange-700">Hours:</span>
                   <span className="font-semibold text-orange-900">{subcontractor.byStatus.submitted.hours.toFixed(1)}h</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-orange-700">Cost:</span>
-                  <span className="font-semibold text-orange-900">{formatCurrency(subcontractor.byStatus.submitted.cost, currency)}</span>
-                </div>
+                {showCosts && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-orange-700">Cost:</span>
+                    <span className="font-semibold text-orange-900">{formatCurrency(subcontractor.byStatus.submitted.cost, currency)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm">
                   <span className="text-orange-700">Bill:</span>
                   <span className="font-semibold text-orange-900">{formatCurrency(subcontractor.byStatus.submitted.billing, currency)}</span>
@@ -398,10 +435,12 @@ export default function SubcontractorCostBreakdown({
                   <span className="text-green-700">Hours:</span>
                   <span className="font-semibold text-green-900">{subcontractor.byStatus.approved.hours.toFixed(1)}h</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-green-700">Cost:</span>
-                  <span className="font-semibold text-green-900">{formatCurrency(subcontractor.byStatus.approved.cost, currency)}</span>
-                </div>
+                {showCosts && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-green-700">Cost:</span>
+                    <span className="font-semibold text-green-900">{formatCurrency(subcontractor.byStatus.approved.cost, currency)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm">
                   <span className="text-green-700">Bill:</span>
                   <span className="font-semibold text-green-900">{formatCurrency(subcontractor.byStatus.approved.billing, currency)}</span>
@@ -410,32 +449,36 @@ export default function SubcontractorCostBreakdown({
             </div>
 
             {/* Rejected */}
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-red-700 uppercase">Rejected</span>
-                <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor('REJECTED')}`}>
-                  {subcontractor.byStatus.rejected.count}
-                </span>
+            {showRejectedStatus && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-red-700 uppercase">Rejected</span>
+                  <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor('REJECTED')}`}>
+                    {subcontractor.byStatus.rejected.count}
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-red-700">Hours:</span>
+                    <span className="font-semibold text-red-900">{subcontractor.byStatus.rejected.hours.toFixed(1)}h</span>
+                  </div>
+                  {showCosts && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-red-700">Cost:</span>
+                      <span className="font-semibold text-red-900">{formatCurrency(subcontractor.byStatus.rejected.cost, currency)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm">
+                    <span className="text-red-700">Bill:</span>
+                    <span className="font-semibold text-red-900">{formatCurrency(subcontractor.byStatus.rejected.billing, currency)}</span>
+                  </div>
+                </div>
               </div>
-              <div className="space-y-1">
-                <div className="flex justify-between text-sm">
-                  <span className="text-red-700">Hours:</span>
-                  <span className="font-semibold text-red-900">{subcontractor.byStatus.rejected.hours.toFixed(1)}h</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-red-700">Cost:</span>
-                  <span className="font-semibold text-red-900">{formatCurrency(subcontractor.byStatus.rejected.cost, currency)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-red-700">Bill:</span>
-                  <span className="font-semibold text-red-900">{formatCurrency(subcontractor.byStatus.rejected.billing, currency)}</span>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Line Items */}
-          {showLineItems && (subcontractor.timeLogs.length > 0 || subcontractor.expenses.length > 0) && (
+          {showLineItems && (groupedTimeLogs.length > 0 || visibleExpenses.length > 0) && (
             <div>
               <h4 className="font-semibold text-gray-900 mb-3 flex items-center space-x-2">
                 <FileText className="w-4 h-4" />
@@ -452,9 +495,13 @@ export default function SubcontractorCostBreakdown({
                         <th className="px-4 py-3 text-center font-semibold text-gray-700">Time</th>
                         <th className="px-4 py-3 text-left font-semibold text-gray-700">Notes</th>
                         <th className="px-4 py-3 text-center font-semibold text-gray-700">Qty/Hours</th>
-                        <th className="px-4 py-3 text-right font-semibold text-gray-700">Cost</th>
+                        {showCosts && (
+                          <th className="px-4 py-3 text-right font-semibold text-gray-700">Cost</th>
+                        )}
                         <th className="px-4 py-3 text-right font-semibold text-gray-700">Bill</th>
-                        <th className="px-4 py-3 text-right font-semibold text-gray-700">Margin</th>
+                        {showMargins && (
+                          <th className="px-4 py-3 text-right font-semibold text-gray-700">Margin</th>
+                        )}
                         {showConversations && (
                           <th className="px-4 py-3 text-center font-semibold text-gray-700">Conversation</th>
                         )}
@@ -463,8 +510,11 @@ export default function SubcontractorCostBreakdown({
                     <tbody className="divide-y divide-gray-200">
                       {/* Time Logs */}
                       {groupedTimeLogs.map((item) => {
-                        if (item.type === 'group') {
-                          const columnCount = showConversations ? 10 : 9;
+                          if (item.type === 'group') {
+                            let columnCount = 7;
+                            if (showCosts) columnCount += 1;
+                            if (showMargins) columnCount += 1;
+                            if (showConversations) columnCount += 1;
                           const summary = item.summary;
                           return (
                             <tr key={`group-${item.key}`} className="bg-indigo-50/60 border-t border-indigo-100">
@@ -473,16 +523,20 @@ export default function SubcontractorCostBreakdown({
                                   <div className="font-semibold text-indigo-900">
                                     Grouped time log • {item.logs.length} segments
                                   </div>
-                                  {summary && (
-                                    <div className="flex items-center gap-4 text-indigo-900">
-                                      <span>{summary.totalHours.toFixed(1)}h</span>
-                                      <span>{formatCurrency(summary.totalCost, currency)}</span>
-                                      <span>{formatCurrency(summary.totalBill, currency)}</span>
-                                      <span className="text-indigo-700">
-                                        {formatCurrency(summary.totalMargin, currency)} ({summary.marginPct.toFixed(1)}%)
-                                      </span>
-                                    </div>
-                                  )}
+                                    {summary && (
+                                      <div className="flex items-center gap-4 text-indigo-900">
+                                        <span>{summary.totalHours.toFixed(1)}h</span>
+                                        {showCosts && (
+                                          <span>{formatCurrency(summary.totalCost, currency)}</span>
+                                        )}
+                                        <span>{formatCurrency(summary.totalBill, currency)}</span>
+                                        {showMargins && (
+                                          <span className="text-indigo-700">
+                                            {formatCurrency(summary.totalMargin, currency)} ({summary.marginPct.toFixed(1)}%)
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
                                 </div>
                               </td>
                             </tr>
@@ -526,22 +580,26 @@ export default function SubcontractorCostBreakdown({
                                 <span className="text-xs text-gray-500"> × {log.quantity}</span>
                               )}
                             </td>
-                            <td className="px-4 py-3 text-right font-semibold text-red-700">
-                              {formatCurrency(log.subCost, currency)}
-                            </td>
+                            {showCosts && (
+                              <td className="px-4 py-3 text-right font-semibold text-red-700">
+                                {formatCurrency(log.subCost, currency)}
+                              </td>
+                            )}
                             <td className="px-4 py-3 text-right font-semibold text-green-700">
                               {formatCurrency(log.clientBill || 0, currency)}
                             </td>
-                            <td className="px-4 py-3 text-right">
-                              <div className="text-right">
-                                <div className={`font-semibold ${margin >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
-                                  {formatCurrency(margin, currency)}
+                            {showMargins && (
+                              <td className="px-4 py-3 text-right">
+                                <div className="text-right">
+                                  <div className={`font-semibold ${margin >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
+                                    {formatCurrency(margin, currency)}
+                                  </div>
+                                  <div className={`text-xs ${margin >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                                    {marginPct}%
+                                  </div>
                                 </div>
-                                <div className={`text-xs ${margin >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                                  {marginPct}%
-                                </div>
-                              </div>
-                            </td>
+                              </td>
+                            )}
                             {showConversations && (
                               <td className="px-4 py-3 text-center">
                                 {(() => {
@@ -576,7 +634,7 @@ export default function SubcontractorCostBreakdown({
                       })}
 
                       {/* Expenses */}
-                      {subcontractor.expenses.map((exp) => {
+                      {visibleExpenses.map((exp) => {
                         const billing = exp.clientBillAmount ?? exp.amount; // Fall back to cost for backward compatibility
                         const margin = billing - exp.amount;
                         const marginPct = billing > 0 ? ((margin / billing) * 100) : 0;
@@ -605,22 +663,26 @@ export default function SubcontractorCostBreakdown({
                                 <span className="text-xs text-gray-500"> @ {formatCurrency(exp.unitRate, currency)}</span>
                               )}
                             </td>
-                            <td className="px-4 py-3 text-right font-semibold text-red-700">
-                              {formatCurrency(exp.amount, currency)}
-                            </td>
+                            {showCosts && (
+                              <td className="px-4 py-3 text-right font-semibold text-red-700">
+                                {formatCurrency(exp.amount, currency)}
+                              </td>
+                            )}
                             <td className="px-4 py-3 text-right font-semibold text-green-700">
                               {formatCurrency(billing, currency)}
                             </td>
-                            <td className="px-4 py-3 text-right">
-                              <div className="text-right">
-                                <div className={`font-semibold ${margin >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
-                                  {formatCurrency(margin, currency)}
+                            {showMargins && (
+                              <td className="px-4 py-3 text-right">
+                                <div className="text-right">
+                                  <div className={`font-semibold ${margin >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
+                                    {formatCurrency(margin, currency)}
+                                  </div>
+                                  <div className={`text-xs ${margin >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                                    {marginPct.toFixed(1)}%
+                                  </div>
                                 </div>
-                                <div className={`text-xs ${margin >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                                  {marginPct.toFixed(1)}%
-                                </div>
-                              </div>
-                            </td>
+                              </td>
+                            )}
                             {showConversations && (
                               <td className="px-4 py-3 text-center">
                                 {(() => {
@@ -662,26 +724,30 @@ export default function SubcontractorCostBreakdown({
 
           {/* Summary Row */}
           <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-lg p-4">
-            <div className="grid grid-cols-4 gap-4">
+            <div className={`grid ${summaryGridClass} gap-4`}>
               <div>
                 <p className="text-xs text-indigo-700 mb-1">Total Hours</p>
                 <p className="text-xl font-bold text-indigo-900">{subcontractor.totalHours.toFixed(1)}h</p>
               </div>
-              <div>
-                <p className="text-xs text-red-700 mb-1">Total Cost</p>
-                <p className="text-xl font-bold text-red-900">{formatCurrency(subcontractor.totalCost, currency)}</p>
-              </div>
+              {showCosts && (
+                <div>
+                  <p className="text-xs text-red-700 mb-1">Total Cost</p>
+                  <p className="text-xl font-bold text-red-900">{formatCurrency(subcontractor.totalCost, currency)}</p>
+                </div>
+              )}
               <div>
                 <p className="text-xs text-green-700 mb-1">Total Billing</p>
                 <p className="text-xl font-bold text-green-900">{formatCurrency(subcontractor.totalBilling, currency)}</p>
               </div>
-              <div>
-                <p className="text-xs text-blue-700 mb-1">Total Margin</p>
-                <p className={`text-xl font-bold ${subcontractor.marginPct >= 0 ? 'text-blue-900' : 'text-red-900'}`}>
-                  {formatCurrency(subcontractor.totalMargin, currency)}
-                  <span className="text-sm ml-1">({subcontractor.marginPct.toFixed(1)}%)</span>
-                </p>
-              </div>
+              {showMargins && (
+                <div>
+                  <p className="text-xs text-blue-700 mb-1">Total Margin</p>
+                  <p className={`text-xl font-bold ${subcontractor.marginPct >= 0 ? 'text-blue-900' : 'text-red-900'}`}>
+                    {formatCurrency(subcontractor.totalMargin, currency)}
+                    <span className="text-sm ml-1">({subcontractor.marginPct.toFixed(1)}%)</span>
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>

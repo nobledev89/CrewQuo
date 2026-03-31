@@ -12,17 +12,17 @@ import {
   where,
   getDocs,
 } from 'firebase/firestore';
-import { ArrowLeft, Activity, Clock, DollarSign, TrendingUp, MessageSquare, Download, FileSpreadsheet, FileText, FileDown } from 'lucide-react';
+import { ArrowLeft, Activity, Clock, DollarSign, TrendingUp, FileSpreadsheet, FileText, FileDown } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import LineItemNotesModal from '@/components/LineItemNotesModal';
 import DownloadProgressBar from '@/components/DownloadProgressBar';
+import SubcontractorCostBreakdown from '@/components/SubcontractorCostBreakdown';
 import { getProjectVisibilitySettings } from '@/lib/clientAccessUtils';
 import { exportToCSV, exportToXLSX, exportToPDF } from '@/lib/projectExportUtils';
 import { getUnresolvedNotesCounts } from '@/lib/lineItemNotesUtils';
 import {
   aggregateProjectCosts,
   formatCurrency,
-  formatDate,
   getStatusColor,
   type TimeLogData,
   type ExpenseData,
@@ -245,6 +245,21 @@ export default function ClientProjectDetailPage() {
           startTime: data.startTime,
           endTime: data.endTime,
           notes: data.notes,
+          entryStartTime: data.entryStartTime,
+          entryEndTime: data.entryEndTime,
+          segmentStartTime: data.segmentStartTime,
+          segmentEndTime: data.segmentEndTime,
+          createdAt: data.createdAt,
+          unitSubCost: data.unitSubCost,
+          unitClientBill: data.unitClientBill,
+          timeframeId: data.timeframeId,
+          payRateCardId: data.payRateCardId,
+          billRateCardId: data.billRateCardId,
+          splitGroupId: data.splitGroupId,
+          splitIndex: data.splitIndex,
+          splitTotal: data.splitTotal,
+          projectId: data.projectId,
+          createdByUserId: data.createdByUserId,
         };
       }).sort((a, b) => {
         const dateA = a.date ? new Date(a.date).getTime() : 0;
@@ -566,256 +581,28 @@ export default function ClientProjectDetailPage() {
           ) : (
             <div className="space-y-4">
               {projectTracking.subcontractors.map((sub) => (
-                <div key={sub.id} className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm">
-                  {/* Subcontractor Header */}
-                  <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">
-                          {sub.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-gray-900">{sub.name}</h4>
-                          <p className="text-sm text-gray-600">
-                            {sub.totalHours.toFixed(1)}h logged • {sub.timeLogs.length + sub.expenses.length} entries
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-4">
-                        {visibility.showCosts && (
-                          <div className="text-right">
-                            <p className="text-sm text-gray-600">Total Cost</p>
-                            <p className="text-xl font-bold text-red-600">{formatCurrency(sub.totalCost, currency)}</p>
-                          </div>
-                        )}
-                        <div className="text-right">
-                          <p className="text-sm text-gray-600">Total Bill</p>
-                          <p className="text-xl font-bold text-green-600">{formatCurrency(sub.totalBilling, currency)}</p>
-                        </div>
-                        {visibility.showMargins && (
-                          <div className="text-right">
-                            <p className="text-sm text-gray-600">Margin</p>
-                            <p className={`text-xl font-bold ${sub.marginPct >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                              {sub.marginPct.toFixed(1)}%
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Line Items Table */}
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 border-b border-gray-200">
-                        <tr>
-                          <th className="px-4 py-3 text-left font-semibold text-gray-700">Date</th>
-                          <th className="px-4 py-3 text-left font-semibold text-gray-700">Type</th>
-                          <th className="px-4 py-3 text-left font-semibold text-gray-700">Description</th>
-                          <th className="px-4 py-3 text-center font-semibold text-gray-700">Qty/Hours</th>
-                          {visibility.showCosts && (
-                            <th className="px-4 py-3 text-right font-semibold text-gray-700">Cost</th>
-                          )}
-                          <th className="px-4 py-3 text-right font-semibold text-gray-700">Bill</th>
-                          {visibility.showMargins && (
-                            <th className="px-4 py-3 text-right font-semibold text-gray-700">Margin</th>
-                          )}
-                          <th className="px-4 py-3 text-left font-semibold text-gray-700 w-1/4">Notes</th>
-                          {visibility.allowClientNotes && (
-                            <th className="px-4 py-3 text-center font-semibold text-gray-700">Conversation</th>
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {/* Time Logs */}
-                        {sub.timeLogs.map((log) => {
-                          const totalHours = (log.hoursRegular || 0) + (log.hoursOT || 0);
-                          const margin = (log.clientBill || 0) - (log.subCost || 0);
-                          const marginPct = log.clientBill && log.clientBill > 0
-                            ? ((margin / log.clientBill) * 100).toFixed(1)
-                            : '0.0';
-
-                          // Filter by status visibility
-                          const status = log.status.toUpperCase();
-                          if (status === 'DRAFT' && !visibility.showDraftStatus) return null;
-                          if (status === 'REJECTED' && !visibility.showRejectedStatus) return null;
-
-                          return (
-                            <tr key={`log-${log.id}`} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 text-gray-600">{formatDate(log.date)}</td>
-                              <td className="px-4 py-3">
-                                <span className="inline-flex items-center space-x-1 text-blue-700">
-                                  <Clock className="w-3 h-3" />
-                                  <span className="font-medium">Time</span>
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 text-gray-900">
-                                {log.roleName} {log.timeframeName ? `- ${log.timeframeName}` : log.shiftType ? `- ${log.shiftType}` : ''}
-                                {log.startTime && log.endTime && (
-                                  <span className="text-xs text-gray-500 ml-1">({log.startTime}-{log.endTime})</span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3 text-center text-gray-900">
-                                {totalHours.toFixed(1)}h
-                                {log.quantity && log.quantity > 1 && (
-                                  <span className="text-xs text-gray-500"> × {log.quantity}</span>
-                                )}
-                              </td>
-                              {visibility.showCosts && (
-                                <td className="px-4 py-3 text-right font-semibold text-red-700">
-                                  {formatCurrency(log.subCost, currency)}
-                                </td>
-                              )}
-                              <td className="px-4 py-3 text-right font-semibold text-green-700">
-                                {formatCurrency(log.clientBill || 0, currency)}
-                              </td>
-                              {visibility.showMargins && (
-                                <td className="px-4 py-3 text-right">
-                                  <div className="text-right">
-                                    <div className={`font-semibold ${margin >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
-                                      {formatCurrency(margin, currency)}
-                                    </div>
-                                    <div className={`text-xs ${margin >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                                      {marginPct}%
-                                    </div>
-                                  </div>
-                                </td>
-                              )}
-                              <td className="px-4 py-3 text-left align-top">
-                                {log.notes ? (
-                                  <p className="text-sm text-gray-700 whitespace-normal break-words">
-                                    {log.notes}
-                                  </p>
-                                ) : (
-                                  <span className="text-xs text-gray-400">-</span>
-                                )}
-                              </td>
-                              {visibility.allowClientNotes && (
-                                <td className="px-4 py-3 text-center align-top">
-                                  {(() => {
-                                    const unresolvedCount = unresolvedNotesMap.get(log.id) || 0;
-                                    const hasConversation = unresolvedCount > 0;
-                                    return (
-                                      <button 
-                                        onClick={() => setSelectedLineItem({
-                                          itemId: log.id,
-                                          itemType: 'timeLog',
-                                          itemDescription: `${log.roleName} - ${formatDate(log.date)} - ${totalHours.toFixed(1)}h`
-                                        })}
-                                        className={`relative p-2 rounded-lg transition ${
-                                          hasConversation 
-                                            ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' 
-                                            : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'
-                                        }`}
-                                        title={hasConversation ? `${unresolvedCount} unresolved message${unresolvedCount !== 1 ? 's' : ''}` : "View conversation"}
-                                      >
-                                        <MessageSquare className="w-4 h-4" fill={hasConversation ? 'currentColor' : 'none'} />
-                                        {hasConversation && (
-                                          <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                                            {unresolvedCount}
-                                          </span>
-                                        )}
-                                      </button>
-                                    );
-                                  })()}
-                                </td>
-                              )}
-                            </tr>
-                          );
-                        })}
-
-                        {/* Expenses */}
-                        {sub.expenses.map((exp) => {
-                          const status = exp.status.toUpperCase();
-                          if (status === 'DRAFT' && !visibility.showDraftStatus) return null;
-                          if (status === 'REJECTED' && !visibility.showRejectedStatus) return null;
-
-                          const billing = exp.clientBillAmount ?? exp.amount;
-                          const margin = billing - exp.amount;
-                          const marginPct = billing > 0 ? ((margin / billing) * 100) : 0;
-
-                          return (
-                            <tr key={`exp-${exp.id}`} className="hover:bg-gray-50 bg-gray-50">
-                              <td className="px-4 py-3 text-gray-600">{formatDate(exp.date)}</td>
-                              <td className="px-4 py-3">
-                                <span className="inline-flex items-center space-x-1 text-green-700">
-                                  <DollarSign className="w-3 h-3" />
-                                  <span className="font-medium">Expense</span>
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 text-gray-900">{exp.category}</td>
-                              <td className="px-4 py-3 text-center text-gray-900">
-                                {exp.quantity ? exp.quantity.toFixed(1) : '1'}
-                                {exp.unitRate && (
-                                  <span className="text-xs text-gray-500"> @ {formatCurrency(exp.unitRate, currency)}</span>
-                                )}
-                              </td>
-                              {visibility.showCosts && (
-                                <td className="px-4 py-3 text-right font-semibold text-red-700">
-                                  {formatCurrency(exp.amount, currency)}
-                                </td>
-                              )}
-                              <td className="px-4 py-3 text-right font-semibold text-green-700">
-                                {formatCurrency(billing, currency)}
-                              </td>
-                              {visibility.showMargins && (
-                                <td className="px-4 py-3 text-right">
-                                  <div className="text-right">
-                                    <div className={`font-semibold ${margin >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
-                                      {formatCurrency(margin, currency)}
-                                    </div>
-                                    <div className={`text-xs ${margin >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                                      {marginPct.toFixed(1)}%
-                                    </div>
-                                  </div>
-                                </td>
-                              )}
-                              <td className="px-4 py-3 text-left align-top">
-                                {exp.description ? (
-                                  <p className="text-sm text-gray-700 whitespace-normal break-words">
-                                    {exp.description}
-                                  </p>
-                                ) : (
-                                  <span className="text-xs text-gray-400">-</span>
-                                )}
-                              </td>
-                              {visibility.allowClientNotes && (
-                                <td className="px-4 py-3 text-center align-top">
-                                  {(() => {
-                                    const unresolvedCount = unresolvedNotesMap.get(exp.id) || 0;
-                                    const hasConversation = unresolvedCount > 0;
-                                    return (
-                                      <button 
-                                        onClick={() => setSelectedLineItem({
-                                          itemId: exp.id,
-                                          itemType: 'expense',
-                                          itemDescription: `${exp.category} - ${formatDate(exp.date)} - ${formatCurrency(billing, currency)}`
-                                        })}
-                                        className={`relative p-2 rounded-lg transition ${
-                                          hasConversation 
-                                            ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' 
-                                            : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'
-                                        }`}
-                                        title={hasConversation ? `${unresolvedCount} unresolved message${unresolvedCount !== 1 ? 's' : ''}` : "View conversation"}
-                                      >
-                                        <MessageSquare className="w-4 h-4" fill={hasConversation ? 'currentColor' : 'none'} />
-                                        {hasConversation && (
-                                          <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                                            {unresolvedCount}
-                                          </span>
-                                        )}
-                                      </button>
-                                    );
-                                  })()}
-                                </td>
-                              )}
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                <SubcontractorCostBreakdown
+                  key={sub.id}
+                  subcontractor={sub}
+                  currency={currency}
+                  showLineItems={true}
+                  showCosts={visibility.showCosts}
+                  showMargins={visibility.showMargins}
+                  showDraftStatus={visibility.showDraftStatus}
+                  showRejectedStatus={visibility.showRejectedStatus}
+                  unresolvedNotesMap={visibility.allowClientNotes ? unresolvedNotesMap : undefined}
+                  onOpenConversation={
+                    visibility.allowClientNotes
+                      ? (itemId, itemType, description) => {
+                          setSelectedLineItem({
+                            itemId,
+                            itemType,
+                            itemDescription: description,
+                          });
+                        }
+                      : undefined
+                  }
+                />
               ))}
             </div>
           )}
@@ -850,3 +637,4 @@ export default function ClientProjectDetailPage() {
     </DashboardLayout>
   );
 }
+
