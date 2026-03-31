@@ -31,20 +31,13 @@ export default function SubcontractorCostBreakdown({
     if (!value) return value;
     return value.replace(/\(\d{2}:\d{2}-\d{2}:\d{2}\)/g, '').replace(/\s{2,}/g, ' ').trim();
   };
-  const extractTimeRange = (value?: string): string | null => {
-    if (!value) return null;
-    const match = value.match(/(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/);
-    if (!match) return null;
-    return `${match[1]}-${match[2]}`;
-  };
-  const getLogTimeRange = (log: any): string => {
-    if (log.startTime && log.endTime) {
+  const getLogTimeRange = (log: any, isGrouped: boolean): string => {
+    if (log.entryStartTime && log.entryEndTime) {
+      return `${log.entryStartTime}-${log.entryEndTime}`;
+    }
+    if (!isGrouped && log.startTime && log.endTime) {
       return `${log.startTime}-${log.endTime}`;
     }
-    const fromTimeframe = extractTimeRange(log.timeframeName);
-    if (fromTimeframe) return fromTimeframe;
-    const fromShift = extractTimeRange(log.shiftType);
-    if (fromShift) return fromShift;
     return '-';
   };
   const groupedTimeLogs = useMemo(() => {
@@ -518,7 +511,7 @@ export default function SubcontractorCostBreakdown({
                               {log.timeframeName ? ` - ${normalizeTimeframeName(log.timeframeName)}` : log.shiftType ? ` - ${log.shiftType}` : ''}
                             </td>
                             <td className="px-4 py-3 text-center text-gray-600 text-xs">
-                              {getLogTimeRange(log)}
+                              {getLogTimeRange(log, isGrouped)}
                             </td>
                             <td className="px-4 py-3 text-gray-600 text-xs">
                               {log.notes ? (

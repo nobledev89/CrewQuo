@@ -616,6 +616,10 @@ export interface TimeLog {
   splitGroupId?: string;   // Groups split segments from one logged entry
   splitIndex?: number;     // 1-based index within the split group
   splitTotal?: number;     // Total segments in the split group
+  entryStartTime?: string; // User-entered start time (HH:MM)
+  entryEndTime?: string;   // User-entered end time (HH:MM)
+  segmentStartTime?: string; // Segment start time when split (HH:MM)
+  segmentEndTime?: string;   // Segment end time when split (HH:MM)
 
   // Metadata
   currency: string;        // e.g., 'GBP'

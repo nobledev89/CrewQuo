@@ -24,6 +24,10 @@ export interface TimeLogData {
   startTime?: string;
   endTime?: string;
   notes?: string;
+  entryStartTime?: string;
+  entryEndTime?: string;
+  segmentStartTime?: string;
+  segmentEndTime?: string;
   createdAt?: any;
   unitSubCost?: number;
   unitClientBill?: number;

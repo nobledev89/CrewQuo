@@ -14,6 +14,8 @@ export const CreateTimeLogSchema = z.object({
   shiftType: ShiftTypeEnum,
   hoursRegular: z.number().min(0).max(24),
   hoursOT: z.number().min(0).max(24).default(0),
+  entryStartTime: z.string().optional(),
+  entryEndTime: z.string().optional(),
   notes: z.string().optional(),
   expenses: z.array(z.object({
     category: ExpenseCategoryEnum,
@@ -30,6 +32,8 @@ export const UpdateTimeLogSchema = z.object({
   shiftType: ShiftTypeEnum.optional(),
   hoursRegular: z.number().min(0).max(24).optional(),
   hoursOT: z.number().min(0).max(24).optional(),
+  entryStartTime: z.string().optional(),
+  entryEndTime: z.string().optional(),
   notes: z.string().optional(),
 });
 

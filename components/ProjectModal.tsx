@@ -271,32 +271,34 @@ export default function ProjectModal({
       const subRole = userData?.subcontractorRoles?.[activeCompanyId];
 
       // Build time log data with support for both new and old rate card systems
-      const timeLogData: any = {
-        companyId: activeCompanyId,
-        projectId: project.projectId,
-        clientId: project.clientId,
-        subcontractorId: subRole.subcontractorId,
-        createdByUserId: user.uid,
-        date: new Date(logForm.date),
-        roleName: selectedRateEntry.roleName,
-        hoursRegular: Number(logForm.hoursRegular),
-        hoursOT: Number(logForm.hoursOT),
-        quantity: Number(logForm.quantity),
-        subCost: calculatedLog.cost,
-        clientBill: calculatedLog.bill,
-        marginValue: calculatedLog.bill - calculatedLog.cost,
-        marginPct:
-          calculatedLog.bill > 0
-            ? ((calculatedLog.bill - calculatedLog.cost) / calculatedLog.bill) * 100
-            : 0,
-        unitSubCost: payRate,
-        unitClientBill: billRate,
-        currency: 'GBP',
-        payRateCardId: rateAssignment?.payRateCardId || null,
-        billRateCardId: rateAssignment?.billRateCardId || null,
-        status,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        const timeLogData: any = {
+          companyId: activeCompanyId,
+          projectId: project.projectId,
+          clientId: project.clientId,
+          subcontractorId: subRole.subcontractorId,
+          createdByUserId: user.uid,
+          date: new Date(logForm.date),
+          roleName: selectedRateEntry.roleName,
+          hoursRegular: Number(logForm.hoursRegular),
+          hoursOT: Number(logForm.hoursOT),
+          quantity: Number(logForm.quantity),
+          subCost: calculatedLog.cost,
+          clientBill: calculatedLog.bill,
+          marginValue: calculatedLog.bill - calculatedLog.cost,
+          marginPct:
+            calculatedLog.bill > 0
+              ? ((calculatedLog.bill - calculatedLog.cost) / calculatedLog.bill) * 100
+              : 0,
+          unitSubCost: payRate,
+          unitClientBill: billRate,
+          entryStartTime: logForm.startTime || null,
+          entryEndTime: logForm.endTime || null,
+          currency: 'GBP',
+          payRateCardId: rateAssignment?.payRateCardId || null,
+          billRateCardId: rateAssignment?.billRateCardId || null,
+          status,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
       };
 
       // Add timeframe fields (new system) or shiftType (old system)
