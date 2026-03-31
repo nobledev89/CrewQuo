@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useClientFilter } from '../lib/ClientFilterContext';
 import { useClientData } from '../lib/ClientDataContext';
 import TrialBanner from './TrialBanner';
+import TimeLogNoticeBanner from './TimeLogNoticeBanner';
 import { 
   Layers, 
   Home,
@@ -153,6 +154,14 @@ function DashboardContent({ children }: DashboardLayoutProps) {
   };
   
   const navItems = getNavItems();
+
+  const noticeRole = isActingAsSubcontractor()
+    ? 'subcontractor'
+    : userData?.role === 'CLIENT'
+      ? 'client'
+      : (userData?.role === 'ADMIN' || userData?.role === 'MANAGER')
+        ? 'admin_manager'
+        : null;
 
   if (loading) {
     return (
@@ -407,6 +416,7 @@ function DashboardContent({ children }: DashboardLayoutProps) {
             trialEndsAt={companyData.trialEndsAt}
           />
         )}
+        <TimeLogNoticeBanner role={noticeRole} />
         
         {/* Content */}
         <main className="min-h-screen">
