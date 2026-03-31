@@ -13,11 +13,11 @@ const STORAGE_PREFIX = 'cq_notice_march_time_logs_v1';
 
 const messages: Record<Exclude<BannerRole, null>, string> = {
   subcontractor:
-    'March time logs: We found a short-lived bug that affected some March entries. Your hours and pay totals are correct, but the exact time-in/time-out details for those entries may not be available. This is now fixed for all new logs.',
+    'March time logs: We found a short-lived bug that affected some March entries. Your hours and pay totals are correct, but the exact time-in/time-out details for those entries may not be available. This is now fixed for all new logs. We are strengthening our security and verification controls so this does not happen again - your data is safe.',
   admin_manager:
-    'March time logs: A brief logging bug affected some March entries. Total hours and costs are accurate, but the specific time-in/time-out details for those entries may be missing. The issue is resolved for new logs.',
+    'March time logs: A brief logging bug affected some March entries. Total hours and costs are accurate, but the specific time-in/time-out details for those entries may be missing. The issue is resolved for new logs. We are strengthening our security and verification controls so this does not happen again - your data is safe.',
   client:
-    'March time logs: A short-term logging issue affected some March entries. Hour totals and billing are correct, but the exact time-in/time-out details for those entries may not appear. This has been fixed going forward.',
+    'March time logs: A short-term logging issue affected some March entries. Hour totals and billing are correct, but the exact time-in/time-out details for those entries may not appear. This has been fixed going forward. We are strengthening our security and verification controls so this does not happen again - your data is safe.',
 };
 
 export default function TimeLogNoticeBanner({ role }: TimeLogNoticeBannerProps) {
@@ -75,3 +75,4 @@ export default function TimeLogNoticeBanner({ role }: TimeLogNoticeBannerProps) 
     </div>
   );
 }
+
