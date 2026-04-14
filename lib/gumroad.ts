@@ -60,6 +60,7 @@ export const GUMROAD_CONFIG = {
         '15 projects/month',
         '4 subcontractor accounts',
         'Full rate card customization',
+        'Holiday rate calendar',
         'Time tracking & logs',
         'Advanced financial reports',
         'Project profit margins',
@@ -94,6 +95,7 @@ export const GUMROAD_CONFIG = {
         '40 projects/month',
         '10 subcontractor accounts',
         'Full rate card customization',
+        'Holiday rate calendar',
         'Advanced time tracking',
         'Advanced financial reports',
         'Project profit analysis',
@@ -148,21 +150,20 @@ export function generateGumroadCheckoutUrl(
   email?: string
 ): string {
   const permalink = GUMROAD_CONFIG.productPermalink;
-  
-  // Get Gumroad username from environment variable
-  // Fallback to 'dunehunter' if not set
+
+  // Use custom domain if configured (e.g. subscribe.crewquo.com),
+  // otherwise fall back to the standard Gumroad username subdomain.
+  const customDomain = process.env.NEXT_PUBLIC_GUMROAD_CUSTOM_DOMAIN;
   const gumroadUsername = process.env.NEXT_PUBLIC_GUMROAD_USERNAME || 'dunehunter';
-  const baseUrl = `https://${gumroadUsername}.gumroad.com/l/${permalink}`;
-  
+  const baseUrl = customDomain
+    ? `https://${customDomain}/l/${permalink}`
+    : `https://${gumroadUsername}.gumroad.com/l/${permalink}`;
+
   const params = new URLSearchParams({
-    wanted: 'true',
-    // Pass user_id as query parameter - Gumroad will include it in webhook
+    // Pass user_id as a URL param — Gumroad echoes it back in the webhook's url_params field
     user_id: userId,
   });
 
-  // Add tier selection if Gumroad supports variant selection via URL
-  // Note: For memberships with tiers, the user selects the tier on Gumroad's page
-  
   if (email) {
     params.append('email', email);
   }

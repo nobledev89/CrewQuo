@@ -141,6 +141,48 @@ export class RateResolver {
   }
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// HOLIDAY RATE UTILITIES
+// ──────────────────────────────────────────────────────────────────────────────
+
+export interface HolidayInfo {
+  timeframeId: string;
+  holidayName: string;
+  /** Optional multiplier from the timeframe definition (e.g. 2.0 = double time). */
+  multiplier?: number;
+}
+
+/**
+ * Check whether an ISO date string (YYYY-MM-DD) falls on a holiday defined in
+ * the template's timeframeDefinitions.  Returns info about the first matching
+ * holiday timeframe, or null if the date is not a holiday.
+ */
+export function getHolidayInfo(
+  isoDate: string,
+  timeframeDefinitions: Array<{
+    id: string;
+    name: string;
+    type?: string;
+    holidayDates?: string[];
+    holidayMultiplier?: number;
+  }>
+): HolidayInfo | null {
+  for (const tf of timeframeDefinitions) {
+    if (
+      tf.type === 'holiday' &&
+      Array.isArray(tf.holidayDates) &&
+      tf.holidayDates.includes(isoDate)
+    ) {
+      return {
+        timeframeId: tf.id,
+        holidayName: tf.name,
+        multiplier: tf.holidayMultiplier,
+      };
+    }
+  }
+  return null;
+}
+
 /**
  * Price Calculator: computes costs and margins from resolved rates
  */

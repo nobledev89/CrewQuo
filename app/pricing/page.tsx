@@ -35,9 +35,11 @@ export default function PricingPage() {
 
     // Generate Gumroad checkout URL with user ID
     const checkoutUrl = generateGumroadCheckoutUrl(tierName, userId, userEmail || undefined);
-    
-    // Redirect to Gumroad checkout
-    window.location.href = checkoutUrl;
+
+    // Open Gumroad checkout in a new tab so the user can complete payment,
+    // then navigate them to the success page which polls for activation.
+    window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
+    router.push('/subscription/success');
   };
 
   if (loading) {
@@ -237,6 +239,12 @@ export default function PricingPage() {
                   <td className="text-center py-4 px-4 text-gray-600">Standard</td>
                   <td className="text-center py-4 px-4 text-gray-600 bg-blue-50">Full</td>
                   <td className="text-center py-4 px-4 text-gray-600">Full</td>
+                </tr>
+                <tr>
+                  <td className="py-4 px-4 text-gray-700">Holiday Rate Calendar</td>
+                  <td className="text-center py-4 px-4 text-gray-400">-</td>
+                  <td className="text-center py-4 px-4 bg-blue-50"><Check className="w-5 h-5 text-green-500 mx-auto" /></td>
+                  <td className="text-center py-4 px-4"><Check className="w-5 h-5 text-green-500 mx-auto" /></td>
                 </tr>
                 <tr>
                   <td className="py-4 px-4 text-gray-700">Invoice/Report Export</td>

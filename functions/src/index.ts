@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import * as functions from 'firebase-functions';
 import {FieldValue, Timestamp} from 'firebase-admin/firestore';
 import {getUserClaims, refreshUserClaims, buildUserClaims, setCustomUserClaims} from './auth';
-import {PriceCalculator, ShiftType} from './rates';
+import {PriceCalculator, ShiftType, getHolidayInfo} from './rates';
 export {fixCompanyMismatch} from './fixCompanyMismatch';
 import {
   CreateTimeLogSchema,
@@ -329,18 +329,77 @@ export const createTimeLog = functions.https.onCall(async (data, context) => {
   console.log(`[createTimeLog] Full pay card:`, JSON.stringify(payCardData, null, 2));
   console.log(`[createTimeLog] Full bill card:`, JSON.stringify(billCardData, null, 2));
 
+  // ── Holiday Rate Detection ───────────────────────────────────────────────
+  // Start from the extracted base rates and adjust if the log date falls on
+  // a public holiday defined in the rate card template.
+  let effectivePayBase = payBaseRate;
+  let effectivePayOT = payOTRate;
+  let effectiveBillBase = billBaseRate;
+  let effectiveBillOT = billOTRate;
+
+  let isHolidayRate = false;
+  let holidayTimeframeId: string | undefined;
+  let holidayName: string | undefined;
+
+  const templateId = payCardData.templateId as string | undefined;
+  if (templateId) {
+    const templateDoc = await db.collection('rateCardTemplates').doc(templateId).get();
+    if (templateDoc.exists) {
+      const templateData = templateDoc.data()!;
+      const timeframeDefinitions: any[] = templateData.timeframeDefinitions || [];
+      // Normalise to YYYY-MM-DD regardless of whether the input carries a time component
+      const isoDateOnly = input.date.slice(0, 10);
+      const holidayInfo = getHolidayInfo(isoDateOnly, timeframeDefinitions);
+
+      if (holidayInfo) {
+        isHolidayRate = true;
+        holidayTimeframeId = holidayInfo.timeframeId;
+        holidayName = holidayInfo.holidayName;
+
+        console.log(`[createTimeLog] Holiday detected: ${holidayName} on ${input.date}`);
+
+        // Prefer a dedicated RateEntry for this holiday timeframe in each card.
+        // Fall back to applying the multiplier on the standard base rate.
+        const payHolidayEntry = (payCardData.rates || []).find(
+          (r: any) => r.timeframeId === holidayInfo.timeframeId
+        );
+        const billHolidayEntry = (billCardData.rates || []).find(
+          (r: any) => r.timeframeId === holidayInfo.timeframeId
+        );
+
+        if (payHolidayEntry) {
+          effectivePayBase = payHolidayEntry.subcontractorRate ?? payHolidayEntry.hourlyRate ?? effectivePayBase;
+          // Prefer an explicit OT rate on the entry; fall back to base (no extra OT premium on holidays)
+          effectivePayOT = payHolidayEntry.otRate ?? payHolidayEntry.otHourlyRate ?? effectivePayBase;
+        } else if (holidayInfo.multiplier) {
+          effectivePayBase *= holidayInfo.multiplier;
+          effectivePayOT *= holidayInfo.multiplier;
+        }
+
+        if (billHolidayEntry) {
+          effectiveBillBase = billHolidayEntry.clientRate ?? billHolidayEntry.hourlyRate ?? effectiveBillBase;
+          effectiveBillOT = billHolidayEntry.otRate ?? billHolidayEntry.otHourlyRate ?? effectiveBillBase;
+        } else if (holidayInfo.multiplier) {
+          effectiveBillBase *= holidayInfo.multiplier;
+          effectiveBillOT *= holidayInfo.multiplier;
+        }
+      }
+    }
+  }
+  // ────────────────────────────────────────────────────────────────────────
+
   const subRate: any = {
     rateLabel: payCardData.rateLabel || 'Custom',
-    baseRate: payBaseRate,
-    otRate: payOTRate,
+    baseRate: effectivePayBase,
+    otRate: effectivePayOT,
     currency: payCardData.currency || 'GBP',
     rateCardId: payRateCardId,
   };
 
   const clientRate: any = {
     rateLabel: billCardData.rateLabel || 'Custom',
-    baseRate: billBaseRate,
-    otRate: billOTRate,
+    baseRate: effectiveBillBase,
+    otRate: effectiveBillOT,
     currency: billCardData.currency || 'GBP',
     rateCardId: billRateCardId || payRateCardId,
   };
@@ -355,7 +414,7 @@ export const createTimeLog = functions.https.onCall(async (data, context) => {
   );
 
   // Create time log
-  const timeLogData = {
+  const timeLogData: Record<string, any> = {
     companyId: claims.companyId,
     projectId: input.projectId,
     subcontractorId: input.subcontractorId,
@@ -376,6 +435,12 @@ export const createTimeLog = functions.https.onCall(async (data, context) => {
     createdByUserId: context.auth!.uid,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
+    // Holiday fields — only written when relevant
+    ...(isHolidayRate ? {
+      isHolidayRate: true,
+      holidayTimeframeId,
+      holidayName,
+    } : {}),
   };
 
   const timeLogRef = await db.collection('timeLogs').add(timeLogData);
@@ -581,16 +646,27 @@ export const gumroadWebhook = functions.https.onRequest(async (req, res) => {
     console.log('Received Gumroad webhook:', data);
 
     // Extract user_id from multiple possible sources
-    // 1. Custom fields (if configured in Gumroad)
-    // 2. Direct field (from query parameter)
-    // 3. Referrer field (fallback)
-    const userId = data.custom_fields?.user_id || data.user_id || data.referrer;
+    // 1. url_params field (Gumroad includes URL query params here as a JSON object/string)
+    // 2. Custom fields (if a custom field named user_id is added in Gumroad product settings)
+    // 3. Direct top-level field (some Gumroad versions pass URL params at top level)
+    // 4. Referrer field (fallback)
+    let urlParams: Record<string, string> = {};
+    if (data.url_params) {
+      try {
+        urlParams = typeof data.url_params === 'string'
+          ? JSON.parse(data.url_params)
+          : data.url_params;
+      } catch {
+        console.warn('Failed to parse url_params:', data.url_params);
+      }
+    }
+    const userId = urlParams.user_id || data.custom_fields?.user_id || data.user_id;
 
     if (!userId) {
-      console.error('No user_id in webhook data', { 
+      console.error('No user_id in webhook data', {
+        url_params: data.url_params,
         custom_fields: data.custom_fields,
         user_id: data.user_id,
-        referrer: data.referrer 
       });
       res.status(400).json({ error: 'No user_id provided' });
       return;
@@ -614,10 +690,15 @@ export const gumroadWebhook = functions.https.onRequest(async (req, res) => {
     const ended = data.ended === 'true' || data.ended === true;
     const isRefund = data.refunded === 'true' || data.refunded === true;
 
-    // Verify this is from your Gumroad account (optional but recommended)
+    // Verify this is from your Gumroad account
     const expectedSellerId = functions.config().gumroad?.seller_id || process.env.GUMROAD_SELLER_ID;
-    if (expectedSellerId && sellerId !== expectedSellerId) {
-      console.error('Invalid seller ID');
+    if (!expectedSellerId) {
+      // This is a security gap — anyone who knows the webhook URL can trigger fake purchases.
+      // Set GUMROAD_SELLER_ID via: firebase functions:config:set gumroad.seller_id="YOUR_ID"
+      // Find your seller ID at: https://app.gumroad.com/settings/advanced
+      console.error('SECURITY WARNING: GUMROAD_SELLER_ID is not configured. Webhook sender is unverified. Set it immediately via firebase functions:config:set gumroad.seller_id="YOUR_SELLER_ID"');
+    } else if (sellerId !== expectedSellerId) {
+      console.error('Webhook rejected: seller_id mismatch', { received: sellerId });
       res.status(401).json({ error: 'Invalid seller ID' });
       return;
     }
@@ -644,39 +725,35 @@ export const gumroadWebhook = functions.https.onRequest(async (req, res) => {
 
 // Gumroad webhook event handlers
 async function handleGumroadPurchase(data: any, userId: string) {
-  const companyRef = db.collection('companies').doc(userId);
-  
-  await companyRef.update({
+  const subscriptionPlan = determineSubscriptionPlan(data);
+
+  // Use set+merge so the handler succeeds even if the company doc doesn't exist yet
+  // (e.g. webhook arrives before signup completes)
+  await db.collection('companies').doc(userId).set({
     subscriptionStatus: 'active',
+    subscriptionPlan,
     gumroadSaleId: data.sale_id,
     gumroadPurchaserEmail: data.email,
     gumroadProductPermalink: data.product_permalink,
     lastPaymentAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
-  });
+  }, { merge: true });
 
-  // Determine subscription plan from tier
-  const subscriptionPlan = determineSubscriptionPlan(data);
-  
-  // Also update user document
-  await db.collection('users').doc(userId).update({
+  await db.collection('users').doc(userId).set({
     subscriptionStatus: 'active',
-    subscriptionPlan: subscriptionPlan,
+    subscriptionPlan,
     updatedAt: FieldValue.serverTimestamp(),
-  });
+  }, { merge: true });
 
   console.log(`Gumroad purchase completed for user ${userId}, plan: ${subscriptionPlan}`);
 }
 
 async function handleGumroadSubscription(data: any, userId: string) {
-  const companyRef = db.collection('companies').doc(userId);
-  
-  // Determine subscription plan from tier
   const subscriptionPlan = determineSubscriptionPlan(data);
-  
-  await companyRef.update({
+
+  await db.collection('companies').doc(userId).set({
     subscriptionStatus: 'active',
-    subscriptionPlan: subscriptionPlan,
+    subscriptionPlan,
     gumroadSubscriptionId: data.subscription_id,
     gumroadSaleId: data.sale_id,
     gumroadPurchaserEmail: data.email,
@@ -684,82 +761,77 @@ async function handleGumroadSubscription(data: any, userId: string) {
     gumroadTierName: data.variant_name || data.tier_name || '',
     lastPaymentAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
-  });
+  }, { merge: true });
 
-  // Also update user document
-  await db.collection('users').doc(userId).update({
+  await db.collection('users').doc(userId).set({
     subscriptionStatus: 'active',
-    subscriptionPlan: subscriptionPlan,
+    subscriptionPlan,
     updatedAt: FieldValue.serverTimestamp(),
-  });
+  }, { merge: true });
 
   console.log(`Gumroad subscription active for user ${userId}`);
 }
 
 async function handleGumroadCancellation(data: any, userId: string) {
-  const companyRef = db.collection('companies').doc(userId);
-  
-  await companyRef.update({
+  await db.collection('companies').doc(userId).set({
     subscriptionStatus: 'cancelled',
     subscriptionCancelledAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
-  });
+  }, { merge: true });
 
-  // Also update user document
-  await db.collection('users').doc(userId).update({
+  await db.collection('users').doc(userId).set({
     subscriptionStatus: 'cancelled',
     updatedAt: FieldValue.serverTimestamp(),
-  });
+  }, { merge: true });
 
   console.log(`Gumroad subscription cancelled for user ${userId}`);
 }
 
 async function handleGumroadSubscriptionEnded(data: any, userId: string) {
-  const companyRef = db.collection('companies').doc(userId);
-  
-  await companyRef.update({
+  await db.collection('companies').doc(userId).set({
     subscriptionStatus: 'expired',
     subscriptionExpiredAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
-  });
+  }, { merge: true });
 
-  // Also update user document
-  await db.collection('users').doc(userId).update({
+  await db.collection('users').doc(userId).set({
     subscriptionStatus: 'expired',
     updatedAt: FieldValue.serverTimestamp(),
-  });
+  }, { merge: true });
 
   console.log(`Gumroad subscription ended for user ${userId}`);
 }
 
 async function handleGumroadRefund(data: any, userId: string) {
-  const companyRef = db.collection('companies').doc(userId);
-  
-  await companyRef.update({
+  await db.collection('companies').doc(userId).set({
     subscriptionStatus: 'refunded',
     refundedAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
-  });
+  }, { merge: true });
 
-  // Also update user document
-  await db.collection('users').doc(userId).update({
+  await db.collection('users').doc(userId).set({
     subscriptionStatus: 'refunded',
     updatedAt: FieldValue.serverTimestamp(),
-  });
+  }, { merge: true });
 
   console.log(`Gumroad refund processed for user ${userId}`);
 }
 
 // Helper function to determine subscription plan from Gumroad tier/variant name
 function determineSubscriptionPlan(data: any): string {
-  // Gumroad sends tier/variant information in different fields depending on product type
-  const variantName = data.variant_name || data.variants || '';
+  // Gumroad sends variants as an object e.g. { Tier: 'Business Starter' } — flatten to a string
+  const variantsRaw = data.variants;
+  const variantString = variantsRaw && typeof variantsRaw === 'object'
+    ? Object.values(variantsRaw).join(' ')
+    : (variantsRaw || '');
+
+  const variantName = data.variant_name || variantString;
   const tierName = data.tier_name || data.offer_code || '';
   const productName = data.product_name || '';
-  
+
   // Combine all possible fields to find the tier
   const searchString = `${variantName} ${tierName} ${productName}`.toLowerCase();
-  
+
   console.log('Determining plan from:', { variantName, tierName, productName, searchString });
   
   // Match against tier names

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
-import { X, Plus, Trash2, DollarSign, Tag, Receipt, ChevronDown, ChevronUp, Clock } from 'lucide-react';
+import { X, Plus, Trash2, DollarSign, Tag, Receipt, ChevronDown, ChevronUp, Clock, CalendarDays } from 'lucide-react';
 import { RateCard, RateEntry, ResourceCategory, RateCardTemplate, ExpenseEntry, TimeframeDefinition } from '@/lib/types';
 import { calculateMarginValue, calculateMarginPercentage } from '@/lib/currencyUtils';
 
@@ -633,101 +633,144 @@ function MultiTimeframeModal({
           </div>
 
           {/* Timeframe Rates */}
-          <div>
-            <h4 className="text-sm font-semibold text-gray-900 mb-3">Rates by Timeframe</h4>
-            <p className="text-xs text-gray-600 mb-4">
-              Set rates for each timeframe. Uncheck timeframes that don't apply to this role.
-            </p>
-            
-            <div className="space-y-3">
-              {timeframeDefinitions.map(tf => {
-                const rates = timeframeRates[tf.id];
-                const daysDisplay = tf.applicableDays.length > 0
-                  ? tf.applicableDays.map(d => d.slice(0, 3)).join(', ')
-                  : 'All days';
-                const marginValue = rates ? calculateMarginValue(rates.clientRate, rates.subcontractorRate) : 0;
-                const marginPercentage = rates ? calculateMarginPercentage(rates.clientRate, rates.subcontractorRate) : 0;
+          {(() => {
+            const standardTfs = timeframeDefinitions.filter(tf => tf.type !== 'holiday');
+            const holidayTfs = timeframeDefinitions.filter(tf => tf.type === 'holiday');
 
-                return (
-                  <div
-                    key={tf.id}
-                    className={`border-2 rounded-lg p-4 transition ${
-                      rates?.enabled 
-                        ? 'border-green-300 bg-green-50' 
-                        : 'border-gray-200 bg-gray-50 opacity-60'
-                    }`}
-                  >
-                    <div className="flex items-start gap-4">
-                      <div className="flex items-center pt-2">
-                        <input
-                          type="checkbox"
-                          checked={rates?.enabled || false}
-                          onChange={() => toggleTimeframe(tf.id)}
-                          className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-2">
-                          <div>
+            const renderTf = (tf: TimeframeDefinition, isHoliday: boolean) => {
+              const rates = timeframeRates[tf.id];
+              const daysDisplay = (tf.applicableDays || []).length > 0
+                ? tf.applicableDays.map((d: string) => d.slice(0, 3)).join(', ')
+                : isHoliday
+                  ? `${(tf.holidayDates || []).length} date${(tf.holidayDates || []).length !== 1 ? 's' : ''}`
+                  : 'All days';
+              const marginValue = rates ? calculateMarginValue(rates.clientRate, rates.subcontractorRate) : 0;
+              const marginPercentage = rates ? calculateMarginPercentage(rates.clientRate, rates.subcontractorRate) : 0;
+              const enabledColor = isHoliday ? 'border-orange-300 bg-orange-50' : 'border-green-300 bg-green-50';
+              const ringColor = isHoliday ? 'focus:ring-orange-500' : 'focus:ring-green-500';
+              const checkColor = isHoliday ? 'text-orange-600 focus:ring-orange-500' : 'text-green-600 focus:ring-green-500';
+
+              return (
+                <div
+                  key={tf.id}
+                  className={`border-2 rounded-lg p-4 transition ${rates?.enabled ? enabledColor : 'border-gray-200 bg-gray-50 opacity-60'}`}
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="flex items-center pt-2">
+                      <input
+                        type="checkbox"
+                        checked={rates?.enabled || false}
+                        onChange={() => toggleTimeframe(tf.id)}
+                        className={`w-5 h-5 border-gray-300 rounded ${checkColor}`}
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <div className="flex items-center gap-2">
                             <h5 className="font-semibold text-gray-900">{tf.name}</h5>
-                            <p className="text-xs text-gray-600">
-                              {tf.startTime} - {tf.endTime} ({daysDisplay})
-                            </p>
-                            {tf.description && (
-                              <p className="text-xs text-gray-500 mt-1">{tf.description}</p>
+                            {isHoliday && (
+                              <span className="bg-orange-200 text-orange-800 px-2 py-0.5 rounded text-xs font-semibold">
+                                Holiday
+                              </span>
                             )}
                           </div>
-                          {rates?.enabled && marginValue > 0 && (
-                            <div className="text-right">
-                              <div className="text-xs text-gray-600">Margin</div>
-                              <div className="font-bold text-green-700">
-                                £{marginValue.toFixed(2)} ({marginPercentage.toFixed(1)}%)
-                              </div>
-                            </div>
+                          <p className="text-xs text-gray-600">
+                            {isHoliday ? daysDisplay : `${tf.startTime} - ${tf.endTime} (${daysDisplay})`}
+                          </p>
+                          {isHoliday && tf.holidayMultiplier && (
+                            <p className="text-xs text-orange-700 mt-0.5">
+                              Fallback ×{tf.holidayMultiplier} multiplier if no rate set here
+                            </p>
+                          )}
+                          {tf.description && (
+                            <p className="text-xs text-gray-500 mt-1">{tf.description}</p>
                           )}
                         </div>
-
-                        {rates?.enabled && (
-                          <div className="grid grid-cols-2 gap-3 mt-3">
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">
-                                Subcontractor Rate (£/hr) *
-                              </label>
-                              <input
-                                type="number"
-                                step="0.01"
-                                required={rates.enabled}
-                                min="0"
-                                value={rates.subcontractorRate}
-                                onChange={(e) => updateTimeframeRate(tf.id, 'subcontractorRate', parseFloat(e.target.value) || 0)}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 bg-white"
-                                placeholder="0.00"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">
-                                Client Rate (£/hr) *
-                              </label>
-                              <input
-                                type="number"
-                                step="0.01"
-                                required={rates.enabled}
-                                min="0"
-                                value={rates.clientRate}
-                                onChange={(e) => updateTimeframeRate(tf.id, 'clientRate', parseFloat(e.target.value) || 0)}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 bg-white"
-                                placeholder="0.00"
-                              />
+                        {rates?.enabled && marginValue > 0 && (
+                          <div className="text-right">
+                            <div className="text-xs text-gray-600">Margin</div>
+                            <div className="font-bold text-green-700">
+                              £{marginValue.toFixed(2)} ({marginPercentage.toFixed(1)}%)
                             </div>
                           </div>
                         )}
                       </div>
+
+                      {rates?.enabled && (
+                        <div className="grid grid-cols-2 gap-3 mt-3">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Subcontractor Rate (£/hr) *
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              required={rates.enabled}
+                              min="0"
+                              value={rates.subcontractorRate}
+                              onChange={(e) => updateTimeframeRate(tf.id, 'subcontractorRate', parseFloat(e.target.value) || 0)}
+                              className={`w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 ${ringColor} bg-white`}
+                              placeholder="0.00"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Client Rate (£/hr) *
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              required={rates.enabled}
+                              min="0"
+                              value={rates.clientRate}
+                              onChange={(e) => updateTimeframeRate(tf.id, 'clientRate', parseFloat(e.target.value) || 0)}
+                              className={`w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 ${ringColor} bg-white`}
+                              placeholder="0.00"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          </div>
+                </div>
+              );
+            };
+
+            return (
+              <div className="space-y-4">
+                {/* Standard Timeframes */}
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-purple-600" />
+                    Standard Timeframes
+                  </h4>
+                  <p className="text-xs text-gray-600 mb-3">
+                    Set rates for each timeframe. Uncheck timeframes that don't apply to this role.
+                  </p>
+                  <div className="space-y-3">
+                    {standardTfs.map(tf => renderTf(tf, false))}
+                  </div>
+                </div>
+
+                {/* Holiday Timeframes */}
+                {holidayTfs.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                      <CalendarDays className="w-4 h-4 text-orange-600" />
+                      Holiday Rates
+                    </h4>
+                    <p className="text-xs text-gray-600 mb-3">
+                      Set explicit holiday rates per role. If left unchecked, the template fallback multiplier is used instead.
+                    </p>
+                    <div className="space-y-3">
+                      {holidayTfs.map(tf => renderTf(tf, true))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Footer */}
           <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200">
@@ -837,16 +880,32 @@ function GroupedRateEntries({
                 {group.rates.map((rate, groupIndex) => {
                   const actualIndex = group.indices[groupIndex];
                   const timeframe = timeframeDefinitions.find(tf => tf.id === rate.timeframeId);
+                  const isHolidayTf = timeframe?.type === 'holiday';
                   const timeframeDisplay = timeframe
-                    ? `${timeframe.name} (${timeframe.startTime}-${timeframe.endTime})`
+                    ? isHolidayTf
+                      ? timeframe.name
+                      : `${timeframe.name} (${timeframe.startTime}-${timeframe.endTime})`
                     : rate.timeframeName || 'Unknown';
 
                   return (
-                    <div key={actualIndex} className="p-4 border-b border-gray-200 last:border-b-0">
+                    <div key={actualIndex} className={`p-4 border-b border-gray-200 last:border-b-0 ${isHolidayTf ? 'bg-orange-50' : ''}`}>
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
-                          <Clock className="w-4 h-4 text-purple-600" />
+                          {isHolidayTf
+                            ? <CalendarDays className="w-4 h-4 text-orange-600" />
+                            : <Clock className="w-4 h-4 text-purple-600" />
+                          }
                           <h5 className="font-semibold text-gray-900">{timeframeDisplay}</h5>
+                          {isHolidayTf && (
+                            <span className="bg-orange-200 text-orange-800 px-2 py-0.5 rounded text-xs font-semibold">
+                              Holiday Rate
+                            </span>
+                          )}
+                          {timeframe?.holidayMultiplier && (
+                            <span className="bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded text-xs font-medium">
+                              ×{timeframe.holidayMultiplier} fallback
+                            </span>
+                          )}
                           {rate.marginValue !== undefined && rate.marginValue > 0 && (
                             <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-medium">
                               Margin: £{rate.marginValue.toFixed(2)} ({rate.marginPercentage?.toFixed(1)}%)

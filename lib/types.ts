@@ -8,7 +8,7 @@ export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'SUBCONTRACTOR' | '
 
 export type SubscriptionPlan = 'free' | 'starter' | 'professional' | 'enterprise';
 
-export type SubscriptionStatus = 'active' | 'trial' | 'inactive';
+export type SubscriptionStatus = 'active' | 'trial' | 'inactive' | 'cancelled' | 'expired' | 'refunded';
 
 export type SubcontractorType = 'invited' | 'manual';
 
@@ -371,9 +371,21 @@ export interface TimeframeDefinition {
   id: string;
   name: string;                    // e.g., "Day Rate Mon-Fri", "Night Rate", "Weekend"
   description?: string;
+  type?: 'standard' | 'holiday';  // 'holiday' timeframes match specific calendar dates
   startTime: string;               // e.g., "08:00" (24-hour format)
   endTime: string;                 // e.g., "17:00" (24-hour format)
-  applicableDays: DayOfWeek[];    // e.g., ['monday', 'tuesday', 'wednesday']
+  applicableDays: DayOfWeek[];    // e.g., ['monday', 'tuesday', 'wednesday'] — ignored when type='holiday'
+  // Holiday-specific fields (only used when type='holiday')
+  holidayDates?: string[];         // ISO date strings e.g. ["2025-12-25", "2026-01-01"]
+  holidayMultiplier?: number;      // Optional fallback multiplier e.g. 2.0 — applied to standard rate when no dedicated holiday RateEntry exists
+}
+
+// Preset bank holiday calendars for quick population
+export interface HolidayPreset {
+  name: string;                    // e.g. "England & Wales 2025"
+  region: string;                  // e.g. "England & Wales"
+  year: number;
+  dates: Array<{ date: string; name: string }>; // ISO date + holiday name
 }
 
 export type ExpenseRateType = 'CAPPED' | 'FIXED';
@@ -606,6 +618,11 @@ export interface TimeLog {
   // Unit rates (NEW) - for reference/calculation
   unitSubCost?: number;    // Per person hourly cost (before multiplying by quantity & hours)
   unitClientBill?: number; // Per person hourly billing (before multiplying by quantity & hours)
+
+  // Holiday rate fields (NEW)
+  isHolidayRate?: boolean;       // True when this log was calculated using a holiday rate
+  holidayTimeframeId?: string;   // ID of the holiday TimeframeDefinition that matched
+  holidayName?: string;          // Display name e.g. "Christmas Day"
 
   // Rate card references - tracks which cards were used for calculation
   payRateCardId: string;   // Card used to calculate subCost (what we pay subcontractor)

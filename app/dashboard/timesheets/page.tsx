@@ -17,7 +17,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import DashboardLayout from '@/components/DashboardLayout';
-import { 
+import {
   FileText,
   Check,
   X,
@@ -25,6 +25,7 @@ import {
   ChevronDown,
   MessageSquare,
   Download,
+  CalendarDays,
 } from 'lucide-react';
 import type { ProjectSubmission, TimeLog, Expense, LineItemRejectionNote } from '@/lib/types';
 import { logTimesheetApproval, logTimesheetRejection } from '@/lib/auditLogger';
@@ -793,7 +794,17 @@ export default function TimesheetsPage() {
                         return (
                           <tr key={`log_${log.id}`} className="hover:bg-gray-50">
                             <td className="px-4 py-4 text-sm text-gray-600">{dateStr}</td>
-                            <td className="px-4 py-4 text-sm font-medium text-gray-900">Time Log</td>
+                            <td className="px-4 py-4 text-sm font-medium text-gray-900">
+                              <div className="flex items-center gap-2">
+                                <span>Time Log</span>
+                                {log.isHolidayRate && (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-800 border border-orange-200" title={log.holidayName || 'Holiday rate applied'}>
+                                    <CalendarDays className="w-3 h-3" />
+                                    {log.holidayName ? log.holidayName : 'Holiday'}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
                             <td className="px-4 py-4 text-sm text-gray-900">
                               <div>{log.roleName}</div>
                               {(log.timeframeName || log.shiftType) && (

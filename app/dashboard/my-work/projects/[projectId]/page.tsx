@@ -511,30 +511,46 @@ export default function ProjectDetailPage() {
       const dayOfWeek = dayNames[dateObj.getDay()];
       
       // Find the rate entry that applies to this start time
+      const dateKey = logForm.date ? logForm.date.slice(0, 10) : '';
       for (const rateEntry of selectedRoleEntries) {
         if (rateEntry.timeframeId && rateCardTemplate.timeframeDefinitions) {
           const timeframeDef = rateCardTemplate.timeframeDefinitions.find(
             (tf: any) => tf.id === rateEntry.timeframeId
           );
-          
+
           if (timeframeDef) {
+            // Holiday timeframes only apply on their specific dates; skip them otherwise
+            // so they don't override standard rates via their catch-all 00:00–23:59 range.
+            if (timeframeDef.type === 'holiday') {
+              if (!dateKey || !timeframeDef.holidayDates?.includes(dateKey)) continue;
+              // It IS a holiday — use the holiday rate directly (covers full day)
+              const pay = rateEntry.subcontractorRate ?? rateEntry.hourlyRate ?? rateEntry.baseRate ?? 0;
+              const matchingBill = billCard?.rates?.find(
+                (r: any) => r.roleName === rateEntry.roleName && r.timeframeId === rateEntry.timeframeId
+              );
+              const bill = matchingBill
+                ? (matchingBill.clientRate ?? matchingBill.hourlyRate ?? matchingBill.baseRate ?? pay)
+                : (rateEntry.clientRate ?? pay);
+              return { pay, bill };
+            }
+
             const tfStartMinutes = parseInt(timeframeDef.startTime.split(':')[0]) * 60 + parseInt(timeframeDef.startTime.split(':')[1]);
             let tfEndMinutes = parseInt(timeframeDef.endTime.split(':')[0]) * 60 + parseInt(timeframeDef.endTime.split(':')[1]);
-            
+
             // Handle overnight ranges
             if (tfEndMinutes <= tfStartMinutes) {
               tfEndMinutes += 24 * 60;
             }
-            
+
             // Check if start time falls within this timeframe
             const isInTimeRange = startMinutes >= tfStartMinutes && startMinutes < tfEndMinutes;
-            
+
             // Check day restrictions
             let dayMatches = true;
             if (timeframeDef.applicableDays && timeframeDef.applicableDays.length > 0) {
               dayMatches = timeframeDef.applicableDays.includes(dayOfWeek as any);
             }
-            
+
             if (isInTimeRange && dayMatches) {
               const pay = rateEntry.subcontractorRate ?? rateEntry.hourlyRate ?? rateEntry.baseRate ?? 0;
               const matchingBill = billCard?.rates?.find(
@@ -570,22 +586,41 @@ export default function ProjectDetailPage() {
       const timeBasedRates: any[] = [];
       
       // Get all rate entries for the selected role
+      const logDateKey = logForm.date ? logForm.date.slice(0, 10) : '';
       selectedRoleEntries.forEach((rateEntry: any) => {
         if (rateEntry.timeframeId && rateCardTemplate?.timeframeDefinitions) {
           // Find the matching timeframe definition from the template
           const timeframeDef = rateCardTemplate.timeframeDefinitions.find(
             (tf: any) => tf.id === rateEntry.timeframeId
           );
-          
+
           if (timeframeDef) {
+            // Holiday timeframes only apply on their specific dates.
+            // Excluding them on non-holiday days prevents their 00:00–23:59 range
+            // from being used in the time-based cost calculation incorrectly.
+            if (timeframeDef.type === 'holiday') {
+              if (!logDateKey || !timeframeDef.holidayDates?.includes(logDateKey)) return;
+              // On a holiday, represent the holiday as a full-day rate
+              timeBasedRates.push({
+                id: rateEntry.timeframeId,
+                startTime: '00:00',
+                endTime: '23:59',
+                applicableDays: [],
+                subcontractorRate: rateEntry.subcontractorRate || 0,
+                clientRate: rateEntry.clientRate || 0,
+                description: timeframeDef.name || 'Holiday',
+              });
+              return;
+            }
+
             timeBasedRates.push({
               id: rateEntry.timeframeId,
               startTime: timeframeDef.startTime,
               endTime: timeframeDef.endTime,
-              applicableDays: timeframeDef.applicableDays || [], // Include day restrictions
+              applicableDays: timeframeDef.applicableDays || [],
               subcontractorRate: rateEntry.subcontractorRate || 0,
               clientRate: rateEntry.clientRate || 0,
-              description: rateEntry.timeframeName || timeframeDef.name || 'Standard'
+              description: rateEntry.timeframeName || timeframeDef.name || 'Standard',
             });
           }
         }
@@ -653,6 +688,18 @@ export default function ProjectDetailPage() {
         ? Math.min(expenseForm.manualAmount, selectedExpense.rate * expenseForm.quantity) // Capped: use manual input but cap it
         : selectedExpense.rate * expenseForm.quantity) // Fixed: quantity × rate
     : 0;
+
+  // Returns the first matching holiday timeframe for the given ISO date, or null.
+  const getHolidayForDate = (dateStr: string) => {
+    if (!rateCardTemplate?.timeframeDefinitions || !dateStr) return null;
+    const key = dateStr.slice(0, 10);
+    for (const tf of rateCardTemplate.timeframeDefinitions) {
+      if (tf.type === 'holiday' && (tf.holidayDates as string[] | undefined)?.includes(key)) {
+        return { id: tf.id as string, name: tf.name as string };
+      }
+    }
+    return null;
+  };
 
   const saveLog = async (status: 'DRAFT' | 'SUBMITTED') => {
     if (!selectedRateEntry || !logForm.date) {
@@ -726,6 +773,14 @@ export default function ProjectDetailPage() {
           const description = segment.timeRange.split('(')[1]?.split(')')[0] || 'Standard';
           timeLogData.shiftType = description;
 
+          // Attach holiday fields when applicable
+          const holidaySegment = getHolidayForDate(logForm.date);
+          if (holidaySegment) {
+            timeLogData.isHolidayRate = true;
+            timeLogData.holidayTimeframeId = holidaySegment.id;
+            timeLogData.holidayName = holidaySegment.name;
+          }
+
           const newLogRef = await addDoc(collection(db, 'timeLogs'), timeLogData);
           
           // Log audit event for this segment
@@ -791,6 +846,14 @@ export default function ProjectDetailPage() {
           timeLogData.timeframeName = selectedRateEntry.timeframeName;
         } else if (selectedRateEntry.shiftType) {
           timeLogData.shiftType = selectedRateEntry.shiftType;
+        }
+
+        // Attach holiday fields when applicable
+        const holidaySingle = getHolidayForDate(logForm.date);
+        if (holidaySingle) {
+          timeLogData.isHolidayRate = true;
+          timeLogData.holidayTimeframeId = holidaySingle.id;
+          timeLogData.holidayName = holidaySingle.name;
         }
 
         const newLogRef = await addDoc(collection(db, 'timeLogs'), timeLogData);

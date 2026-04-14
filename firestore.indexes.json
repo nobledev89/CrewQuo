@@ -263,6 +263,7 @@
     {
       "collectionGroup": "auditLogs",
       "fieldPath": "expiresAt",
+      "indexes": [],
       "ttl": true
     }
   ]
