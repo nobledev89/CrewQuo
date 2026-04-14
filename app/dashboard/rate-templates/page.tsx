@@ -256,11 +256,40 @@ export default function RateTemplatesPage() {
   const handleSaveTemplate = async (data: RateCardTemplateFormData) => {
     setSaving(true);
     try {
+      // Sanitize timeframeDefinitions — Firestore rejects undefined values on optional fields
+      const sanitizedTimeframes = data.timeframeDefinitions.map(tf => {
+        const base: Record<string, unknown> = {
+          id: tf.id,
+          name: tf.name,
+          type: tf.type ?? 'standard',
+          startTime: tf.startTime,
+          endTime: tf.endTime,
+          applicableDays: tf.applicableDays,
+        };
+        if (tf.description !== undefined) base.description = tf.description;
+        if (tf.holidayDates !== undefined) base.holidayDates = tf.holidayDates;
+        if (tf.holidayMultiplier !== undefined) base.holidayMultiplier = tf.holidayMultiplier;
+        return base;
+      });
+
+      const sanitizedExpenses = data.expenseCategories.map(ec => {
+        const base: Record<string, unknown> = {
+          id: ec.id,
+          name: ec.name,
+          unitType: ec.unitType,
+        };
+        if (ec.description !== undefined) base.description = ec.description;
+        if (ec.defaultRate !== undefined) base.defaultRate = ec.defaultRate;
+        if (ec.rateType !== undefined) base.rateType = ec.rateType;
+        if (ec.taxable !== undefined) base.taxable = ec.taxable;
+        return base;
+      });
+
       const templateData = {
         name: data.name,
         description: data.description,
-        timeframeDefinitions: data.timeframeDefinitions,
-        expenseCategories: data.expenseCategories,
+        timeframeDefinitions: sanitizedTimeframes,
+        expenseCategories: sanitizedExpenses,
         resourceCategories: data.resourceCategories,
         active: data.active,
         isDefault: data.isDefault,
